@@ -1,0 +1,3 @@
+[submodule "submodules/pnp"]
+	path = submodules/pnp
+	url = https://github.com/midjji/pnp.git
