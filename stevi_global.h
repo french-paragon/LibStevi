@@ -1,5 +1,5 @@
-#ifndef VISION_GLOBAL_H
-#define VISION_GLOBAL_H
+#ifndef STEREOVISION_GLOBAL_H
+#define STEREOVISION_GLOBAL_H
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 

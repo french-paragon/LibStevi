@@ -1,5 +1,5 @@
-#ifndef IMAGECOORDINATES_H
-#define IMAGECOORDINATES_H
+#ifndef STEREOVISION_IMAGECOORDINATES_H
+#define STEREOVISION_IMAGECOORDINATES_H
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 

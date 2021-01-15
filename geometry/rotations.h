@@ -1,5 +1,5 @@
-#ifndef ROTATIONS_H
-#define ROTATIONS_H
+#ifndef STEREOVISION_ROTATIONS_H
+#define STEREOVISION_ROTATIONS_H
 
 #include "geometry/core.h"
 

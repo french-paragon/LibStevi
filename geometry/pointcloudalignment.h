@@ -1,5 +1,5 @@
-#ifndef POINTCLOUDALIGNMENT_H
-#define POINTCLOUDALIGNMENT_H
+#ifndef STEREOVISION_POINTCLOUDALIGNMENT_H
+#define STEREOVISION_POINTCLOUDALIGNMENT_H
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 

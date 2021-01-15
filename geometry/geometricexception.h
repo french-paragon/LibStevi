@@ -1,5 +1,5 @@
-#ifndef STEREOVISIONAPP_GEOMETRICEXCEPTION_H
-#define STEREOVISIONAPP_GEOMETRICEXCEPTION_H
+#ifndef STEREOVISION_GEOMETRICEXCEPTION_H
+#define STEREOVISION_GEOMETRICEXCEPTION_H
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 

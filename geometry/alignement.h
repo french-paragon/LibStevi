@@ -1,5 +1,5 @@
-#ifndef STEREOVISIONAPP_ALIGNEMENT_H
-#define STEREOVISIONAPP_ALIGNEMENT_H
+#ifndef STEREOVISION_ALIGNEMENT_H
+#define STEREOVISION_ALIGNEMENT_H
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 

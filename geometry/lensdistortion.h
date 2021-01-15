@@ -1,5 +1,5 @@
-#ifndef STEREOVISIONAPP_LENSDISTORTION_H
-#define STEREOVISIONAPP_LENSDISTORTION_H
+#ifndef STEREOVISION_LENSDISTORTION_H
+#define STEREOVISION_LENSDISTORTION_H
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 
