@@ -6,7 +6,7 @@
 namespace StereoVision {
 namespace Geometry {
 
-Eigen::Matrix3f skewAPP(Eigen::Vector3f const& v);
+Eigen::Matrix3f skew(Eigen::Vector3f const& v);
 Eigen::Vector3f unskew(Eigen::Matrix3f const& m);
 
 Eigen::Matrix3d skewD(Eigen::Vector3d const& v);
