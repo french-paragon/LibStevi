@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 set(STEREOVISION_LIB stevi)
+set(STEREOVISION_LIB ${STEREOVISION_LIB} PARENT_SCOPE)
 project(lib${STEREOVISION_LIB} LANGUAGES CXX)
 
 option(buildTests "Build the test suits for the library" ON)
