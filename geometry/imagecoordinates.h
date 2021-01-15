@@ -19,7 +19,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "geometry/core.h"
+#include "../geometry/core.h"
 
 namespace StereoVision {
 namespace Geometry {
