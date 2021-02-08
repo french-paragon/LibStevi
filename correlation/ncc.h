@@ -368,7 +368,7 @@ Multidim::Array<float, 3> ccCostVolume(Multidim::Array<T_L, 2> const& img_l,
 	auto r_shape = img_r.shape();
 
 	if (l_shape[0] != r_shape[0]) {
-		return Multidim::Array<float, 3>();
+		return Multidim::Array<float, 3>(0,0,0);
 	}
 
 	Multidim::Array<float, 2> meanLeft = meanFilter2D(h_radius, v_radius, img_l);
@@ -410,7 +410,7 @@ Multidim::Array<float, 3> nccCostVolume(Multidim::Array<T_L, 2> const& img_l,
 	auto r_shape = img_r.shape();
 
 	if (l_shape[0] != r_shape[0]) {
-		return Multidim::Array<float, 3>();
+		return Multidim::Array<float, 3>(0,0,0);
 	}
 
 	Multidim::Array<float, 2> meanLeft = meanFilter2D(h_radius, v_radius, img_l);
