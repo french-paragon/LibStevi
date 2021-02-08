@@ -21,3 +21,8 @@ add_executable(testLenseDistortion testLenseDistortion.cpp)
 target_link_libraries(testLenseDistortion ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestLenseDistortion testLenseDistortion)
 
+
+
+add_executable(testCorrelation testCorrelationFilters.cpp)
+target_link_libraries(testCorrelation ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestCorrelation testCorrelation)

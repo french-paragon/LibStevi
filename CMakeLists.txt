@@ -41,6 +41,8 @@ set(LIB_SRC
         interpolation/interpolation.h
         interpolation/lensdistortionsmap.cpp
         interpolation/lensdistortionsmap.h
+        correlation/correlation_base.h
+        correlation/ncc.h
 )
 
 add_library(
