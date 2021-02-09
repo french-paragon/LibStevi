@@ -36,6 +36,29 @@ Multidim::Array<float, 3> ZSSDCostVolume(Multidim::Array<T_S, 2> const& img_s,
 
 }
 
+
+template<class T_L, class T_R, dispDirection dDir = dispDirection::RightToLeft, bool rmIncompleteRanges = false>
+Multidim::Array<float, 3> ZSSDCostVolume(Multidim::Array<T_L, 2> const& img_l,
+										 Multidim::Array<T_R, 2> const& img_r,
+										 uint8_t h_radius,
+										 uint8_t v_radius,
+										 disp_t disp_width,
+										 disp_t disp_offset = 0) {
+
+	return buildZeroMeanCostVolume<T_L,
+			T_R,
+			squareDiff,
+			dispExtractionStartegy::Cost,
+			dDir,
+			rmIncompleteRanges>(img_l,
+								img_r,
+								h_radius,
+								v_radius,
+								disp_width,
+								disp_offset);
+
+}
+
 } //namespace Correlation
 } //namespace StereoVision
 
