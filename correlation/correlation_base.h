@@ -123,7 +123,7 @@ Multidim::Array<T_CV, 3> truncatedCostVolume(Multidim::Array<T_CV, 3> const& cos
 				if (p < 0 or p >= cv_shape[2]) {
 					tcv.template at<Nc>(i,j,d) = 0;
 				} else {
-					tcv.template at<Nc>(i,j,d) = costVolume.value<Nc>(i,j,p);
+					tcv.template at<Nc>(i,j,d) = costVolume.template value<Nc>(i,j,p);
 				}
 			}
 		}
