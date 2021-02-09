@@ -30,7 +30,7 @@ Multidim::Array<census_data_t, 2> censusTransform2D(Multidim::Array<T_I, 2> cons
 				for (int l = -h_radius; l <= h_radius; l++) {
 
 					if (i+k >= 0 and i+k < shape[0] and j+l >= 0 and j+l < shape[1]) {
-						census_data_t g = (input.value<Nc>(i,j) > input.value<Nc>(i+k,j+l)) ? 1 : 0;
+						census_data_t g = (input.template value<Nc>(i,j) > input.template value<Nc>(i+k,j+l)) ? 1 : 0;
 						d |= g << b;
 					}
 

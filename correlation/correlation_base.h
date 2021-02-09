@@ -354,7 +354,7 @@ Multidim::Array<T_CV, 3> buildCostVolume(Multidim::Array<T_L, 2> const& img_l,
 	auto s_shape = img_s.shape();
 	auto t_shape = img_t.shape();
 
-	Multidim::Array<float, 3> costVolume(s_shape[0], s_shape[1], disp_width);
+	Multidim::Array<T_CV, 3> costVolume(s_shape[0], s_shape[1], disp_width);
 
 	#pragma omp parallel for
 	for (int i = 0; i < s_shape[0]; i++) {
@@ -363,9 +363,9 @@ Multidim::Array<T_CV, 3> buildCostVolume(Multidim::Array<T_L, 2> const& img_l,
 
 			for (int d = 0; d < disp_width; d++) {
 
-				const T_CV errorVal;
+				T_CV errorVal = 0;
 
-				if (std::numeric_limits<T_CV>::has_infinity()) {
+				if (std::numeric_limits<T_CV>::has_infinity) {
 					errorVal = ((strat == dispExtractionStartegy::Cost) ? 1 : -1)*std::numeric_limits<T_CV>::infinity();
 				} else {
 					errorVal = (strat == dispExtractionStartegy::Cost) ? std::numeric_limits<T_CV>::max() : std::numeric_limits<T_CV>::lowest();
