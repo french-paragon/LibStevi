@@ -46,6 +46,8 @@ set(LIB_SRC
         correlation/sad.h
         correlation/ssd.h
         correlation/census.h
+        correlation/cost_based_refinement.cpp
+        correlation/cost_based_refinement.h
 )
 
 add_library(
