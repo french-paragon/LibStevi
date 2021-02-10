@@ -1,6 +1,7 @@
 #include "cost_based_refinement.h"
 
-using namespace StereoVision::Correlation;
+namespace StereoVision {
+namespace Correlation {
 
 Multidim::Array<float, 2> refineDispEquiangularCostInterpolation(Multidim::Array<float, 3> const& truncatedCostVolume,
 																 Multidim::Array<disp_t, 2> const& rawDisparity) {
@@ -64,3 +65,6 @@ Multidim::Array<float, 2> refineDispParabolaCostInterpolation(Multidim::Array<fl
 	return refined;
 
 }
+
+} //namespace Correlation
+} //namespace StereoVision
