@@ -80,7 +80,7 @@ Multidim::Array<float, 3> ZSADCostVolume(Multidim::Array<T_L, 2> const& img_l,
 }
 
 template<class T_L, class T_R, dispDirection dDir = dispDirection::RightToLeft, bool rmIncompleteRanges = false>
-Multidim::Array<float, 2> refinedSSDDisp(Multidim::Array<T_L, 2> const& img_l,
+Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 2> const& img_l,
 										 Multidim::Array<T_R, 2> const& img_r,
 										 uint8_t h_radius,
 										 uint8_t v_radius,
