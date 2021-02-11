@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "./correlation_base.h"
 #include <vector>
 #include <algorithm>
+#include <iostream>
 
 namespace StereoVision {
 namespace Correlation {
@@ -176,14 +177,13 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 2> const& img_l,
 						float tc_0 = t_img.template value<Nc>(i+k, jd+l) - t_mean.value<Nc>(i,jd);
 						float tc_1 = t_img.template value<Nc>(i+k, jd+l+1) - t_mean.value<Nc>(i,jd+1);
 
-						float sc_m1 = s_img.template value<Nc>(i+k, j+l-1) - t_mean.value<Nc>(i,j-1);
-						float sc_0 = s_img.template value<Nc>(i+k, j+l) - t_mean.value<Nc>(i,j);
+						float sc = s_img.template value<Nc>(i+k, j+l) - t_mean.value<Nc>(i,j);
 
-						float b1_plus = tc_0*tc_1;
-						float b1_minus = tc_0*tc_m1;
+						float b1_plus = tc_1 - tc_0;
+						float b1_minus = tc_0 - tc_m1;
 
-						float b2_plus = tc_0*sc_0;
-						float b2_minus = tc_m1*sc_m1;
+						float b2_plus = tc_0 - sc;
+						float b2_minus = tc_m1 - sc;
 
 						grad_plus += b2_plus/std::fabs(b2_plus)*b1_plus;
 						grad_minus += b2_minus/std::fabs(b2_minus)*b1_minus;
@@ -263,11 +263,11 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 2> const& img_l,
 							float tc_0 = t_img.template value<Nc>(i+k, jd+l) - t_mean.value<Nc>(i,jd);
 							float tc_1 = t_img.template value<Nc>(i+k, jd+l+1) - t_mean.value<Nc>(i,jd+1);
 
-							float sc_0 = s_img.template value<Nc>(i+k, j+l) - t_mean.value<Nc>(i,j);
+							float sc = s_img.template value<Nc>(i+k, j+l) - t_mean.value<Nc>(i,j);
 
-							float b1_plus = tc_0*tc_1;
+							float b1_plus = tc_1 - tc_0;
 
-							float b2_plus = tc_0*sc_0;
+							float b2_plus = tc_0 - sc;
 
 							cost_plus += std::fabs(b1_plus*DeltaD_plus + b2_plus);
 						}
@@ -291,11 +291,11 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 2> const& img_l,
 							float tc_0 = t_img.template value<Nc>(i+k, jd+l) - t_mean.value<Nc>(i,jd);
 							float tc_m1 = t_img.template value<Nc>(i+k, jd+l-1) - t_mean.value<Nc>(i,jd-1);
 
-							float sc_m1 = s_img.template value<Nc>(i+k, j+l-1) - t_mean.value<Nc>(i,j-1);
+							float sc = s_img.template value<Nc>(i+k, j+l) - t_mean.value<Nc>(i,j);
 
-							float b1_minus = tc_0*tc_m1;
+							float b1_minus = tc_0 - tc_m1;
 
-							float b2_minus = tc_m1*sc_m1;
+							float b2_minus = tc_m1 - sc;
 
 							cost_minus += std::fabs(b1_minus*DeltaD_minus + b2_minus);
 						}
@@ -303,7 +303,7 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 2> const& img_l,
 
 					if (cost_minus < cost) {
 						cost = cost_minus;
-						DeltaD = DeltaD_minus;
+						DeltaD = DeltaD_minus - 1;
 					}
 
 				}

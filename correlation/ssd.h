@@ -136,7 +136,9 @@ Multidim::Array<float, 2> refinedSSDDisp(Multidim::Array<T_L, 2> const& img_l,
 				refinedDisp.at<Nc>(i,j) = d;
 			} else if (j < h_radius+1 or j + h_radius + 1 >= d_shape[1]) { // if the source patch is partially outside the image
 				refinedDisp.at<Nc>(i,j) = d;
-			} else if (!rmIncompleteRanges and (j + disp_offset + deltaSign*d < h_radius + 1 or
+			} else if (d == 0 or d >= d_shape[2]) {
+				refinedDisp.at<Nc>(i,j) = d;
+			}else if (!rmIncompleteRanges and (j + disp_offset + deltaSign*d < h_radius + 1 or
 					   j + disp_offset + deltaSign*d + h_radius + 1 >= t_shape[1])) { // if the target patch is partially outside the image
 				refinedDisp.at<Nc>(i,j) = d;
 			} else if (rmIncompleteRanges and (j + disp_offset < h_radius + 1 or
@@ -163,14 +165,13 @@ Multidim::Array<float, 2> refinedSSDDisp(Multidim::Array<T_L, 2> const& img_l,
 						float tc_0 = t_img.template value<Nc>(i+k, jd+l) - t_mean.value<Nc>(i,jd);
 						float tc_1 = t_img.template value<Nc>(i+k, jd+l+1) - t_mean.value<Nc>(i,jd+1);
 
-						float sc_m1 = s_img.template value<Nc>(i+k, j+l-1) - t_mean.value<Nc>(i,j-1);
-						float sc_0 = s_img.template value<Nc>(i+k, j+l) - t_mean.value<Nc>(i,j);
+						float sc = s_img.template value<Nc>(i+k, j+l) - s_mean.value<Nc>(i,j);
 
-						float b1_plus = tc_0*tc_1;
-						float b1_minus = tc_0*tc_m1;
+						float b1_plus = tc_1 - tc_0;
+						float b1_minus = tc_0 - tc_m1;
 
-						float b2_plus = tc_0*sc_0;
-						float b2_minus = tc_m1*sc_m1;
+						float b2_plus = tc_0 - sc;
+						float b2_minus = tc_m1 - sc;
 
 						a1_plus += b1_plus*b1_plus;
 						a1_minus += b1_minus*b1_minus;
@@ -183,8 +184,8 @@ Multidim::Array<float, 2> refinedSSDDisp(Multidim::Array<T_L, 2> const& img_l,
 				float a3_plus = costVolume.value<Nc>(i,j,d);
 				float a3_minus = costVolume.value<Nc>(i,j,d-1);
 
-				float DeltaD_plus = -a2_plus/(2*a1_plus);
-				float DeltaD_minus = -a2_minus/(2*a1_minus);
+				float DeltaD_plus = -a2_plus/a1_plus;
+				float DeltaD_minus = -a2_minus/a1_minus;
 
 				float cost = a3_plus;
 
@@ -192,7 +193,7 @@ Multidim::Array<float, 2> refinedSSDDisp(Multidim::Array<T_L, 2> const& img_l,
 
 				if (DeltaD_plus > 0 and DeltaD_plus < 1) {
 
-					float interpSSD = a1_plus*DeltaD_plus*DeltaD_plus + a2_plus*DeltaD_plus + a3_plus;
+					float interpSSD = a1_plus*DeltaD_plus*DeltaD_plus + 2*a2_plus*DeltaD_plus + a3_plus;
 
 					if (interpSSD < cost) {
 						cost = interpSSD;
@@ -203,11 +204,11 @@ Multidim::Array<float, 2> refinedSSDDisp(Multidim::Array<T_L, 2> const& img_l,
 
 				if (DeltaD_minus > 0 and DeltaD_minus < 1) {
 
-					float interpSSD = a1_minus*DeltaD_minus*DeltaD_minus + a2_minus*DeltaD_minus + a3_minus;
+					float interpSSD = a1_minus*DeltaD_minus*DeltaD_minus + 2*a2_minus*DeltaD_minus + a3_minus;
 
 					if (interpSSD < cost) {
 						cost = interpSSD;
-						DeltaD = DeltaD_minus;
+						DeltaD = DeltaD_minus - 1;
 					}
 
 				}
