@@ -292,14 +292,16 @@ Multidim::Array<float, 2> refinedNCCDisp(Multidim::Array<T_L, 2> const& img_l,
 
 			disp_t const& d = disp.at<Nc>(i,j);
 
+			int jd = j + deltaSign*d;
+
 			if (i < v_radius or i + v_radius >= d_shape[0]) { // if we are too high or too low
 				refinedDisp.at<Nc>(i,j) = d;
 			} else if (j < h_radius+1 or j + h_radius + 1 >= d_shape[1]) { // if the source patch is partially outside the image
 				refinedDisp.at<Nc>(i,j) = d;
-			} else if (d == 0 or d >= d_shape[2]) {
+			} else if (d == 0 or d+1 >= disp_width) {
 				refinedDisp.at<Nc>(i,j) = d;
-			}  else if (!rmIncompleteRanges and (j + disp_offset + deltaSign*d < h_radius + 1 or
-					   j + disp_offset + deltaSign*d + h_radius + 1 >= t_shape[1])) { // if the target patch is partially outside the image
+			}  else if (!rmIncompleteRanges and (jd + disp_offset < h_radius + 1 or
+					   jd + disp_offset + h_radius + 1 >= t_shape[1])) { // if the target patch is partially outside the image
 				refinedDisp.at<Nc>(i,j) = d;
 			} else if (rmIncompleteRanges and (j + disp_offset < h_radius + 1 or
 					   j + disp_offset + h_radius + 1 >= t_shape[1])) { // if the target patch is partially outside the image
@@ -308,8 +310,6 @@ Multidim::Array<float, 2> refinedNCCDisp(Multidim::Array<T_L, 2> const& img_l,
 						j + disp_offset + deltaSign*disp_width + h_radius + 1 >= t_shape[1])) { // if the target patch is partially outside the image
 				refinedDisp.at<Nc>(i,j) = d;
 			}  else {
-
-				int jd = j + d;
 
 				float k_plus = 0;
 				float k_minus = 0;

@@ -136,7 +136,7 @@ Multidim::Array<float, 2> refinedSSDDisp(Multidim::Array<T_L, 2> const& img_l,
 				refinedDisp.at<Nc>(i,j) = d;
 			} else if (j < h_radius+1 or j + h_radius + 1 >= d_shape[1]) { // if the source patch is partially outside the image
 				refinedDisp.at<Nc>(i,j) = d;
-			} else if (d == 0 or d >= d_shape[2]) {
+			} else if (d == 0 or d+1 >= disp_width) {
 				refinedDisp.at<Nc>(i,j) = d;
 			} else if (!rmIncompleteRanges and (j + disp_offset + deltaSign*d < h_radius + 1 or
 					   j + disp_offset + deltaSign*d + h_radius + 1 >= t_shape[1])) { // if the target patch is partially outside the image
