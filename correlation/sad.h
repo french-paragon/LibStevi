@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include "./correlation_base.h"
+#include "./cost_based_refinement.h"
+
 #include <vector>
 #include <algorithm>
 
@@ -317,6 +319,71 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 2> const& img_l,
 	}
 
 	return refinedDisp;
+
+}
+
+
+template<class T_L, class T_R, dispDirection dDir = dispDirection::RightToLeft, bool rmIncompleteRanges = false>
+Multidim::Array<float, 2> refinedSADCostSymmetricDisp(Multidim::Array<T_L, 2> const& img_l,
+													  Multidim::Array<T_R, 2> const& img_r,
+													  uint8_t h_radius,
+													  uint8_t v_radius,
+													  disp_t disp_width,
+													  disp_t disp_offset = 0) {
+
+
+	condImgRef<T_L, T_R, dDir> cir(img_l, img_r);
+
+	constexpr disp_t deltaSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
+
+	auto l_shape = img_l.shape();
+	auto r_shape = img_r.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<float, 2>(0,0);
+	}
+
+	Multidim::Array<float, 2> meanLeft = meanFilter2D(h_radius, v_radius, img_l);
+	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_l);
+
+	Multidim::Array<typename condImgRef<T_L, T_R, dDir>::T_S, 2> const& s_img = cir.source();
+	Multidim::Array<float, 2> const& s_mean = (dDir == dispDirection::RightToLeft) ? meanRight : meanLeft;
+
+	Multidim::Array<typename condImgRef<T_L, T_R, dDir>::T_T, 2> const& t_img = cir.target();
+	Multidim::Array<float, 2> const& t_mean = (dDir == dispDirection::RightToLeft) ? meanLeft : meanRight;
+
+	Multidim::Array<float, 3> cv = buildZeroMeanCostVolume<typename condImgRef<T_L, T_R, dDir>::T_S,
+			typename condImgRef<T_L, T_R, dDir>::T_T,
+			absDiff,
+			dispExtractionStartegy::Cost,
+			deltaSign,
+			rmIncompleteRanges>(s_img,
+								t_img,
+								s_mean,
+								t_mean,
+								h_radius,
+								v_radius,
+								disp_width,
+								disp_offset);
+
+	Multidim::Array<disp_t, 2> raw_disp = extractSelectedIndex<dispExtractionStartegy::Cost, float>(cv);
+
+	Multidim::Array<float, 3> tcv = truncatedCostVolume(cv, raw_disp, 1);
+
+	return refineDispParabolaSymmetricCostInterpolation<typename condImgRef<T_L, T_R, dDir>::T_S,
+			typename condImgRef<T_L, T_R, dDir>::T_T,
+			absDiff,
+			dispExtractionStartegy::Cost,
+			deltaSign,
+			rmIncompleteRanges> (s_img,
+								 t_img,
+								 s_mean,
+								 t_mean,
+								 tcv,
+								 raw_disp,
+								 h_radius,
+								 v_radius,
+								 disp_offset);
 
 }
 
