@@ -67,6 +67,51 @@ Multidim::Array<census_data_t, 2> censusTransform2D(Multidim::Array<T_I, 2> cons
 
 }
 
+template<typename T_I>
+Multidim::Array<census_data_t, 2> censusTransform2D(Multidim::Array<T_I, 3> const& input,
+													int8_t h_radius,
+													int8_t v_radius){
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	auto shape = input.shape();
+
+	Multidim::Array<census_data_t, 2> census(shape[0], shape[1]);
+
+	for (int i = 0; i < shape[0]; i++) {
+
+		for (int j = 0; j < shape[1]; j++) {
+
+			census_data_t d = 0;
+			int b = 0;
+
+			for (int k = -v_radius; k <= v_radius; k++) {
+
+				for (int l = -h_radius; l <= h_radius; l++) {
+
+					for (int c = 0; c < shape[2]; c++) {
+
+						if (i+k >= 0 and i+k < shape[0] and j+l >= 0 and j+l < shape[1]) {
+							census_data_t g = (input.template value<Nc>(i,j,c) > input.template value<Nc>(i+k,j+l,c)) ? 1 : 0;
+							d |= g << b;
+						}
+
+						b++;
+					}
+				}
+
+			}
+
+			census.at<Nc>(i,j) = d;
+
+		}
+
+	}
+
+	return census;
+
+}
+
 typedef uint8_t census_cv_t;
 
 inline census_cv_t hammingDistance(census_data_t n1, census_data_t n2) {
@@ -82,9 +127,9 @@ inline census_cv_t hammingDistance(census_data_t n1, census_data_t n2) {
 
 }
 
-template<typename T_L, typename T_R, dispDirection dDir = dispDirection::RightToLeft, bool rmIncompleteRanges = false>
-Multidim::Array<census_cv_t, 3> censusCostVolume(Multidim::Array<T_L, 2> const& img_l,
-												 Multidim::Array<T_R, 2> const& img_r,
+template<typename T_L, typename T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft, bool rmIncompleteRanges = false>
+Multidim::Array<census_cv_t, 3> censusCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
+												 Multidim::Array<T_R, nImDim> const& img_r,
 												 uint8_t h_radius,
 												 uint8_t v_radius,
 												 disp_t disp_width,
