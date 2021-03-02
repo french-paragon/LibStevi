@@ -618,7 +618,7 @@ Multidim::Array<float, 2> refinedSADCostSymmetricDisp(Multidim::Array<T_L, 2> co
 
 	Multidim::Array<disp_t, 2> raw_disp = extractSelectedIndex<dispExtractionStartegy::Cost, float>(cv);
 
-	Multidim::Array<float, 3> tcv = truncatedCostVolume(cv, raw_disp, 1);
+	Multidim::Array<float, 3> tcv = truncatedCostVolume(cv, raw_disp, h_radius, v_radius, 1);
 
 	return refineDispParabolaSymmetricCostInterpolation<typename condImgRef<T_L, T_R, dDir>::T_S,
 			typename condImgRef<T_L, T_R, dDir>::T_T,
@@ -689,7 +689,7 @@ Multidim::Array<float, 2> refinedSADCostSymmetricDisp(Multidim::Array<T_L, nImDi
 
 	Multidim::Array<disp_t, 2> raw_disp = extractSelectedIndex<dispExtractionStartegy::Cost, float>(cv);
 
-	Multidim::Array<float, 3> tcv = truncatedCostVolume(cv, raw_disp, 1);
+	Multidim::Array<float, 3> tcv = truncatedCostVolume(cv, raw_disp, h_radius, v_radius, 1);
 
 	return refineDispParabolaSymmetricCostInterpolation<typename condImgRef<T_L, T_R, dDir>::T_S,
 			typename condImgRef<T_L, T_R, dDir>::T_T,

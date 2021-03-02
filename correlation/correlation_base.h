@@ -132,6 +132,8 @@ template<class T_CV,
 		 truncatedCostVolumeDirection sdir = truncatedCostVolumeDirection::Same>
 Multidim::Array<T_CV, 3> truncatedCostVolume(Multidim::Array<T_CV, 3> const& costVolume,
 											 Multidim::Array<disp_t, 2> const& selectedIndex,
+											 uint8_t h_radius,
+											 uint8_t v_radius,
 											 uint8_t cost_vol_radius) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
@@ -151,7 +153,9 @@ Multidim::Array<T_CV, 3> truncatedCostVolume(Multidim::Array<T_CV, 3> const& cos
 				for (int32_t d = 0; d <= 2*cost_vol_radius; d++) {
 					int32_t p = selectedIndex.value<Nc>(i,j)+d-cost_vol_radius;
 
-					if (p < 0 or p >= cv_shape[2]) {
+					if (p < 0 or p >= cv_shape[2]
+							or j < h_radius or j+p+h_radius >= cv_shape[1]
+							or i < v_radius or i+v_radius >= cv_shape[0]) {
 						tcv.template at<Nc>(i,j,d) = 0;
 					} else {
 						tcv.template at<Nc>(i,j,d) = costVolume.template value<Nc>(i,j,p);
@@ -166,7 +170,9 @@ Multidim::Array<T_CV, 3> truncatedCostVolume(Multidim::Array<T_CV, 3> const& cos
 					int32_t p = selectedIndex.value<Nc>(i,j)+d-cost_vol_radius;
 					int32_t jp = j+sgn*(d-cost_vol_radius);
 
-					if (p < 0 or p >= cv_shape[2] or jp < 0 or jp < cv_shape[1]) {
+					if (p < 0 or p >= cv_shape[2]
+							or std::min(jp, j) < h_radius or std::max(jp, j) + h_radius >= cv_shape[1]
+							or i < v_radius or i+v_radius >= cv_shape[0]) {
 						tcv.template at<Nc>(i,j,d) = 0;
 					} else {
 						tcv.template at<Nc>(i,j,d) = costVolume.template value<Nc>(i,jp,p);
@@ -193,13 +199,17 @@ Multidim::Array<T_CV, 3> truncatedCostVolume(Multidim::Array<T_CV, 3> const& cos
 						d_r -= 1;
 					}
 
-					if (p < 0 or p >= cv_shape[2]) {
+					if (p < 0 or p >= cv_shape[2]
+							or j < h_radius or j+p+h_radius >= cv_shape[1]
+							or i < v_radius or i+v_radius >= cv_shape[0]) {
 						tcv.template at<Nc>(i,j,d_d) = 0;
 					} else {
 						tcv.template at<Nc>(i,j,d_d) = costVolume.template value<Nc>(i,j,p);
 					}
 
-					if (p < 0 or p >= cv_shape[2] or jp < 0 or jp < cv_shape[1]) {
+					if (p < 0 or p >= cv_shape[2]
+							or std::min(jp, j) < h_radius or std::max(jp, j) + h_radius >= cv_shape[1]
+							or i < v_radius or i+v_radius >= cv_shape[0]) {
 						tcv.template at<Nc>(i,j,d_r) = 0;
 					} else {
 						tcv.template at<Nc>(i,j,d_r) = costVolume.template value<Nc>(i,jp,p);
@@ -253,7 +263,7 @@ Multidim::Array<T_IB, 3> extractInBoundDomain(Multidim::Array<disp_t, 2> const& 
 					int32_t sgn = (dir == dispDirection::RightToLeft) ? -1 : 1;
 
 					int32_t p = selectedIndex.value<Nc>(i,j)+d;
-					int32_t jp = j+sgn*(d-cost_vol_radius);
+					int32_t jp = j+sgn*d;
 
 					if (p < 0 or p >= static_cast<int32_t>(width)
 							or std::min(jp, j) < h_radius or std::max(jp, j) + h_radius >= im_shape[1]
@@ -270,16 +280,16 @@ Multidim::Array<T_IB, 3> extractInBoundDomain(Multidim::Array<disp_t, 2> const& 
 					int32_t sgn = (dir == dispDirection::RightToLeft) ? -1 : 1;
 
 					int32_t p = selectedIndex.value<Nc>(i,j)+d;
-					int32_t jp = j+sgn*(d-cost_vol_radius);
+					int32_t jp = j+sgn*d;
 
 					int32_t d_d = 2*(d+cost_vol_radius);
 					int32_t d_r = 2*(d+cost_vol_radius)+1;
 
-					if (d == cost_vol_radius) {
+					if (d == 0) {
 						jp = -1;
 					}
 
-					if (d > cost_vol_radius) {
+					if (d > 0) {
 						d_d -= 1;
 						d_r -= 1;
 					}

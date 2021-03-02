@@ -692,7 +692,7 @@ Multidim::Array<float, 2> refinedNCCCostSymmetricDisp(Multidim::Array<T_L, 2> co
 
 	Multidim::Array<disp_t, 2> raw_disp = extractSelectedIndex<dispExtractionStartegy::Score, float>(cv);
 
-	Multidim::Array<float, 3> tcv = truncatedCostVolume(cv, raw_disp, 1);
+	Multidim::Array<float, 3> tcv = truncatedCostVolume(cv, raw_disp, h_radius, v_radius, 1);
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -830,7 +830,7 @@ Multidim::Array<float, 2> refinedNCCCostSymmetricDisp(Multidim::Array<T_L, 3> co
 
 	Multidim::Array<disp_t, 2> raw_disp = extractSelectedIndex<dispExtractionStartegy::Score, float>(cv);
 
-	Multidim::Array<float, 3> tcv = truncatedCostVolume(cv, raw_disp, 1);
+	Multidim::Array<float, 3> tcv = truncatedCostVolume(cv, raw_disp, h_radius, v_radius, 1);
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
