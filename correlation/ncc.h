@@ -39,6 +39,7 @@ Multidim::Array<float, 2> sigmaFilter(uint8_t h_radius,
 
 	#pragma omp parallel for
 	for(long i = v_radius; i < shape[0]-v_radius; i++){
+		#pragma omp simd
 		for(long j = h_radius; j < shape[1]-h_radius; j++){
 
 			float s = 0.;
@@ -73,6 +74,7 @@ Multidim::Array<float, 2> sigmaFilter(uint8_t h_radius,
 
 	#pragma omp parallel for
 	for(long i = v_radius; i < shape[0]-v_radius; i++){
+		#pragma omp simd
 		for(long j = h_radius; j < shape[1]-h_radius; j++){
 
 			float s = 0.;
@@ -96,6 +98,7 @@ Multidim::Array<float, 2> sigmaFilter(uint8_t h_radius,
 	return sigma;
 }
 
+#pragma omp declare simd
 inline float product(float p1, float p2) {
 	return p1*p2;
 }
@@ -144,7 +147,7 @@ Multidim::Array<float, 3> normalizedCrossCorrelation(Multidim::Array<float, 3> c
 
 	#pragma omp parallel for
 	for (int i = 0; i < s_shape[0]; i++) {
-
+		#pragma omp simd
 		for (int j = 0; j < s_shape[1]; j++) {
 
 			for (int d = 0; d < disp_width; d++) {
@@ -333,7 +336,7 @@ Multidim::Array<float, 2> refinedNCCDisp(Multidim::Array<T_L, 2> const& img_l,
 
 	#pragma omp parallel for
 	for (int i = 0; i < d_shape[0]; i++) {
-
+		#pragma omp simd
 		for (int j = 0; j < d_shape[1]; j++) {
 
 			disp_t const& d = disp.at<Nc>(i,j);

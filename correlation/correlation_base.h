@@ -58,6 +58,7 @@ Multidim::Array<disp_t, 2> extractSelectedIndex(Multidim::Array<T_CV, 3> const& 
 
 	#pragma omp parallel for
 	for (int i = 0; i < cv_shape[0]; i++) {
+		#pragma omp simd
 		for (int j = 0; j < cv_shape[1]; j++) {
 
 						T_CV selectedScore = costVolume.template value<Nc>(i,j,0);
@@ -96,7 +97,9 @@ Multidim::Array<DT, 2> selectedIndexToDisp(Multidim::Array<DT, 2> const& selecte
 
 	Multidim::Array<DT, 2> disp(shape[0], shape[1]);
 
+	#pragma omp parallel for
 	for(int i = 0; i < shape[0]; i++) {
+		#pragma omp simd
 		for (int j = 0; j < shape[1]; j++) {
 			disp.template at<Nc>(i,j) = deltaSign*selectedIndex.template value<Nc>(i,j) + disp_offset;
 		}
@@ -118,6 +121,7 @@ Multidim::Array<T_CV, 2> selectedCost(Multidim::Array<T_CV, 3> const& costVolume
 
 	#pragma omp parallel for
 	for (int i = 0; i < cv_shape[0]; i++) {
+		#pragma omp simd
 		for (int j = 0; j < cv_shape[1]; j++) {
 			uint32_t p = selectedIndex.value<Nc>(i,j);
 			tcv.template at<Nc>(i,j) = costVolume.value<Nc>(i,j,p);
@@ -146,6 +150,7 @@ Multidim::Array<T_CV, 3> truncatedCostVolume(Multidim::Array<T_CV, 3> const& cos
 
 	#pragma omp parallel for
 	for (int i = 0; i < cv_shape[0]; i++) {
+		#pragma omp simd
 		for (int j = 0; j < cv_shape[1]; j++) {
 
 			if (sdir == truncatedCostVolumeDirection::Same) {
@@ -242,6 +247,7 @@ Multidim::Array<T_IB, 3> extractInBoundDomain(Multidim::Array<disp_t, 2> const& 
 
 	#pragma omp parallel for
 	for (int i = 0; i < im_shape[0]; i++) {
+		#pragma omp simd
 		for (int j = 0; j < im_shape[1]; j++) {
 
 			if (sdir == truncatedCostVolumeDirection::Same) {
@@ -425,6 +431,7 @@ Multidim::Array<float, 2> meanFilter2D (uint8_t h_radius,
 
 	#pragma omp parallel for
 	for(long j = h_radius; j < shape[1]-h_radius; j++){
+		#pragma omp simd
 		for(long i = v_radius; i < shape[0]-v_radius; i++) {
 			mean.at<Nc>(i, j) /= box_size;
 		}
@@ -490,6 +497,7 @@ Multidim::Array<float, 2> meanFilter2D (uint8_t h_radius,
 
 	#pragma omp parallel for
 	for(long j = h_radius; j < shape[1]-h_radius; j++){
+		#pragma omp simd
 		for(long i = v_radius; i < shape[0]-v_radius; i++) {
 			mean.at<Nc>(i, j) /= box_size;
 		}
@@ -566,7 +574,7 @@ Multidim::Array<T_CV, 3> buildCostVolume(Multidim::Array<T_L, 2> const& img_l,
 
 	#pragma omp parallel for
 	for (int i = 0; i < s_shape[0]; i++) {
-
+		#pragma omp simd
 		for (int j = 0; j < s_shape[1]; j++) {
 
 			for (int d = 0; d < disp_width; d++) {
@@ -661,7 +669,7 @@ Multidim::Array<T_CV, 3> buildCostVolume(Multidim::Array<T_L, 3> const& img_l,
 
 	#pragma omp parallel for
 	for (int i = 0; i < s_shape[0]; i++) {
-
+		#pragma omp simd
 		for (int j = 0; j < s_shape[1]; j++) {
 
 			for (int d = 0; d < disp_width; d++) {
@@ -745,7 +753,7 @@ Multidim::Array<float, 3> buildZeroMeanCostVolume(Multidim::Array<T_S, 2> const&
 
 	#pragma omp parallel for
 	for (int i = 0; i < s_shape[0]; i++) {
-
+		#pragma omp simd
 		for (int j = 0; j < s_shape[1]; j++) {
 
 			for (int d = 0; d < disp_width; d++) {
@@ -812,7 +820,7 @@ Multidim::Array<float, 3> buildZeroMeanCostVolume(Multidim::Array<T_S, 3> const&
 
 	#pragma omp parallel for
 	for (int i = 0; i < s_shape[0]; i++) {
-
+		#pragma omp simd
 		for (int j = 0; j < s_shape[1]; j++) {
 
 			for (int d = 0; d < disp_width; d++) {
