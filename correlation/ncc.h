@@ -193,6 +193,7 @@ Multidim::Array<float, 3> ccCostVolume(Multidim::Array<T_L, nImDim> const& img_l
 			T_R,
 			product,
 			dispExtractionStartegy::Score,
+			nImDim,
 			dDir,
 			rmIncompleteRanges>(img_l,
 								img_r,
@@ -229,7 +230,7 @@ Multidim::Array<float, 3> nccCostVolume(Multidim::Array<T_L, nImDim> const& img_
 	}
 
 	Multidim::Array<float, 2> meanLeft = meanFilter2D(h_radius, v_radius, img_l);
-	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_l);
+	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_r);
 
 	Multidim::Array<float, 2> sigmaLeft = sigmaFilter(h_radius, v_radius, meanLeft, img_l);
 	Multidim::Array<float, 2> sigmaRight = sigmaFilter(h_radius, v_radius, meanRight, img_r);
@@ -289,7 +290,7 @@ Multidim::Array<float, 2> refinedNCCDisp(Multidim::Array<T_L, 2> const& img_l,
 	}
 
 	Multidim::Array<float, 2> meanLeft = meanFilter2D(h_radius, v_radius, img_l);
-	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_l);
+	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_r);
 
 	Multidim::Array<float, 2> sigmaLeft = sigmaFilter(h_radius, v_radius, meanLeft, img_l);
 	Multidim::Array<float, 2> sigmaRight = sigmaFilter(h_radius, v_radius, meanRight, img_r);
@@ -363,9 +364,9 @@ Multidim::Array<float, 2> refinedNCCDisp(Multidim::Array<T_L, 2> const& img_l,
 				float k_plus = 0;
 				float k_minus = 0;
 
-				for(int k = -h_radius; k <= h_radius; k++) {
+				for(int k = -v_radius; k <= v_radius; k++) {
 
-					for (int l = -v_radius; l <= v_radius; l++) {
+					for (int l = -h_radius; l <= h_radius; l++) {
 
 						float k0 = t_img.template value<Nc>(i+k, jd+l-1) - t_mean.value<Nc>(i,jd-1);
 						float k1 = t_img.template value<Nc>(i+k, jd+l) - t_mean.value<Nc>(i,jd);
@@ -470,7 +471,7 @@ Multidim::Array<float, 2> refinedNCCDisp(Multidim::Array<T_L, 3> const& img_l,
 	}
 
 	Multidim::Array<float, 2> meanLeft = meanFilter2D(h_radius, v_radius, img_l);
-	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_l);
+	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_r);
 
 	Multidim::Array<float, 2> sigmaLeft = sigmaFilter(h_radius, v_radius, meanLeft, img_l);
 	Multidim::Array<float, 2> sigmaRight = sigmaFilter(h_radius, v_radius, meanRight, img_r);
@@ -544,9 +545,9 @@ Multidim::Array<float, 2> refinedNCCDisp(Multidim::Array<T_L, 3> const& img_l,
 				float k_plus = 0;
 				float k_minus = 0;
 
-				for(int k = -h_radius; k <= h_radius; k++) {
+				for(int k = -v_radius; k <= v_radius; k++) {
 
-					for (int l = -v_radius; l <= v_radius; l++) {
+					for (int l = -h_radius; l <= h_radius; l++) {
 
 						for (int c = 0; c < t_shape[2]; c++) {
 
@@ -655,7 +656,7 @@ Multidim::Array<float, 2> refinedNCCCostSymmetricDisp(Multidim::Array<T_L, 2> co
 	}
 
 	Multidim::Array<float, 2> meanLeft = meanFilter2D(h_radius, v_radius, img_l);
-	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_l);
+	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_r);
 
 	Multidim::Array<float, 2> sigmaLeft = sigmaFilter(h_radius, v_radius, meanLeft, img_l);
 	Multidim::Array<float, 2> sigmaRight = sigmaFilter(h_radius, v_radius, meanRight, img_r);
@@ -730,9 +731,9 @@ Multidim::Array<float, 2> refinedNCCCostSymmetricDisp(Multidim::Array<T_L, 2> co
 					dir = -1;
 				}
 
-				for(int k = -h_radius; k <= h_radius; k++) {
+				for(int k = -v_radius; k <= v_radius; k++) {
 
-					for (int l = -v_radius; l <= v_radius; l++) {
+					for (int l = -h_radius; l <= h_radius; l++) {
 						float source = (s_img.template value<Nc>(i+k, j+l) - s_mean.value<Nc>(i,j) + s_img.template value<Nc>(i+k, j+l+dir) - s_mean.value<Nc>(i,j+dir))/2.;
 
 						float targetm1 = t_img.template value<Nc>(i+k, j + disp_offset + deltaSign*d + l - 1) - t_mean.value<Nc>(i,j + disp_offset + deltaSign*d - 1);
@@ -793,7 +794,7 @@ Multidim::Array<float, 2> refinedNCCCostSymmetricDisp(Multidim::Array<T_L, 3> co
 	}
 
 	Multidim::Array<float, 2> meanLeft = meanFilter2D(h_radius, v_radius, img_l);
-	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_l);
+	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_r);
 
 	Multidim::Array<float, 2> sigmaLeft = sigmaFilter(h_radius, v_radius, meanLeft, img_l);
 	Multidim::Array<float, 2> sigmaRight = sigmaFilter(h_radius, v_radius, meanRight, img_r);
@@ -868,9 +869,9 @@ Multidim::Array<float, 2> refinedNCCCostSymmetricDisp(Multidim::Array<T_L, 3> co
 					dir = -1;
 				}
 
-				for(int k = -h_radius; k <= h_radius; k++) {
+				for(int k = -v_radius; k <= v_radius; k++) {
 
-					for (int l = -v_radius; l <= v_radius; l++) {
+					for (int l = -h_radius; l <= h_radius; l++) {
 
 						for (int c = 0; c < l_shape[2]; c++) {
 

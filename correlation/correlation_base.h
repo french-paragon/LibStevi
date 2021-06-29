@@ -776,9 +776,9 @@ Multidim::Array<float, 3> buildZeroMeanCostVolume(Multidim::Array<T_S, 2> const&
 
 					float s = 0;
 
-					for(int k = -h_radius; k <= h_radius; k++) {
+					for(int k = -v_radius; k <= v_radius; k++) {
 
-						for (int l = -v_radius; l <= v_radius; l++) {
+						for (int l = -h_radius; l <= h_radius; l++) {
 							float source = img_s.template value<Nc>(i+k, j+l) - s_mean.value<Nc>(i,j);
 							float target = img_t.template value<Nc>(i+k, j + disp_offset + deltaSign*d + l) - t_mean.value<Nc>(i,j + disp_offset + deltaSign*d);
 							s += costFunction(source, target);
@@ -843,9 +843,9 @@ Multidim::Array<float, 3> buildZeroMeanCostVolume(Multidim::Array<T_S, 3> const&
 
 					float s = 0;
 
-					for(int k = -h_radius; k <= h_radius; k++) {
+					for(int k = -v_radius; k <= v_radius; k++) {
 
-						for (int l = -v_radius; l <= v_radius; l++) {
+						for (int l = -h_radius; l <= h_radius; l++) {
 
 							for (int c = 0; c < s_shape[2]; c++) {
 
@@ -895,7 +895,7 @@ Multidim::Array<float, 3> buildZeroMeanCostVolume(Multidim::Array<T_L, nImDims> 
 	}
 
 	Multidim::Array<float, 2> meanLeft = meanFilter2D(h_radius, v_radius, img_l);
-	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_l);
+	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_r);
 
 	Multidim::Array<typename condImgRef<T_L, T_R, dDir>::T_S, nImDims> const& s_img = cir.source();
 	Multidim::Array<float, 2> const& s_mean = (dDir == dispDirection::RightToLeft) ? meanRight : meanLeft;

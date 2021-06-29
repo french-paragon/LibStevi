@@ -52,6 +52,7 @@ Eigen::Vector3f pathFromDiff(Axis dir) {
 	case Axis::Y:
 		return Eigen::Vector3f(0,1.,0);
 	case Axis::Z:
+	default:
 		return Eigen::Vector3f(0,0,1.);
 	}
 }
