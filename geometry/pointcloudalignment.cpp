@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "geometricexception.h"
 
+#include <eigen3/Eigen/Dense>
 #include <eigen3/Eigen/SVD>
 #include <eigen3/Eigen/QR>
 #include <iostream>
