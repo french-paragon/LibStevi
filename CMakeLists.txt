@@ -6,11 +6,13 @@ project(lib${STEREOVISION_LIB} LANGUAGES CXX)
 
 option(buildTests "Build the test suits for the library" ON)
 
-
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fopenmp")
 
 find_package(Eigen3 3.3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
@@ -42,6 +44,8 @@ set(LIB_SRC
         interpolation/lensdistortionsmap.cpp
         interpolation/lensdistortionsmap.h
         correlation/correlation_base.h
+		correlation/unfold.h
+		correlation/unfold.cpp
         correlation/ncc.h
         correlation/sad.h
         correlation/ssd.h
