@@ -391,6 +391,80 @@ Multidim::Array<float, 3> nccUnfoldBasedCostVolume(Multidim::Array<T_L, nImDim> 
 	return costVolume;
 }
 
+template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft, bool rmIncompleteRanges = false>
+Multidim::Array<float, 3> nccUnfoldBasedCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
+												   Multidim::Array<T_R, nImDim> const& img_r,
+												   UnFoldCompressor const& compressor,
+												   disp_t disp_width)
+{
+	condImgRef<T_L, T_R, dDir, nImDim> cir(img_l, img_r);
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+	constexpr disp_t deltaSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
+
+	auto l_shape = img_l.shape();
+	auto r_shape = img_r.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<float, 3>(0,0,0);
+	}
+
+	if (nImDim == 3) {
+		if (l_shape[2] != r_shape[2]) {
+			return Multidim::Array<float, 3>(0,0,0);
+		}
+	}
+
+	Multidim::Array<typename condImgRef<T_L, T_R, dDir>::T_S, nImDim> const& s_img = cir.source();
+	Multidim::Array<typename condImgRef<T_L, T_R, dDir>::T_T, nImDim> const& t_img = cir.target();
+
+	Multidim::Array<float, 3> source_feature_volume = unfold(compressor, s_img);
+	Multidim::Array<float, 3> target_feature_volume = unfold(compressor, t_img);
+
+	int h = source_feature_volume.shape()[0];
+	int w = source_feature_volume.shape()[1];
+	int f = source_feature_volume.shape()[2];
+
+	Multidim::Array<float, 2> source_mean = channelsMean(source_feature_volume);
+	Multidim::Array<float, 2> target_mean = channelsMean(target_feature_volume);
+
+	Multidim::Array<float, 2> source_sigma = channelsSigma(source_feature_volume, source_mean);
+	Multidim::Array<float, 2> target_sigma = channelsSigma(target_feature_volume, target_mean);
+
+	#pragma omp parallel for
+	for (int i = 0; i < h; i++) {
+		#pragma omp simd
+		for (int j = 0; j < w; j++) {
+			for (int c = 0; c < f; c++) {
+				source_feature_volume.at<Nc>(i,j,c) = (source_feature_volume.value<Nc>(i,j,c) - source_mean.value<Nc>(i,j))/source_sigma.value<Nc>(i,j);
+				target_feature_volume.at<Nc>(i,j,c) = (target_feature_volume.value<Nc>(i,j,c) - target_mean.value<Nc>(i,j))/target_sigma.value<Nc>(i,j);
+			}
+		}
+	}
+
+	Multidim::Array<float, 3> costVolume(h,w,disp_width);
+
+	#pragma omp parallel for
+	for (int i = 0; i < h; i++) {
+		#pragma omp simd
+		for (int j = 0; j < w; j++) {
+
+			for (int d = 0; d < disp_width; d++) {
+
+				costVolume.at<Nc>(i,j,d) = 0.0;
+
+				for (int c = 0; c < f; c++) {
+					float s = source_feature_volume.value<Nc>(i,j,c);
+					float t = target_feature_volume.valueOrAlt({i,j+deltaSign*d,c}, 0);
+					costVolume.at<Nc>(i,j,d) += s*t;
+				}
+			}
+		}
+	}
+
+	return costVolume;
+}
+
 template<class T_L, class T_R, dispDirection dDir = dispDirection::RightToLeft, bool rmIncompleteRanges = false>
 Multidim::Array<float, 2> refinedNCCDisp(Multidim::Array<T_L, 2> const& img_l,
 										 Multidim::Array<T_R, 2> const& img_r,

@@ -139,25 +139,20 @@ Multidim::Array<float, 3> unfold(uint8_t h_radius,
 	int outHeight = inHeight - v + padding_top + padding_bottom + 1;
 	int outWidth = inWidth - h + padding_left + padding_right + 1;
 
-	Multidim::Array<float, 3> out(outHeight, outWidth, featureSpaceSize);
+	Multidim::Array<float, 3> out({outHeight, outWidth, featureSpaceSize}, {outWidth*featureSpaceSize, featureSpaceSize, 1});
 
-	for (int k = 0; k < v; k++) {
-		for (int l = 0; l < h; l++) {
+	#pragma omp parallel for
+	for (int i = 0; i < outHeight; i++) {
+		int in_i = i - padding_top;
 
-			int c = k*h + l;
+		for (int j = 0; j < outWidth; j++) {
+			int in_j = j - padding_left;
 
-			#pragma omp parallel for
-			for (int i = 0; i < outHeight; i++) {
-				int in_i = i + k - padding_top;
-
-				#pragma omp simd
-				for (int j = 0; j < outWidth; j++) {
-
-					int in_j = j + l - padding_left;
-
-					out.at<Nc>(i,j,c) = static_cast<float>( in_data.valueOrAlt({in_i, in_j}, 0) );
+			for (int k = 0; k < v; k++) {
+				for (int l = 0; l < h; l++) {
+					int c = k*h + l;
+					out.at<Nc>(i,j,c) = static_cast<float>( in_data.valueOrAlt({in_i+k, in_j+l}, 0) );
 				}
-
 			}
 		}
 	}
@@ -217,12 +212,10 @@ Multidim::Array<float, 3> unfold(uint8_t h_radius,
 	return out;
 }
 
-template<class T_I, int InputDims>
+template<class T_I>
 Multidim::Array<float, 3> unfold(UnFoldCompressor const& compressor,
-								 Multidim::Array<T_I, InputDims> const& in_data,
+								 Multidim::Array<T_I, 2> const& in_data,
 								 PaddingMargins const& padding = PaddingMargins()) {
-
-	static_assert(InputDims == 2 or InputDims == 3, "Input dim can only be 2 or 3 !");
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -236,9 +229,67 @@ Multidim::Array<float, 3> unfold(UnFoldCompressor const& compressor,
 
 	int featureSpaceSize = compressor.nFeatures();
 
-	if (InputDims == 3) {
-		featureSpaceSize *= in_data.shape()[2];
+	int inHeight = in_data.shape()[0];
+	int inWidth = in_data.shape()[1];
+
+	int outHeight = inHeight - v + padding_top + padding_bottom + 1;
+	int outWidth = inWidth - h + padding_left + padding_right + 1;
+
+	Multidim::Array<float, 3> out(outHeight, outWidth, featureSpaceSize);
+
+	#pragma omp parallel for
+	for (int i = 0; i < outHeight; i++) {
+		#pragma omp simd
+		for (int j = 0; j < outWidth; j++) {
+			for (int f = 0; f < featureSpaceSize; f++) {
+				out.at<Nc>(i,j,f) = 0.0;
+			}
+		}
 	}
+
+	int top = compressor.margins().top();
+	int left = compressor.margins().left();
+
+	for (UnFoldCompressor::pixelIndex const& ind : compressor.indices()) {
+
+		int k = ind.verticalShift;
+		int l = ind.horizontalShift;
+		int f = ind.featureIndex;
+
+		#pragma omp parallel for
+		for (int i = 0; i < outHeight; i++) {
+			int in_i = i + k + top - padding_top;
+
+			#pragma omp simd
+			for (int j = 0; j < outWidth; j++) {
+
+				int in_j = j + l + left - padding_left;
+
+				out.at<Nc>(i,j,f) += ind.weight*static_cast<float>( in_data.valueOrAlt({in_i, in_j}, 0) );
+			}
+
+		}
+	}
+
+	return out;
+}
+
+template<class T_I>
+Multidim::Array<float, 3> unfold(UnFoldCompressor const& compressor,
+								 Multidim::Array<T_I, 3> const& in_data,
+								 PaddingMargins const& padding = PaddingMargins()) {
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	int padding_left = (padding.isAuto()) ? compressor.margins().left() : padding.left();
+	int padding_right = (padding.isAuto()) ? compressor.margins().right() : padding.right();
+	int padding_top = (padding.isAuto()) ? compressor.margins().top() : padding.top();
+	int padding_bottom = (padding.isAuto()) ? compressor.margins().bottom() : padding.bottom();
+
+	int h = compressor.width();
+	int v = compressor.height();
+
+	int featureSpaceSize = compressor.nFeatures();
 
 	int inHeight = in_data.shape()[0];
 	int inWidth = in_data.shape()[1];
@@ -268,25 +319,7 @@ Multidim::Array<float, 3> unfold(UnFoldCompressor const& compressor,
 		int f = ind.featureIndex;
 		int in_c = 0;
 
-		if (InputDims == 3) {
-			for (int in_c = 0; in_c < in_data.shape()[2]; in_c++) {
-				#pragma omp parallel for
-				for (int i = 0; i < outHeight; i++) {
-					int in_i = i + k + top - padding_top;
-
-					#pragma omp simd
-					for (int j = 0; j < outWidth; j++) {
-
-						int in_j = j + l + left - padding_left;
-
-						out.at<Nc>(i,j,in_c*compressor.nFeatures() + f) += ind.weight*static_cast<float>( in_data.valueOrAlt({in_i, in_j, in_c}, 0) );
-
-					}
-
-				}
-			}
-		} else {
-
+		for (int in_c = 0; in_c < in_data.shape()[2]; in_c++) {
 			#pragma omp parallel for
 			for (int i = 0; i < outHeight; i++) {
 				int in_i = i + k + top - padding_top;
@@ -296,11 +329,11 @@ Multidim::Array<float, 3> unfold(UnFoldCompressor const& compressor,
 
 					int in_j = j + l + left - padding_left;
 
-					out.at<Nc>(i,j,f) += ind.weight*static_cast<float>( in_data.valueOrAlt({in_i, in_j}, 0) );
+					out.at<Nc>(i,j,in_c*compressor.nFeatures() + f) += ind.weight*static_cast<float>( in_data.valueOrAlt({in_i, in_j, in_c}, 0) );
+
 				}
 
 			}
-
 		}
 	}
 

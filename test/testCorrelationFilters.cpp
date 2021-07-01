@@ -2,6 +2,10 @@
 
 #include "correlation/ncc.h"
 
+typedef Multidim::Array<int,2> CompressorMask;
+
+Q_DECLARE_METATYPE(CompressorMask);
+
 class TestCorrelationNcc: public QObject
 {
 	Q_OBJECT
@@ -125,11 +129,20 @@ private Q_SLOTS:
 	void testUnfoldOperator_data();
 	void testUnfoldOperator();
 
+	void benchmarkUnfoldOperator_data();
+	void benchmarkUnfoldOperator();
+
 	void testUnfoldNCCFilter_data();
 	void testUnfoldNCCFilter();
 
 	void benchmarkUnfoldNCCFilter_data();
 	void benchmarkUnfoldNCCFilter();
+
+	void testUnfoldCompressor_data();
+	void testUnfoldCompressor();
+
+	void benchmarkCompressedNCCFilter_data();
+	void benchmarkCompressedNCCFilter();
 
 private:
 	std::default_random_engine re;
@@ -549,6 +562,51 @@ void TestCorrelationNcc::testUnfoldOperator() {
 	}
 }
 
+
+void TestCorrelationNcc::benchmarkUnfoldOperator_data() {
+
+	QTest::addColumn<int>("img_height");
+	QTest::addColumn<int>("img_width");
+	QTest::addColumn<int>("h_radius");
+	QTest::addColumn<int>("v_radius");
+
+
+	QTest::newRow("small") << 120 << 160 << 1 << 1;
+	QTest::newRow("small box") << 480 << 640 << 1 << 1;
+	QTest::newRow("medium box") << 480 << 640 << 2 << 2;
+	QTest::newRow("box") << 480 << 640 << 3 << 3;
+	QTest::newRow("large box") << 480 << 640 << 4 << 4;
+
+}
+void TestCorrelationNcc::benchmarkUnfoldOperator() {
+
+	#ifndef NDEBUG
+	QSKIP("No benchmarking in debug mode!");
+	return;
+	#endif
+
+	QFETCH(int, img_height);
+	QFETCH(int, img_width);
+	QFETCH(int, h_radius);
+	QFETCH(int, v_radius);
+
+	Multidim::Array<float, 2> rand(img_height,img_width);
+
+	std::uniform_real_distribution<float> uniformDist(-1, 1);
+
+	for(int i = 0; i < img_height; i++) {
+		for(int j = 0; j < img_width; j++) {
+			rand.at(i,j) = uniformDist(re);
+		}
+	}
+
+	QBENCHMARK_ONCE {
+		Multidim::Array<float, 3> CV = StereoVision::Correlation::unfold(h_radius, v_radius, rand);
+	}
+
+}
+
+
 void TestCorrelationNcc::testUnfoldNCCFilter_data() {
 
 	QTest::addColumn<int>("h_radius");
@@ -645,6 +703,135 @@ void TestCorrelationNcc::benchmarkUnfoldNCCFilter() {
 		Multidim::Array<float, 3> CV = StereoVision::Correlation::nccUnfoldBasedCostVolume(randLeft, randRight, h_radius, v_radius, disp_w);
 	}
 
+}
+
+void TestCorrelationNcc::testUnfoldCompressor_data() {
+
+	QTest::addColumn<int>("h_radius");
+	QTest::addColumn<int>("v_radius");
+
+	QTest::newRow("small") << 1 << 1;
+	QTest::newRow("avg") << 3 << 3;
+	QTest::newRow("wide") << 5 << 1;
+	QTest::newRow("big") << 1 << 5;
+	QTest::newRow("large") << 5 << 5;
+
+}
+void TestCorrelationNcc::testUnfoldCompressor() {
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	QFETCH(int, h_radius);
+	QFETCH(int, v_radius);
+
+	int h = 2*v_radius + 1;
+	int w = 2*h_radius + 1;
+
+	std::uniform_real_distribution<float> uniformDist(-1, 1);
+
+	Multidim::Array<float, 2> rand(h,w);
+	Multidim::Array<int, 2> mask(h,w);
+	std::vector<int> superpixs(h*w);
+
+	int fnum = h;
+	int f = 0;
+
+	for(int i = 0; i < h; i++) {
+		for(int j = 0; j < w; j++) {
+			float val = uniformDist(re);
+			rand.at(i,j) = val;
+			superpixs[i*w + j] = ((f++)%fnum)+1;
+		}
+	}
+
+	std::shuffle(superpixs.begin(), superpixs.end(), re);
+
+	for(int i = 0; i < h; i++) {
+		for(int j = 0; j < w; j++) {
+			mask.at<Nc>(i,j) = superpixs[i*w + j];
+		}
+	}
+
+
+	std::vector<float> vals(fnum);
+	std::vector<float> valsCheck(fnum);
+
+	StereoVision::Correlation::UnFoldCompressor compressor(mask);
+
+	Multidim::Array<float, 3> unfoldedCompressed = StereoVision::Correlation::unfold(compressor, rand, StereoVision::Correlation::PaddingMargins(0));
+
+	QCOMPARE(fnum, unfoldedCompressed.shape()[2]);
+
+	for (int f = 1; f <= fnum; f++) {
+		vals[f-1] = unfoldedCompressed.value<Nc>(0,0,f-1);
+		valsCheck[f-1] = 0;
+		float count = 0;
+
+		for(int i = 0; i < h; i++) {
+			for(int j = 0; j < w; j++) {
+
+				int t = mask.at<Nc>(i,j);
+
+				if (t == f) {
+					count += 1.0;
+					valsCheck[f-1] += rand.value<Nc>(i,j);
+				}
+			}
+		}
+
+		valsCheck[f-1] /= count;
+
+	}
+
+	std::sort(vals.begin(), vals.end());
+	std::sort(valsCheck.begin(), valsCheck.end());
+
+	for (int f = 0; f < fnum; f++) {
+		QCOMPARE(vals[f], valsCheck[f]);
+	}
+
+}
+
+
+void TestCorrelationNcc::benchmarkCompressedNCCFilter_data() {
+
+	QTest::addColumn<int>("img_height");
+	QTest::addColumn<int>("img_width");
+	QTest::addColumn<CompressorMask>("compressor_mask");
+	QTest::addColumn<int>("disp_w");
+
+	QTest::newRow("640x480-GrPix17R3Filter-w20") << 480 << 640 << StereoVision::Correlation::CompressorGenerators::GrPix17R3Filter() << 20;
+	QTest::newRow("640x480-GrPix17R4Filter-w20") << 480 << 640 << StereoVision::Correlation::CompressorGenerators::GrPix17R4Filter() << 20;
+}
+void TestCorrelationNcc::benchmarkCompressedNCCFilter() {
+
+	#ifndef NDEBUG
+	QSKIP("No benchmarking in debug mode!");
+	return;
+	#endif
+
+	QFETCH(int, img_height);
+	QFETCH(int, img_width);
+	QFETCH(CompressorMask, compressor_mask);
+	QFETCH(int, disp_w);
+
+	Multidim::Array<float, 2> randLeft(img_height,img_width);
+	Multidim::Array<float, 2> randRight(img_height,img_width);
+
+	std::uniform_real_distribution<float> uniformDist(-1, 1);
+
+	for(int i = 0; i < img_height; i++) {
+		for(int j = 0; j < img_width; j++) {
+			randLeft.at(i,j) = uniformDist(re);
+			randRight.at(i,j) = uniformDist(re);
+		}
+	}
+
+	StereoVision::Correlation::UnFoldCompressor compressor(compressor_mask);
+
+	QBENCHMARK_ONCE {
+		Multidim::Array<float, 3> CV = StereoVision::Correlation::nccUnfoldBasedCostVolume(randLeft, randRight, compressor, disp_w);
+	}
 }
 
 QTEST_MAIN(TestCorrelationNcc)
