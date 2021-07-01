@@ -151,7 +151,7 @@ void TestPointCloudAlignement::testAffineMap() {
 		float vFound = tFound(row,idxs[i]);
 
 		float error = fabs(vTrue - vFound);
-		QVERIFY2(error < 1e-3, qPrintable(QString("Misaligned recontructed coordinates (%1)").arg(error)));
+		QVERIFY2(error < 1e-3, qPrintable(QString("Misaligned reconstructed coordinates (%1)").arg(error)));
 	}
 
 }
