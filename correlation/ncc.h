@@ -406,7 +406,7 @@ inline Multidim::Array<float, 3> nccFeatureVolume2CostVolume(Multidim::Array<flo
 	return nccFeatureVolume2CostVolume<dDir>(feature_vol_l, feature_vol_r, mean_left, mean_right, sigma_left, sigma_right, disp_width);
 }
 
-template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft, bool rmIncompleteRanges = false>
+template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
 Multidim::Array<float, 3> nccUnfoldBasedCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
 												   Multidim::Array<T_R, nImDim> const& img_r,
 												   uint8_t h_radius,
@@ -433,7 +433,7 @@ Multidim::Array<float, 3> nccUnfoldBasedCostVolume(Multidim::Array<T_L, nImDim> 
 	return nccFeatureVolume2CostVolume<dDir>(left_feature_volume, right_feature_volume, disp_width);
 }
 
-template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft, bool rmIncompleteRanges = false>
+template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
 Multidim::Array<float, 3> nccUnfoldBasedCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
 												   Multidim::Array<T_R, nImDim> const& img_r,
 												   UnFoldCompressor const& compressor,
