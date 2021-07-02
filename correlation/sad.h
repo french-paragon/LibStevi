@@ -86,8 +86,8 @@ Multidim::Array<float, 3> ZSADCostVolume(Multidim::Array<T_L, nImDims> const& im
 template<dispDirection dDir = dispDirection::RightToLeft>
 inline Multidim::Array<float, 3> zsadFeatureVolume2CostVolume(Multidim::Array<float, 3> const& feature_vol_l,
 															  Multidim::Array<float, 3> const& feature_vol_r,
-															  Multidim::Array<float, 3> const& mean_l,
-															  Multidim::Array<float, 3> const& mean_r,
+															  Multidim::Array<float, 2> const& mean_l,
+															  Multidim::Array<float, 2> const& mean_r,
 															  disp_t disp_width) {
 
 	condImgRef<float, float, dDir, 3> cfvr(feature_vol_l, feature_vol_r);
@@ -829,7 +829,7 @@ Multidim::Array<float, 2> refinedSADCostSymmetricDisp(Multidim::Array<T_L, nImDi
 }
 
 template<dispDirection dDir = dispDirection::RightToLeft>
-Multidim::Array<float, 2> refineFeatureVolumeZSSDDisp(Multidim::Array<float, 3> const& feature_vol_l,
+Multidim::Array<float, 2> refineFeatureVolumeZSADDisp(Multidim::Array<float, 3> const& feature_vol_l,
 													  Multidim::Array<float, 3> const& feature_vol_r,
 													  Multidim::Array<float, 2> const& mean_l,
 													  Multidim::Array<float, 2> const& mean_r,
@@ -1032,6 +1032,71 @@ Multidim::Array<float, 2> refineFeatureVolumeZSSDDisp(Multidim::Array<float, 3> 
 
 }
 
+template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 3> refinedUnfoldZSADDisp(Multidim::Array<T_L, nImDim> const& img_l,
+												   Multidim::Array<T_R, nImDim> const& img_r,
+												   uint8_t h_radius,
+												   uint8_t v_radius,
+												   disp_t disp_width)
+{
+	auto l_shape = img_l.shape();
+	auto r_shape = img_r.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<float, 3>(0,0,0);
+	}
+
+	if (nImDim == 3) {
+		if (l_shape[2] != r_shape[2]) {
+			return Multidim::Array<float, 3>(0,0,0);
+		}
+	}
+
+	Multidim::Array<float, 3> left_feature_volume = unfold(h_radius, v_radius, img_l);
+	Multidim::Array<float, 3> right_feature_volume = unfold(h_radius, v_radius, img_r);
+
+	Multidim::Array<float, 2> mean_left = channelsMean(left_feature_volume);
+	Multidim::Array<float, 2> mean_right = channelsMean(right_feature_volume);
+
+	Multidim::Array<float, 3> CV = zsadFeatureVolume2CostVolume<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp_width);
+
+	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Score>(CV);
+
+	return refineFeatureVolumeZSADDisp(left_feature_volume, right_feature_volume, mean_left, mean_right, disp, disp_width);
+}
+
+
+template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 3> refinedUnfoldZSADDisp(Multidim::Array<T_L, nImDim> const& img_l,
+												Multidim::Array<T_R, nImDim> const& img_r,
+												UnFoldCompressor const& compressor,
+												disp_t disp_width)
+{
+	auto l_shape = img_l.shape();
+	auto r_shape = img_r.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<float, 3>(0,0,0);
+	}
+
+	if (nImDim == 3) {
+		if (l_shape[2] != r_shape[2]) {
+			return Multidim::Array<float, 3>(0,0,0);
+		}
+	}
+
+	Multidim::Array<float, 3> left_feature_volume = unfold(compressor, img_l);
+	Multidim::Array<float, 3> right_feature_volume = unfold(compressor, img_r);
+
+	Multidim::Array<float, 2> mean_left = channelsMean(left_feature_volume);
+	Multidim::Array<float, 2> mean_right = channelsMean(right_feature_volume);
+
+	Multidim::Array<float, 3> CV = zsadFeatureVolume2CostVolume<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp_width);
+
+	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Score>(CV);
+
+	return refineFeatureVolumeZSADDisp(left_feature_volume, right_feature_volume, mean_left, mean_right, disp, disp_width);
+}
 
 } //namespace Correlation
 } //namespace StereoVision
