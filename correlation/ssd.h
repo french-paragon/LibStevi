@@ -231,8 +231,8 @@ Multidim::Array<float, 2> refinedSSDDisp(Multidim::Array<T_L, 2> const& img_l,
 template<dispDirection dDir = dispDirection::RightToLeft>
 inline Multidim::Array<float, 3> zssdFeatureVolume2CostVolume(Multidim::Array<float, 3> const& feature_vol_l,
 															  Multidim::Array<float, 3> const& feature_vol_r,
-															  Multidim::Array<float, 3> const& mean_l,
-															  Multidim::Array<float, 3> const& mean_r,
+															  Multidim::Array<float, 2> const& mean_l,
+															  Multidim::Array<float, 2> const& mean_r,
 															  disp_t disp_width) {
 
 	condImgRef<float, float, dDir, 3> cfvr(feature_vol_l, feature_vol_r);
