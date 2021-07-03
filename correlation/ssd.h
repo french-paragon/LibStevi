@@ -792,7 +792,7 @@ Multidim::Array<float, 2> refineFeatureVolumeZSSDDisp(Multidim::Array<float, 3> 
 }
 
 template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
-Multidim::Array<float, 3> refinedUnfoldZSSDDisp(Multidim::Array<T_L, nImDim> const& img_l,
+Multidim::Array<float, 2> refinedUnfoldZSSDDisp(Multidim::Array<T_L, nImDim> const& img_l,
 												   Multidim::Array<T_R, nImDim> const& img_r,
 												   uint8_t h_radius,
 												   uint8_t v_radius,
@@ -826,7 +826,7 @@ Multidim::Array<float, 3> refinedUnfoldZSSDDisp(Multidim::Array<T_L, nImDim> con
 
 
 template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
-Multidim::Array<float, 3> refinedUnfoldZSSDDisp(Multidim::Array<T_L, nImDim> const& img_l,
+Multidim::Array<float, 2> refinedUnfoldZSSDDisp(Multidim::Array<T_L, nImDim> const& img_l,
 												Multidim::Array<T_R, nImDim> const& img_r,
 												UnFoldCompressor const& compressor,
 												disp_t disp_width)
