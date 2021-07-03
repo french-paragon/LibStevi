@@ -1112,7 +1112,7 @@ Multidim::Array<float, 2> refinedNCCCostSymmetricFeatureVolumeDisp(Multidim::Arr
 	auto r_shape = right_feature_volume.shape();
 
 	if (l_shape[0] != r_shape[0]) {
-		return Multidim::Array<float, 3>(0,0,0);
+		return Multidim::Array<float, 2>();
 	}
 
 	Multidim::Array<float, 2> mean_left = channelsMean(left_feature_volume);
@@ -1254,12 +1254,12 @@ Multidim::Array<float, 2> refinedNCCCostSymmetricUnfoldDisp(Multidim::Array<T_L,
 	auto r_shape = img_r.shape();
 
 	if (l_shape[0] != r_shape[0]) {
-		return Multidim::Array<float, 3>(0,0,0);
+		return Multidim::Array<float, 2>();
 	}
 
 	if (nImDim == 3) {
 		if (l_shape[2] != r_shape[2]) {
-			return Multidim::Array<float, 3>(0,0,0);
+			return Multidim::Array<float, 2>();
 		}
 	}
 
