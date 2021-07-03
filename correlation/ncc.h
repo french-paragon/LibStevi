@@ -1103,6 +1103,172 @@ Multidim::Array<float, 2> refinedNCCCostSymmetricDisp(Multidim::Array<T_L, 3> co
 
 }
 
+template<dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 2> refinedNCCCostSymmetricFeatureVolumeDisp(Multidim::Array<float, 3> const& left_feature_volume,
+																   Multidim::Array<float, 3> const& right_feature_volume,
+																   disp_t disp_width) {
+
+	auto l_shape = left_feature_volume.shape();
+	auto r_shape = right_feature_volume.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<float, 3>(0,0,0);
+	}
+
+	Multidim::Array<float, 2> mean_left = channelsMean(left_feature_volume);
+	Multidim::Array<float, 2> mean_right = channelsMean(right_feature_volume);
+
+	Multidim::Array<float, 2> sigma_left = channelsSigma(left_feature_volume, mean_left);
+	Multidim::Array<float, 2> sigma_right = channelsSigma(right_feature_volume, mean_right);
+
+	Multidim::Array<float, 3> CV = nccFeatureVolume2CostVolume<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, sigma_left, sigma_right, disp_width);
+
+	Multidim::Array<disp_t, 2> raw_disp = extractSelectedIndex<dispExtractionStartegy::Score>(CV);
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+	constexpr disp_t deltaSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
+
+
+	condImgRef<float, float, dDir, 3> cfvr(left_feature_volume, right_feature_volume);
+	condImgRef<float, float, dDir, 2> cmr(mean_left, mean_right);
+	condImgRef<float, float, dDir, 2> csr(sigma_left, sigma_right);
+
+	Multidim::Array<float, 3> const& source_feature_volume = cfvr.source();
+	Multidim::Array<float, 3> const& target_feature_volume = cfvr.target();
+
+	Multidim::Array<float, 2> const& source_mean = cmr.source();
+	Multidim::Array<float, 2> const& target_mean = cmr.target();
+
+	Multidim::Array<float, 2> const& target_sigma = csr.target();
+
+	auto shape = raw_disp.shape();
+
+	Multidim::Array<float, 2> refined(shape);
+
+	#pragma omp parallel for
+	for (int i = 0; i < shape[0]; i++) {
+
+		for (int j = 0; j < shape[1]; j++) {
+
+			disp_t d = raw_disp.value<Nc>(i,j);
+
+			float delta = 0;
+
+			if (j - 1 > 0 and j + 1 < shape[1]) {
+
+				float cm1 = CV.value<Nc>(i,j,d-1);
+				float c0 = CV.value<Nc>(i,j,d);
+				float c1 = CV.value<Nc>(i,j,d+1);
+
+				delta = (cm1 - c1)/(2*(c1 - 2*c0 + cm1));
+
+				if (j + deltaSign*d + 1 < shape[1] and j + deltaSign*d - 1 > 0) {
+
+					float fm1 = 0;
+					float f0 = 0;
+					float f1 = 0;
+					float sigmaSource = 0;
+
+					disp_t dir = 1;
+
+					if (delta > 0) {
+						dir = -1;
+					}
+
+					for (int c = 0; c < source_feature_volume.shape()[2]; c++) {
+
+						float source = (source_feature_volume.template value<Nc>(i, j, c) - source_mean.value<Nc>(i,j) +
+										source_feature_volume.template value<Nc>(i, j+dir, c) - source_mean.value<Nc>(i,j+dir))/2.;
+
+						float targetm1 = target_feature_volume.value<Nc>(i, j + deltaSign*d - 1, c) - target_mean.value<Nc>(i,j + deltaSign*d - 1);
+						float target0 = target_feature_volume.value<Nc>(i, j + deltaSign*d, c) - target_mean.value<Nc>(i,j + deltaSign*d);
+						float target1 = target_feature_volume.value<Nc>(i, j + deltaSign*d + 1, c) - target_mean.value<Nc>(i,j + deltaSign*d + 1);
+
+						fm1 += source*targetm1;
+						f0 += source*target0;
+						f1 += source*target1;
+
+						sigmaSource += source*source;
+					}
+
+					sigmaSource = sqrtf(sigmaSource);
+					fm1 /= sigmaSource*target_sigma.value<Nc>(i,j + deltaSign*d - 1);
+					f0 /= sigmaSource*target_sigma.value<Nc>(i,j + deltaSign*d);
+					f1 /= sigmaSource*target_sigma.value<Nc>(i,j + deltaSign*d + 1);
+
+					float delta2 = (fm1 - f1)/(2*(f1 - 2*f0 + fm1)) - dir*0.5;
+
+					if (std::fabs(delta2) < 1.) {
+						delta = (delta + delta2)/2;
+					}
+
+				}
+			}
+
+			refined.at<Nc>(i,j) = d + delta;
+
+		}
+
+	}
+
+	return refined;
+}
+
+
+template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 2> refinedNCCCostSymmetricUnfoldDisp(Multidim::Array<T_L, nImDim> const& img_l,
+															Multidim::Array<T_R, nImDim> const& img_r,
+															uint8_t h_radius,
+															uint8_t v_radius,
+															disp_t disp_width) {
+
+
+	auto l_shape = img_l.shape();
+	auto r_shape = img_r.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<float, 3>(0,0,0);
+	}
+
+	if (nImDim == 3) {
+		if (l_shape[2] != r_shape[2]) {
+			return Multidim::Array<float, 3>(0,0,0);
+		}
+	}
+
+	Multidim::Array<float, 3> left_feature_volume = unfold(h_radius, v_radius, img_l);
+	Multidim::Array<float, 3> right_feature_volume = unfold(h_radius, v_radius, img_r);
+
+	return refinedNCCCostSymmetricFeatureVolumeDisp<dDir>(left_feature_volume, right_feature_volume, disp_width);
+
+}
+
+template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 2> refinedNCCCostSymmetricUnfoldDisp(Multidim::Array<T_L, nImDim> const& img_l,
+															Multidim::Array<T_R, nImDim> const& img_r,
+															UnFoldCompressor compressor,
+															disp_t disp_width) {
+
+
+	auto l_shape = img_l.shape();
+	auto r_shape = img_r.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<float, 3>(0,0,0);
+	}
+
+	if (nImDim == 3) {
+		if (l_shape[2] != r_shape[2]) {
+			return Multidim::Array<float, 3>(0,0,0);
+		}
+	}
+
+	Multidim::Array<float, 3> left_feature_volume = unfold(compressor, img_l);
+	Multidim::Array<float, 3> right_feature_volume = unfold(compressor, img_r);
+
+	return refinedNCCCostSymmetricFeatureVolumeDisp<dDir>(left_feature_volume, right_feature_volume, disp_width);
+
+}
 
 template<dispDirection dDir = dispDirection::RightToLeft>
 Multidim::Array<float, 2> refineFeatureVolumeNCCDisp(Multidim::Array<float, 3> const& feature_vol_l,
@@ -1290,7 +1456,6 @@ Multidim::Array<float, 3> refinedUnfoldNCCDisp(Multidim::Array<T_L, nImDim> cons
 
 	return refineFeatureVolumeNCCDisp(left_feature_volume, right_feature_volume, mean_left, mean_right, sigma_left, sigma_right, disp, disp_width);
 }
-
 
 template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
 Multidim::Array<float, 3> refinedUnfoldNCCDisp(Multidim::Array<T_L, nImDim> const& img_l,
