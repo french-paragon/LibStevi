@@ -1432,12 +1432,12 @@ Multidim::Array<float, 2> refinedUnfoldNCCDisp(Multidim::Array<T_L, nImDim> cons
 	auto r_shape = img_r.shape();
 
 	if (l_shape[0] != r_shape[0]) {
-		return Multidim::Array<float, 2>(0,0,0);
+		return Multidim::Array<float, 2>();
 	}
 
 	if (nImDim == 3) {
 		if (l_shape[2] != r_shape[2]) {
-			return Multidim::Array<float, 2>(0,0,0);
+			return Multidim::Array<float, 2>();
 		}
 	}
 
@@ -1467,12 +1467,12 @@ Multidim::Array<float, 2> refinedUnfoldNCCDisp(Multidim::Array<T_L, nImDim> cons
 	auto r_shape = img_r.shape();
 
 	if (l_shape[0] != r_shape[0]) {
-		return Multidim::Array<float, 2>(0,0,0);
+		return Multidim::Array<float, 2>();
 	}
 
 	if (nImDim == 3) {
 		if (l_shape[2] != r_shape[2]) {
-			return Multidim::Array<float, 2>(0,0,0);
+			return Multidim::Array<float, 2>();
 		}
 	}
 
