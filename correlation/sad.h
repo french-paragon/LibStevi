@@ -294,9 +294,9 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 2> const& img_l,
 				jumps_plus.reserve(windowsSize);
 				jumps_minus.reserve(windowsSize);
 
-				for(int k = -h_radius; k <= h_radius; k++) {
+				for(int k = -v_radius; k <= v_radius; k++) {
 
-					for (int l = -v_radius; l <= v_radius; l++) {
+					for (int l = -h_radius; l <= h_radius; l++) {
 
 						float tc_m1 = t_img.template value<Nc>(i+k, jd+l-1) - t_mean.value<Nc>(i,jd-1);
 						float tc_0 = t_img.template value<Nc>(i+k, jd+l) - t_mean.value<Nc>(i,jd);
@@ -381,9 +381,9 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 2> const& img_l,
 
 					float cost_plus = 0;
 
-					for(int k = -h_radius; k <= h_radius; k++) {
+					for(int k = -v_radius; k <= v_radius; k++) {
 
-						for (int l = -v_radius; l <= v_radius; l++) {
+						for (int l = -h_radius; l <= h_radius; l++) {
 
 							float tc_0 = t_img.template value<Nc>(i+k, jd+l) - t_mean.value<Nc>(i,jd);
 							float tc_1 = t_img.template value<Nc>(i+k, jd+l+1) - t_mean.value<Nc>(i,jd+1);
@@ -409,9 +409,9 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 2> const& img_l,
 
 					float cost_minus = 0;
 
-					for(int k = -h_radius; k <= h_radius; k++) {
+					for(int k = -v_radius; k <= v_radius; k++) {
 
-						for (int l = -v_radius; l <= v_radius; l++) {
+						for (int l = -h_radius; l <= h_radius; l++) {
 
 							float tc_0 = t_img.template value<Nc>(i+k, jd+l) - t_mean.value<Nc>(i,jd);
 							float tc_m1 = t_img.template value<Nc>(i+k, jd+l-1) - t_mean.value<Nc>(i,jd-1);
@@ -536,9 +536,9 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 3> const& img_l,
 				jumps_plus.reserve(windowsSize);
 				jumps_minus.reserve(windowsSize);
 
-				for(int k = -h_radius; k <= h_radius; k++) {
+				for(int k = -v_radius; k <= v_radius; k++) {
 
-					for (int l = -v_radius; l <= v_radius; l++) {
+					for (int l = -h_radius; l <= h_radius; l++) {
 
 						for (int c = 0; c < l_shape[2]; c++) {
 							float tc_m1 = t_img.template value<Nc>(i+k, jd+l-1, c) - t_mean.value<Nc>(i,jd-1);
@@ -625,9 +625,9 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 3> const& img_l,
 
 					float cost_plus = 0;
 
-					for(int k = -h_radius; k <= h_radius; k++) {
+					for(int k = -v_radius; k <= v_radius; k++) {
 
-						for (int l = -v_radius; l <= v_radius; l++) {
+						for (int l = -h_radius; l <= h_radius; l++) {
 
 							for (int c = 0; c < l_shape[2]; c++) {
 								float tc_0 = t_img.template value<Nc>(i+k, jd+l, c) - t_mean.value<Nc>(i,jd);
@@ -655,9 +655,9 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 3> const& img_l,
 
 					float cost_minus = 0;
 
-					for(int k = -h_radius; k <= h_radius; k++) {
+					for(int k = -v_radius; k <= v_radius; k++) {
 
-						for (int l = -v_radius; l <= v_radius; l++) {
+						for (int l = -h_radius; l <= h_radius; l++) {
 
 							for (int c = 0; c < l_shape[2]; c++) {
 								float tc_0 = t_img.template value<Nc>(i+k, jd+l, c) - t_mean.value<Nc>(i,jd);
