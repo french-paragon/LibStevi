@@ -302,7 +302,7 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 2> const& img_l,
 						float tc_0 = t_img.template value<Nc>(i+k, jd+l) - t_mean.value<Nc>(i,jd);
 						float tc_1 = t_img.template value<Nc>(i+k, jd+l+1) - t_mean.value<Nc>(i,jd+1);
 
-						float sc = s_img.template value<Nc>(i+k, j+l) - t_mean.value<Nc>(i,j);
+						float sc = s_img.template value<Nc>(i+k, j+l) - s_mean.value<Nc>(i,j);
 
 						float b1_plus = tc_1 - tc_0;
 						float b1_minus = tc_0 - tc_m1;
@@ -388,7 +388,7 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 2> const& img_l,
 							float tc_0 = t_img.template value<Nc>(i+k, jd+l) - t_mean.value<Nc>(i,jd);
 							float tc_1 = t_img.template value<Nc>(i+k, jd+l+1) - t_mean.value<Nc>(i,jd+1);
 
-							float sc = s_img.template value<Nc>(i+k, j+l) - t_mean.value<Nc>(i,j);
+							float sc = s_img.template value<Nc>(i+k, j+l) - s_mean.value<Nc>(i,j);
 
 							float b1_plus = tc_1 - tc_0;
 
@@ -416,7 +416,7 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 2> const& img_l,
 							float tc_0 = t_img.template value<Nc>(i+k, jd+l) - t_mean.value<Nc>(i,jd);
 							float tc_m1 = t_img.template value<Nc>(i+k, jd+l-1) - t_mean.value<Nc>(i,jd-1);
 
-							float sc = s_img.template value<Nc>(i+k, j+l) - t_mean.value<Nc>(i,j);
+							float sc = s_img.template value<Nc>(i+k, j+l) - s_mean.value<Nc>(i,j);
 
 							float b1_minus = tc_0 - tc_m1;
 
@@ -545,7 +545,7 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 3> const& img_l,
 							float tc_0 = t_img.template value<Nc>(i+k, jd+l, c) - t_mean.value<Nc>(i,jd);
 							float tc_1 = t_img.template value<Nc>(i+k, jd+l+1, c) - t_mean.value<Nc>(i,jd+1);
 
-							float sc = s_img.template value<Nc>(i+k, j+l, c) - t_mean.value<Nc>(i,j);
+							float sc = s_img.template value<Nc>(i+k, j+l, c) - s_mean.value<Nc>(i,j);
 
 							float b1_plus = tc_1 - tc_0;
 							float b1_minus = tc_0 - tc_m1;
@@ -633,7 +633,7 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 3> const& img_l,
 								float tc_0 = t_img.template value<Nc>(i+k, jd+l, c) - t_mean.value<Nc>(i,jd);
 								float tc_1 = t_img.template value<Nc>(i+k, jd+l+1, c) - t_mean.value<Nc>(i,jd+1);
 
-								float sc = s_img.template value<Nc>(i+k, j+l, c) - t_mean.value<Nc>(i,j);
+								float sc = s_img.template value<Nc>(i+k, j+l, c) - s_mean.value<Nc>(i,j);
 
 								float b1_plus = tc_1 - tc_0;
 
@@ -663,7 +663,7 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 3> const& img_l,
 								float tc_0 = t_img.template value<Nc>(i+k, jd+l, c) - t_mean.value<Nc>(i,jd);
 								float tc_m1 = t_img.template value<Nc>(i+k, jd+l-1, c) - t_mean.value<Nc>(i,jd-1);
 
-								float sc = s_img.template value<Nc>(i+k, j+l, c) - t_mean.value<Nc>(i,j);
+								float sc = s_img.template value<Nc>(i+k, j+l, c) - s_mean.value<Nc>(i,j);
 
 								float b1_minus = tc_0 - tc_m1;
 

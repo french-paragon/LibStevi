@@ -101,7 +101,7 @@ Multidim::Array<float, 2> refinedSSDDisp(Multidim::Array<T_L, 2> const& img_l,
 	}
 
 	Multidim::Array<float, 2> meanLeft = meanFilter2D(h_radius, v_radius, img_l);
-	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_l);
+	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_r);
 
 	Multidim::Array<typename condImgRef<T_L, T_R, dDir>::T_S, 2> const& s_img = cir.source();
 	Multidim::Array<float, 2> const& s_mean = (dDir == dispDirection::RightToLeft) ? meanRight : meanLeft;
@@ -368,7 +368,7 @@ Multidim::Array<float, 2> refinedSSDDisp(Multidim::Array<T_L, 3> const& img_l,
 	}
 
 	Multidim::Array<float, 2> meanLeft = meanFilter2D(h_radius, v_radius, img_l);
-	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_l);
+	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_r);
 
 	Multidim::Array<typename condImgRef<T_L, T_R, dDir>::T_S, 3> const& s_img = cir.source();
 	Multidim::Array<float, 2> const& s_mean = (dDir == dispDirection::RightToLeft) ? meanRight : meanLeft;
@@ -525,7 +525,7 @@ Multidim::Array<float, 2> refinedSSDCostSymmetricDisp(Multidim::Array<T_L, nImDi
 	}
 
 	Multidim::Array<float, 2> meanLeft = meanFilter2D(h_radius, v_radius, img_l);
-	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_l);
+	Multidim::Array<float, 2> meanRight = meanFilter2D(h_radius, v_radius, img_r);
 
 	Multidim::Array<typename condImgRef<T_L, T_R, dDir>::T_S, nImDim> const& s_img = cir.source();
 	Multidim::Array<float, 2> const& s_mean = (dDir == dispDirection::RightToLeft) ? meanRight : meanLeft;
