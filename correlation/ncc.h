@@ -1154,7 +1154,7 @@ Multidim::Array<float, 2> refinedNCCCostSymmetricFeatureVolumeDisp(Multidim::Arr
 
 			float delta = 0;
 
-			if (j - 1 > 0 and j + 1 < shape[1]) {
+			if (j - 1 > 0 and j + 1 < shape[1] and d > 0 and d+1 < CV.shape()[2]) {
 
 				float cm1 = CV.value<Nc>(i,j,d-1);
 				float c0 = CV.value<Nc>(i,j,d);

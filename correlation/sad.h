@@ -126,7 +126,7 @@ inline Multidim::Array<float, 3> zsadFeatureVolume2CostVolume(Multidim::Array<fl
 
 				for (int c = 0; c < f; c++) {
 					float s = source_feature_volume.value<Nc>(i,j,c) - source_mean.value<Nc>(i,j);
-					float t = target_feature_volume.valueOrAlt({i,j+deltaSign*d,c}, 0) - target_mean.value<Nc>(i,j);
+					float t = target_feature_volume.valueOrAlt({i,j+deltaSign*d,c}, 0) - target_mean.valueOrAlt({i,j+deltaSign*d}, 0);
 					costVolume.at<Nc>(i,j,d) += std::fabs(s - t);
 				}
 			}
@@ -775,7 +775,7 @@ Multidim::Array<float, 2> refinedZSADCostSymmetricFeatureVolumeDisp(Multidim::Ar
 
 	Multidim::Array<float, 3> CV = zsadFeatureVolume2CostVolume<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp_width);
 
-	Multidim::Array<disp_t, 2> raw_disp = extractSelectedIndex<dispExtractionStartegy::Score>(CV);
+	Multidim::Array<disp_t, 2> raw_disp = extractSelectedIndex<dispExtractionStartegy::Cost>(CV);
 
 	constexpr disp_t deltaSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
 
@@ -1164,7 +1164,7 @@ Multidim::Array<float, 2> refinedUnfoldZSADDisp(Multidim::Array<T_L, nImDim> con
 
 	Multidim::Array<float, 3> CV = zsadFeatureVolume2CostVolume<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp_width);
 
-	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Score>(CV);
+	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Cost>(CV);
 
 	return refineFeatureVolumeZSADDisp(left_feature_volume, right_feature_volume, mean_left, mean_right, disp, disp_width);
 }
@@ -1197,7 +1197,7 @@ Multidim::Array<float, 2> refinedUnfoldZSADDisp(Multidim::Array<T_L, nImDim> con
 
 	Multidim::Array<float, 3> CV = zsadFeatureVolume2CostVolume<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp_width);
 
-	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Score>(CV);
+	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Cost>(CV);
 
 	return refineFeatureVolumeZSADDisp(left_feature_volume, right_feature_volume, mean_left, mean_right, disp, disp_width);
 }

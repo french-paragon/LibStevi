@@ -73,9 +73,9 @@ Multidim::Array<float, 2> refineDispParabolaSymmetricCostInterpolation(Multidim:
 					dir = -1;
 				}
 
-				for(int k = -h_radius; k <= h_radius; k++) {
+				for(int k = -v_radius; k <= v_radius; k++) {
 
-					for (int l = -v_radius; l <= v_radius; l++) {
+					for (int l = -h_radius; l <= h_radius; l++) {
 						float source = (img_s.template value<Nc>(i+k, j+l) - s_mean.value<Nc>(i,j) + img_s.template value<Nc>(i+k, j+l+dir) - s_mean.value<Nc>(i,j+dir))/2.;
 
 						float targetm1 = img_t.template value<Nc>(i+k, j + disp_offset + deltaSign*d + l-1) - t_mean.value<Nc>(i,j + disp_offset + deltaSign*d-1);
@@ -155,9 +155,9 @@ Multidim::Array<float, 2> refineDispParabolaSymmetricCostInterpolation(Multidim:
 					dir = -1;
 				}
 
-				for(int k = -h_radius; k <= h_radius; k++) {
+				for(int k = -v_radius; k <= v_radius; k++) {
 
-					for (int l = -v_radius; l <= v_radius; l++) {
+					for (int l = -h_radius; l <= h_radius; l++) {
 
 						for (int c = 0; c < s_shape[2]; c++) {
 
