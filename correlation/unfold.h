@@ -289,7 +289,7 @@ Multidim::Array<float, 3> unfold(UnFoldCompressor const& compressor,
 	int h = compressor.width();
 	int v = compressor.height();
 
-	int featureSpaceSize = compressor.nFeatures();
+	int featureSpaceSize = in_data.shape()[2]*compressor.nFeatures();
 
 	int inHeight = in_data.shape()[0];
 	int inWidth = in_data.shape()[1];
