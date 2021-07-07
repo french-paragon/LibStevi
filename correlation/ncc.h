@@ -1356,7 +1356,7 @@ Multidim::Array<float, 2> refineFeatureVolumeNCCDisp(Multidim::Array<float, 3> c
 				for (int c = 0; c < t_shape[2]; c++) {
 					float detrend_s = source_feature_volume.value<Nc>(i,j,c) - source_mean.value<Nc>(i,j);
 					float detrend_tm1 = target_feature_volume.value<Nc>(i,jd-1,c) - target_mean.value<Nc>(i,jd-1);
-					float detrend_t0 = target_feature_volume.value<Nc>(i,jd,c) - target_mean.value<Nc>(i,j);
+					float detrend_t0 = target_feature_volume.value<Nc>(i,jd,c) - target_mean.value<Nc>(i,jd);
 					float detrend_t1 = target_feature_volume.value<Nc>(i,jd+1,c) - target_mean.value<Nc>(i,jd+1);
 
 					rho_m1 += detrend_s*detrend_tm1;
@@ -1379,7 +1379,7 @@ Multidim::Array<float, 2> refineFeatureVolumeNCCDisp(Multidim::Array<float, 3> c
 				float DeltaD_plus = -c2_plus/c1_plus;
 				float DeltaD_minus = -c2_minus/c1_minus;
 
-				float score = rho_0/sigma_0;
+				float score = rho_0/sqrtf(sigma_0);
 
 				float DeltaD = 0;
 
@@ -1387,7 +1387,7 @@ Multidim::Array<float, 2> refineFeatureVolumeNCCDisp(Multidim::Array<float, 3> c
 
 					float interpRho = (rho_1 - rho_0)*DeltaD_plus + rho_0;
 					float interpSigma_t = a1_plus*DeltaD_plus*DeltaD_plus + a2_plus*DeltaD_plus + a3_plus;
-					float tmpScore = interpRho/interpSigma_t;
+					float tmpScore = interpRho/sqrtf(interpSigma_t);
 
 					if (tmpScore > score) {
 						score = tmpScore;
@@ -1400,7 +1400,7 @@ Multidim::Array<float, 2> refineFeatureVolumeNCCDisp(Multidim::Array<float, 3> c
 
 					float interpRho = (rho_0 - rho_m1)*DeltaD_minus + rho_m1;
 					float interpSigma_t = a1_minus*DeltaD_minus*DeltaD_minus + a2_minus*DeltaD_minus + a3_minus;
-					float tmpScore = interpRho/interpSigma_t;
+					float tmpScore = interpRho/sqrtf(interpSigma_t);
 
 					if (tmpScore > score) {
 						score = tmpScore;
