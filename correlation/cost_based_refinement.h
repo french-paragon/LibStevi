@@ -142,7 +142,7 @@ Multidim::Array<float, 2> refineDispParabolaSymmetricCostInterpolation(Multidim:
 
 			disp_t d = rawDisparity.value<Nc>(i,j);
 
-			if (j + disp_offset + std::abs(deltaSign*d) + h_radius + 1 < img_t.shape()[1] and j + disp_offset + std::abs(deltaSign*d) - h_radius - 1 > 0 and
+			if (j + disp_offset + std::abs(deltaSign*d) + h_radius + 1 < img_t.shape()[1] and j - h_radius - 1 > 0 and
 				i - v_radius > 0 and i + v_radius < img_t.shape()[0] and std::isfinite(cm1) and std::isfinite(c0) and std::isfinite(c1)) {
 
 				float fm1 = 0;
