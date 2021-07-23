@@ -1106,8 +1106,8 @@ Multidim::Array<float, 2> refineFeatureVolumeZSADDisp(Multidim::Array<float, 3> 
 					float cost_minus = 0;
 
 					for (int c = 0; c < t_shape[2]; c++) {
-						float tc_0 = target_feature_volume.value<Nc>(i, jd, c) - source_mean.value<Nc>(i,jd);
-						float tc_m1 = target_feature_volume.value<Nc>(i, jd-1, c) - source_mean.value<Nc>(i,jd-1);
+						float tc_0 = target_feature_volume.value<Nc>(i, jd, c) - target_mean.value<Nc>(i,jd);
+						float tc_m1 = target_feature_volume.value<Nc>(i, jd-1, c) - target_mean.value<Nc>(i,jd-1);
 
 						float sc = source_feature_volume.value<Nc>(i, j, c) - source_mean.value<Nc>(i,j);
 
