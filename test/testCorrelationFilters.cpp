@@ -787,7 +787,8 @@ void TestCorrelationNcc::testUnfoldCompressor() {
 	std::sort(valsCheck.begin(), valsCheck.end());
 
 	for (int f = 0; f < fnum; f++) {
-		QCOMPARE(vals[f], valsCheck[f]);
+		float missalignement = std::abs(vals[f] - valsCheck[f]);
+		QVERIFY2(missalignement < 1e-4, qPrintable(QString("feature is wrong (error = %1 at feature index %2)").arg(missalignement).arg(f)));
 	}
 
 }
