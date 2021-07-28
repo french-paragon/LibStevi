@@ -44,14 +44,17 @@ set(LIB_SRC
         interpolation/lensdistortionsmap.cpp
         interpolation/lensdistortionsmap.h
         correlation/correlation_base.h
-		correlation/unfold.h
-		correlation/unfold.cpp
+        correlation/unfold.h
+        correlation/unfold.cpp
+        correlation/cross_correlations.h
+        correlation/cross_correlations.cpp
         correlation/ncc.h
         correlation/sad.h
         correlation/ssd.h
         correlation/census.h
         correlation/cost_based_refinement.cpp
         correlation/cost_based_refinement.h
+        optimization/l1optimization.h
 )
 
 add_library(

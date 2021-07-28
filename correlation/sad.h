@@ -20,11 +20,17 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include "./correlation_base.h"
+#include "./cross_correlations.h"
 #include "./cost_based_refinement.h"
 #include "./unfold.h"
+#include "../optimization/l1optimization.h"
 
+#include <limits>
 #include <vector>
 #include <algorithm>
+
+#include <eigen3/Eigen/Core>
+#include <eigen3/Eigen/QR>
 
 namespace StereoVision {
 namespace Correlation {
@@ -283,16 +289,16 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 2> const& img_l,
 				std::vector<float> discontinuities_plus;
 				std::vector<float> discontinuities_minus;
 
-				std::vector<float> jumps_plus;
-				std::vector<float> jumps_minus;
+				std::vector<float> weights_plus;
+				std::vector<float> weights_minus;
 
 				size_t windowsSize = (2*h_radius+1)*(2*v_radius+1);
 
 				discontinuities_plus.reserve(windowsSize);
 				discontinuities_minus.reserve(windowsSize);
 
-				jumps_plus.reserve(windowsSize);
-				jumps_minus.reserve(windowsSize);
+				weights_plus.reserve(windowsSize);
+				weights_minus.reserve(windowsSize);
 
 				for(int k = -v_radius; k <= v_radius; k++) {
 
@@ -315,18 +321,14 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 2> const& img_l,
 
 						float discontinuity_plus = -b2_plus/b1_plus;
 						float discontinuity_minus = -b2_minus/b1_minus;
+						float jump_plus = 2*std::fabs(b1_plus);
+						float jump_minus = 2*std::fabs(b1_minus);
 
-						if (discontinuity_plus > 0 and discontinuity_plus < 1) {
-							float jump_plus = 2*std::fabs(b1_plus);
-							discontinuities_plus.push_back(discontinuity_plus);
-							jumps_plus.push_back(jump_plus);
-						}
+						discontinuities_plus.push_back(discontinuity_plus);
+						weights_plus.push_back(jump_plus);
 
-						if (discontinuity_minus > 0 and discontinuity_minus < 1) {
-							float jump_minus = 2*std::fabs(b1_minus);
-							discontinuities_minus.push_back(discontinuity_minus);
-							jumps_minus.push_back(jump_minus);
-						}
+						discontinuities_minus.push_back(discontinuity_minus);
+						weights_minus.push_back(jump_minus);
 					}
 				}
 
@@ -338,43 +340,11 @@ Multidim::Array<float, 2> refinedSADDisp(Multidim::Array<T_L, 2> const& img_l,
 				float DeltaD = 0;
 
 				if (grad_plus < 0) {
-
-					std::vector<int> sorting_key(discontinuities_plus.size());
-					for(int i = 0; i < static_cast<int>(sorting_key.size()); i++) {sorting_key[i] = i;}
-
-					std::sort(sorting_key.begin(), sorting_key.end(), [&discontinuities_plus] (int i1, int i2) {
-						return discontinuities_plus[i1] < discontinuities_plus[i2];
-					});
-
-					for (int i : sorting_key) {
-						if (grad_plus + jumps_plus[i] >= 0) {
-							DeltaD_plus = discontinuities_plus[i];
-							break;
-						}
-
-						grad_plus += jumps_plus[i];
-					}
-
+					DeltaD_plus = Optimization::weighted_median(discontinuities_plus, weights_plus);
 				}
 
 				if (grad_minus < 0) {
-
-					std::vector<int> sorting_key(discontinuities_minus.size());
-					for(int i = 0; i < static_cast<int>(sorting_key.size()); i++) {sorting_key[i] = i;}
-
-					std::sort(sorting_key.begin(), sorting_key.end(), [&discontinuities_minus] (int i1, int i2) {
-						return discontinuities_minus[i1] < discontinuities_minus[i2];
-					});
-
-					for (int i : sorting_key) {
-						if (grad_minus + jumps_minus[i] >= 0) {
-							DeltaD_minus = discontinuities_minus[i];
-							break;
-						}
-
-						grad_minus += jumps_minus[i];
-					}
-
+					DeltaD_minus = Optimization::weighted_median(discontinuities_plus, weights_plus);
 				}
 
 				if (DeltaD_plus > 0) {
@@ -1136,6 +1106,109 @@ Multidim::Array<float, 2> refineFeatureVolumeZSADDisp(Multidim::Array<float, 3> 
 
 }
 
+template<int refineRadius = 1, dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 2> refineBarycentricSymmetricZSADDisp(Multidim::Array<float, 3> const& feature_vol_l,
+															 Multidim::Array<float, 3> const& feature_vol_r,
+															 Multidim::Array<float, 2> const& mean_l,
+															 Multidim::Array<float, 2> const& mean_r,
+															 Multidim::Array<disp_t, 2> const& selectedIndex,
+															 disp_t disp_width,
+															 float tol=1e-6,
+															 int maxIters = 100) {
+
+	auto softSignFunc = [tol] (float val) -> float {
+		if (val > tol) {
+			return 1;
+		} else if (val < -tol) {
+			return -1;
+		}
+		return 0;
+	};
+
+	static_assert (refineRadius > 0, "refineBarycentricSymmetricZSADDisp cannot proceed with a refinement radius smaller than 1.");
+
+	typedef Eigen::Matrix<float, Eigen::Dynamic, 2*refineRadius> TypeMatrixM;
+	typedef Eigen::Matrix<float, 2*refineRadius, 1> TypeVectorAlpha;
+
+	constexpr int maxNConstraints = 2*refineRadius-1;
+	typedef Eigen::Matrix<float, maxNConstraints, 2*refineRadius> TypeMatrixZ;
+	typedef std::array<int, maxNConstraints> TypeFeatureChannelConstraints;
+
+	constexpr disp_t deltaSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	auto l_shape = feature_vol_l.shape();
+	auto r_shape = feature_vol_r.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<float, 2>(0,0);
+	}
+
+	Multidim::Array<float, 3> const& s_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_r : feature_vol_l;
+	Multidim::Array<float, 2> const& s_mean = (dDir == dispDirection::RightToLeft) ? mean_r : mean_l;
+
+	Multidim::Array<float, 3> const& t_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_l : feature_vol_r;
+	Multidim::Array<float, 2> const& t_mean = (dDir == dispDirection::RightToLeft) ? mean_l : mean_r;
+
+	Multidim::Array<float, 3> source_zfeature_volume = zeromeanFeatureVolume(s_feature_volume, s_mean);
+	Multidim::Array<float, 3> target_zfeature_volume = zeromeanFeatureVolume(t_feature_volume, t_mean);
+
+	auto d_shape = selectedIndex.shape();
+	auto t_shape = t_feature_volume.shape();
+
+	int nFeatures = t_shape[2];
+
+	Multidim::Array<float, 2> refinedDisp(d_shape);
+
+	#pragma omp parallel for
+	for (int i = 0; i < d_shape[0]; i++) {
+
+		#pragma omp simd
+		for (int j = 0; j < d_shape[1]; j++) {
+
+			disp_t const& d = selectedIndex.value<Nc>(i,j);
+
+			int jd = j + deltaSign*d;
+
+			if (j < 1 or j + 1 >= d_shape[1]) { // if the source patch is partially outside the image
+				refinedDisp.at<Nc>(i,j) = d;
+			} else if (jd < 1 + refineRadius or jd + 1 >= d_shape[1] - refineRadius) { // if the target patch is partially outside the image
+				refinedDisp.at<Nc>(i,j) = d;
+			} else if (d == 0 or d+1 >= disp_width) {
+				refinedDisp.at<Nc>(i,j) = d;
+			} else {
+
+				Eigen::VectorXf sourceDelta(t_shape[2]);
+				for (int c = 0 ; c < t_shape[2]; c++) {
+					sourceDelta(c) = source_zfeature_volume.value<Nc>(i,j,c) - target_zfeature_volume.value<Nc>(i,jd+refineRadius,c);
+				}
+
+				TypeMatrixM M(t_shape[2],2*refineRadius);
+
+				for (int p = -refineRadius; p < refineRadius; p++) {
+					for (int c = 0 ; c < t_shape[2]; c++) {
+						M(c, p+refineRadius) = target_zfeature_volume.value<Nc>(i,jd+p,c) - target_zfeature_volume.value<Nc>(i,jd+refineRadius,c);
+					}
+				}
+
+				TypeVectorAlpha alpha = Optimization::leastAbsoluteDifferences(M,sourceDelta,tol, maxIters);
+
+				float delta_d = 0;
+				for (int p = -refineRadius; p < refineRadius; p++) {
+					delta_d += alpha(p)*p + (1.f-alpha(p))*refineRadius;
+				}
+
+				refinedDisp.at<Nc>(i,j) = d + delta_d;
+
+			}
+
+		}
+	}
+
+	return refinedDisp;
+
+}
+
 template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
 Multidim::Array<float, 2> refinedUnfoldZSADDisp(Multidim::Array<T_L, nImDim> const& img_l,
 												   Multidim::Array<T_R, nImDim> const& img_r,
@@ -1166,7 +1239,7 @@ Multidim::Array<float, 2> refinedUnfoldZSADDisp(Multidim::Array<T_L, nImDim> con
 
 	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Cost>(CV);
 
-	return refineFeatureVolumeZSADDisp(left_feature_volume, right_feature_volume, mean_left, mean_right, disp, disp_width);
+	return refineFeatureVolumeZSADDisp<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp, disp_width);
 }
 
 
@@ -1199,7 +1272,73 @@ Multidim::Array<float, 2> refinedUnfoldZSADDisp(Multidim::Array<T_L, nImDim> con
 
 	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Cost>(CV);
 
-	return refineFeatureVolumeZSADDisp(left_feature_volume, right_feature_volume, mean_left, mean_right, disp, disp_width);
+	return refineFeatureVolumeZSADDisp<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp, disp_width);
+}
+
+template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft, int refineRadius = 1>
+Multidim::Array<float, 2> refinedBarycentricSymmetricZSADDisp(Multidim::Array<T_L, nImDim> const& img_l,
+												   Multidim::Array<T_R, nImDim> const& img_r,
+												   uint8_t h_radius,
+												   uint8_t v_radius,
+												   disp_t disp_width)
+{
+	auto l_shape = img_l.shape();
+	auto r_shape = img_r.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<float, 2>();
+	}
+
+	if (nImDim == 3) {
+		if (l_shape[2] != r_shape[2]) {
+			return Multidim::Array<float, 2>();
+		}
+	}
+
+	Multidim::Array<float, 3> left_feature_volume = unfold(h_radius, v_radius, img_l);
+	Multidim::Array<float, 3> right_feature_volume = unfold(h_radius, v_radius, img_r);
+
+	Multidim::Array<float, 2> mean_left = channelsMean(left_feature_volume);
+	Multidim::Array<float, 2> mean_right = channelsMean(right_feature_volume);
+
+	Multidim::Array<float, 3> CV = zsadFeatureVolume2CostVolume<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp_width);
+
+	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Cost>(CV);
+
+	return refineBarycentricSymmetricZSADDisp<refineRadius, dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp, disp_width);
+}
+
+
+template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft, int refineRadius = 1>
+Multidim::Array<float, 2> refinedBarycentricSymmetricZSADDisp(Multidim::Array<T_L, nImDim> const& img_l,
+												Multidim::Array<T_R, nImDim> const& img_r,
+												UnFoldCompressor const& compressor,
+												disp_t disp_width)
+{
+	auto l_shape = img_l.shape();
+	auto r_shape = img_r.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<float, 2>();
+	}
+
+	if (nImDim == 3) {
+		if (l_shape[2] != r_shape[2]) {
+			return Multidim::Array<float, 2>();
+		}
+	}
+
+	Multidim::Array<float, 3> left_feature_volume = unfold(compressor, img_l);
+	Multidim::Array<float, 3> right_feature_volume = unfold(compressor, img_r);
+
+	Multidim::Array<float, 2> mean_left = channelsMean(left_feature_volume);
+	Multidim::Array<float, 2> mean_right = channelsMean(right_feature_volume);
+
+	Multidim::Array<float, 3> CV = zsadFeatureVolume2CostVolume<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp_width);
+
+	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Cost>(CV);
+
+	return refineBarycentricSymmetricZSADDisp<refineRadius, dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp, disp_width);
 }
 
 } //namespace Correlation
