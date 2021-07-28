@@ -769,7 +769,7 @@ Multidim::Array<float, 2> refineBarycentricSymmetricZSSDDisp(Multidim::Array<flo
 				Eigen::VectorXf sourceDelta(t_shape[2]);
 
 				for (int c = 0 ; c < t_shape[2]; c++) {
-					sourceDelta(c) = source_zfeature_volume.value<Nc>(i,j,c) - target_zfeature_volume.value<Nc>(i,jd+refineRadius,c)
+					sourceDelta(c) = source_zfeature_volume.value<Nc>(i,j,c) - target_zfeature_volume.value<Nc>(i,jd+refineRadius,c);
 				}
 
 				TypeMatrixM M(t_shape[2],2*refineRadius);
