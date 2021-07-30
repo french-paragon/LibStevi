@@ -61,7 +61,7 @@ Multidim::Array<disp_t, 2> extractSelectedIndex(Multidim::Array<T_CV, 3> const& 
 		#pragma omp simd
 		for (int j = 0; j < cv_shape[1]; j++) {
 
-						T_CV selectedScore = costVolume.template value<Nc>(i,j,0);
+			T_CV selectedScore = costVolume.template value<Nc>(i,j,0);
 			disp_t selectedDisp = 0;
 
 			for (uint32_t d = 1; d < cv_shape[2]; d++) {

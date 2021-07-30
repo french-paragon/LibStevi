@@ -1193,12 +1193,16 @@ Multidim::Array<float, 2> refineBarycentricSymmetricZSADDisp(Multidim::Array<flo
 
 				TypeVectorAlpha alpha = Optimization::leastAbsoluteDifferences(M,sourceDelta,tol, maxIters);
 
-				float delta_d = 0;
+				float delta_d = refineRadius;
 				for (int p = -refineRadius; p < refineRadius; p++) {
-					delta_d += alpha(p)*p + (1.f-alpha(p))*refineRadius;
+					delta_d += alpha(p)*float(p - refineRadius);
 				}
 
-				refinedDisp.at<Nc>(i,j) = d + delta_d;
+				if (std::fabs(delta_d) < 1) { //subpixel adjustement is in the interval
+					refinedDisp.at<Nc>(i,j) = d + delta_d;
+				} else {
+					refinedDisp.at<Nc>(i,j) = d;
+				}
 
 			}
 

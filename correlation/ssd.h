@@ -243,7 +243,7 @@ inline Multidim::Array<float, 3> zssdFeatureVolume2CostVolume(Multidim::Array<fl
 	Multidim::Array<float, 3> zeromean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_l);
 	Multidim::Array<float, 3> zeromean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_r);
 
-	return aggregateCost<matchingFunctions::ZNCC, dDir>(zeromean_feature_volume_l, zeromean_feature_volume_r, disp_width);
+	return aggregateCost<matchingFunctions::ZSSD, dDir>(zeromean_feature_volume_l, zeromean_feature_volume_r, disp_width);
 
 }
 
@@ -511,7 +511,7 @@ Multidim::Array<float, 2> refinedZSSDCostSymmetricFeatureVolumeDisp(Multidim::Ar
 	Multidim::Array<float, 2> mean_left = channelsMean(left_feature_volume);
 	Multidim::Array<float, 2> mean_right = channelsMean(right_feature_volume);
 
-	Multidim::Array<float, 3> CV = zssdFeatureVolume2CostVolume<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp_width);
+	Multidim::Array<float, 3> CV = featureVolume2CostVolume<matchingFunctions::ZSSD,dDir>(left_feature_volume, right_feature_volume, disp_width);
 
 	Multidim::Array<disp_t, 2> raw_disp = extractSelectedIndex<dispExtractionStartegy::Cost>(CV);
 
@@ -707,7 +707,11 @@ Multidim::Array<float, 2> refineFeatureVolumeZSSDDisp(Multidim::Array<float, 3> 
 
 				}
 
-				refinedDisp.at<Nc>(i,j) = d + DeltaD;
+				if (std::fabs(DeltaD) < 1) { //subpixel adjustement is in the interval
+					refinedDisp.at<Nc>(i,j) = d + DeltaD;
+				} else {
+					refinedDisp.at<Nc>(i,j) = d;
+				}
 
 			}
 
@@ -730,6 +734,7 @@ Multidim::Array<float, 2> refineBarycentricSymmetricZSSDDisp(Multidim::Array<flo
 
 	typedef Eigen::Matrix<float, Eigen::Dynamic, 2*refineRadius+1> TypeMatrixA;
 	typedef Eigen::Matrix<float, Eigen::Dynamic, 2*refineRadius> TypeMatrixM;
+	typedef Eigen::Matrix<float, 2*refineRadius, 1> TypeVectorAlpha;
 
 	constexpr disp_t deltaSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
@@ -782,11 +787,11 @@ Multidim::Array<float, 2> refineBarycentricSymmetricZSSDDisp(Multidim::Array<flo
 
 				Eigen::FullPivHouseholderQR<TypeMatrixM> QRM(M);
 
-				auto alpha = QRM.solve(sourceDelta);
+				TypeVectorAlpha alpha = QRM.solve(sourceDelta);
 
-				float delta_d = 0;
+				float delta_d = refineRadius;
 				for (int p = -refineRadius; p < refineRadius; p++) {
-					delta_d += alpha(p)*p + (1.f-alpha(p))*refineRadius;
+					delta_d += alpha(p)*float(p - refineRadius);
 				}
 
 				if (std::fabs(delta_d) < 1) { //subpixel adjustement is in the interval
@@ -862,7 +867,7 @@ Multidim::Array<float, 2> refinedUnfoldZSSDDisp(Multidim::Array<T_L, nImDim> con
 	Multidim::Array<float, 2> mean_left = channelsMean(left_feature_volume);
 	Multidim::Array<float, 2> mean_right = channelsMean(right_feature_volume);
 
-	Multidim::Array<float, 3> CV = zssdFeatureVolume2CostVolume<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp_width);
+	Multidim::Array<float, 3> CV = featureVolume2CostVolume<matchingFunctions::ZSSD,dDir>(left_feature_volume, right_feature_volume, disp_width);
 
 	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Cost>(CV);
 
@@ -928,7 +933,7 @@ Multidim::Array<float, 2> refinedBarycentricSymmetricZSSDDisp(Multidim::Array<T_
 	Multidim::Array<float, 2> mean_left = channelsMean(left_feature_volume);
 	Multidim::Array<float, 2> mean_right = channelsMean(right_feature_volume);
 
-	Multidim::Array<float, 3> CV = zssdFeatureVolume2CostVolume<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp_width);
+	Multidim::Array<float, 3> CV = featureVolume2CostVolume<matchingFunctions::ZSSD,dDir>(left_feature_volume, right_feature_volume, disp_width);
 
 	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Cost>(CV);
 

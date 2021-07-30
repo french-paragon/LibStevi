@@ -1295,6 +1295,8 @@ Multidim::Array<float, 2> refineBarycentricSymmetricNCCDisp(Multidim::Array<floa
 	typedef Eigen::Matrix<float, Eigen::Dynamic, 2*refineRadius+1> TypeMatrixA;
 	typedef Eigen::Matrix<float, Eigen::Dynamic, 2*refineRadius> TypeMatrixM;
 
+	typedef Eigen::Matrix<float, 2*refineRadius, 1> TypeVectorAlpha;
+
 	constexpr disp_t deltaSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -1346,7 +1348,7 @@ Multidim::Array<float, 2> refineBarycentricSymmetricNCCDisp(Multidim::Array<floa
 
 				Eigen::FullPivHouseholderQR<TypeMatrixA> QRA(A);
 
-				auto fsPerp = A*QRA.solve(source);
+				Eigen::VectorXf fsPerp = A*QRA.solve(source);
 
 				TypeMatrixM M(t_shape[2],2*refineRadius);
 
@@ -1358,15 +1360,15 @@ Multidim::Array<float, 2> refineBarycentricSymmetricNCCDisp(Multidim::Array<floa
 
 				Eigen::FullPivHouseholderQR<TypeMatrixM> QRM(M);
 
-				auto ftPerp = M*QRM.solve(A.col(2*refineRadius));
+				Eigen::VectorXf ftPerp = M*QRM.solve(A.col(2*refineRadius));
 
 				float g = (ftPerp.dot(ftPerp))/(ftPerp.dot(fsPerp));
 
-				auto alpha = QRM.solve(g*fsPerp - A.col(2*refineRadius));
+				TypeVectorAlpha alpha = QRM.solve(g*fsPerp - A.col(2*refineRadius));
 
-				float delta_d = 0;
+				float delta_d = refineRadius;
 				for (int p = -refineRadius; p < refineRadius; p++) {
-					delta_d += alpha(p)*p + (1.f-alpha(p))*refineRadius;
+					delta_d += alpha(p)*float(p - refineRadius);
 				}
 
 				if (std::fabs(delta_d) < 1) { //subpixel adjustement is in the interval
