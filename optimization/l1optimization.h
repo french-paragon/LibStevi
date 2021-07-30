@@ -153,8 +153,9 @@ Eigen::Matrix<float,dims,1> leastAbsoluteDifferences(Eigen::Matrix<float,Eigen::
 
 	};
 
+	Eigen::FullPivHouseholderQR<TypeMatrixA> QRA(A);
 
-	TypeVectorX x = TypeVectorX::Zero(); //start on the reference feature vector.
+	TypeVectorX x = QRA.solve(b); //start on the reference feature vector.
 
 	TypeMatrixZ Z = TypeMatrixZ::Zero();
 	TypeMatrixZ prevZ = TypeMatrixZ::Zero();
