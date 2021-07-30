@@ -1156,8 +1156,6 @@ Multidim::Array<float, 2> refineBarycentricSymmetricZSADDisp(Multidim::Array<flo
 	auto d_shape = selectedIndex.shape();
 	auto t_shape = t_feature_volume.shape();
 
-	int nFeatures = t_shape[2];
-
 	Multidim::Array<float, 2> refinedDisp(d_shape);
 
 	#pragma omp parallel for
@@ -1170,9 +1168,9 @@ Multidim::Array<float, 2> refineBarycentricSymmetricZSADDisp(Multidim::Array<flo
 
 			int jd = j + deltaSign*d;
 
-			if (j < 1 or j + 1 >= d_shape[1]) { // if the source patch is partially outside the image
+			if (j < 0 or j + 1 >= d_shape[1]) { // if the source patch is partially outside the image
 				refinedDisp.at<Nc>(i,j) = d;
-			} else if (jd < 1 + refineRadius or jd + 1 >= d_shape[1] - refineRadius) { // if the target patch is partially outside the image
+			} else if (jd - refineRadius < 0 or jd + 1 > d_shape[1] - refineRadius) { // if the target patch is partially outside the image
 				refinedDisp.at<Nc>(i,j) = d;
 			} else if (d == 0 or d+1 >= disp_width) {
 				refinedDisp.at<Nc>(i,j) = d;
@@ -1195,7 +1193,7 @@ Multidim::Array<float, 2> refineBarycentricSymmetricZSADDisp(Multidim::Array<flo
 
 				float delta_d = refineRadius;
 				for (int p = -refineRadius; p < refineRadius; p++) {
-					delta_d += alpha(p)*float(p - refineRadius);
+					delta_d += alpha(p+refineRadius)*float(p - refineRadius);
 				}
 
 				if (std::fabs(delta_d) < 1) { //subpixel adjustement is in the interval
