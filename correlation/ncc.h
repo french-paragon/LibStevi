@@ -1281,6 +1281,145 @@ Multidim::Array<float, 2> refineFeatureVolumeNCCDisp(Multidim::Array<float, 3> c
 	return refinedDisp;
 
 }
+/*!
+ *	refineZeroMeanNormalizedFeatureVolumeNCCDisp refine the disparity obtained via ncc, assuming the features volumes where already detrended and normalized.
+ */
+template<dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 2> refineZeroMeanNormalizedFeatureVolumeNCCDisp(Multidim::Array<float, 3> const& feature_vol_l,
+																	   Multidim::Array<float, 3> const& feature_vol_r,
+																	   Multidim::Array<disp_t, 2> const& selectedIndex,
+																	   disp_t disp_width)
+{
+
+	constexpr disp_t deltaSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	Multidim::Array<float, 3> const& source_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_r : feature_vol_l;
+	Multidim::Array<float, 3> const& target_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_l : feature_vol_r;
+
+	auto d_shape = selectedIndex.shape();
+	auto t_shape = target_feature_volume.shape();
+
+	Multidim::Array<float, 2> refinedDisp(d_shape);
+
+	#pragma omp parallel for
+	for (int i = 0; i < d_shape[0]; i++) {
+
+		#pragma omp simd
+		for (int j = 0; j < d_shape[1]; j++) {
+
+			disp_t d = selectedIndex.value<Nc>(i,j);
+
+			int jd = j + deltaSign*d;
+
+			if (j < 1 or j + 1 >= d_shape[1]) { // if the source patch is partially outside the image
+				refinedDisp.at<Nc>(i,j) = d;
+			} else if (jd < 1 or jd + 1 >= d_shape[1]) { // if the source patch is partially outside the image
+				refinedDisp.at<Nc>(i,j) = d;
+			} else if (d == 0 or d+1 >= disp_width) {
+				refinedDisp.at<Nc>(i,j) = d;
+			} else {
+
+				float k_plus = 0;
+				float k_minus = 0;
+
+				for (int c = 0; c < t_shape[2]; c++) {
+
+					float k0 = target_feature_volume.value<Nc>(i, jd-1, c);
+					float k1 = target_feature_volume.value<Nc>(i, jd, c);
+					float k2 = target_feature_volume.value<Nc>(i, jd+1, c);
+
+					k_plus += k1*k2;
+					k_minus += k0*k1;
+				}
+
+				float sigma_m1 = 1;
+				float sigma_0 = 1;
+				float sigma_1 = 1;
+
+				float a1_plus = sigma_0 + sigma_1 - 2*k_plus;
+				float a1_minus = sigma_m1 + sigma_0 - 2*k_minus;
+
+				float a2_plus = 2*k_plus - 2*sigma_0;
+				float a2_minus = 2*k_minus - 2*sigma_m1;
+
+				float a3_plus = sigma_0;
+				float a3_minus = sigma_m1;
+
+				//float rho_m1 = cc.value<Nc>(i,j,d-1);
+				//float rho_0 = cc.value<Nc>(i,j,d);
+				//float rho_1 = cc.value<Nc>(i,j,d+1);
+
+				float rho_m1 = 0;
+				float rho_0 = 0;
+				float rho_1 = 0;
+
+				for (int c = 0; c < t_shape[2]; c++) {
+					float detrend_s = source_feature_volume.value<Nc>(i,j,c);
+					float detrend_tm1 = target_feature_volume.value<Nc>(i,jd-1,c);
+					float detrend_t0 = target_feature_volume.value<Nc>(i,jd,c);
+					float detrend_t1 = target_feature_volume.value<Nc>(i,jd+1,c);
+
+					rho_m1 += detrend_s*detrend_tm1;
+					rho_0 += detrend_s*detrend_t0;
+					rho_1 += detrend_s*detrend_t1;
+				}
+
+				float b1_plus = (rho_1 - rho_0);
+				float b1_minus = (rho_0 - rho_m1);
+
+				float b2_plus = rho_0;
+				float b2_minus = rho_m1;
+
+				float c1_plus = 1./2. * a2_plus * b1_plus - a1_plus * b2_plus;
+				float c1_minus = 1./2. * a2_minus * b1_minus - a1_minus * b2_minus;
+
+				float c2_plus = (a3_plus * b1_plus) - (1./2. * a2_plus * b2_plus);
+				float c2_minus = (a3_minus * b1_minus) - (1./2. * a2_minus * b2_minus);
+
+				float DeltaD_plus = -c2_plus/c1_plus;
+				float DeltaD_minus = -c2_minus/c1_minus;
+
+				float score = rho_0/sqrtf(sigma_0);
+
+				float DeltaD = 0;
+
+				if (DeltaD_plus > 0 and DeltaD_plus < 1) {
+
+					float interpRho = (rho_1 - rho_0)*DeltaD_plus + rho_0;
+					float interpSigma_t = a1_plus*DeltaD_plus*DeltaD_plus + a2_plus*DeltaD_plus + a3_plus;
+					float tmpScore = interpRho/sqrtf(interpSigma_t);
+
+					if (tmpScore > score) {
+						score = tmpScore;
+						DeltaD = DeltaD_plus;
+					}
+
+				}
+
+				if (DeltaD_minus > 0 and DeltaD_minus < 1) {
+
+					float interpRho = (rho_0 - rho_m1)*DeltaD_minus + rho_m1;
+					float interpSigma_t = a1_minus*DeltaD_minus*DeltaD_minus + a2_minus*DeltaD_minus + a3_minus;
+					float tmpScore = interpRho/sqrtf(interpSigma_t);
+
+					if (tmpScore > score) {
+						score = tmpScore;
+						DeltaD = DeltaD_minus - 1;
+					}
+
+				}
+
+				refinedDisp.at<Nc>(i,j) = d + DeltaD;
+
+			}
+
+		}
+	}
+
+	return refinedDisp;
+
+}
 
 template<int refineRadius = 1, dispDirection dDir = dispDirection::RightToLeft>
 Multidim::Array<float, 2> refineBarycentricSymmetricNCCDisp(Multidim::Array<float, 3> const& feature_vol_l,
@@ -1387,12 +1526,113 @@ Multidim::Array<float, 2> refineBarycentricSymmetricNCCDisp(Multidim::Array<floa
 
 }
 
+/*!
+ * refineBarycentricSymmetricZeroMeanNCCDisp use a symmetric barycentric approach assuming the input features have a mean of 0.
+ */
+template<int refineRadius = 1, dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 2> refineBarycentricSymmetricZeroMeanNCCDisp(Multidim::Array<float, 3> const& feature_vol_l,
+																	Multidim::Array<float, 3> const& feature_vol_r,
+																	Multidim::Array<disp_t, 2> const& selectedIndex,
+																	disp_t disp_width) {
+
+	static_assert (refineRadius > 0, "refineBarycentricSymmetricNCCDisp cannot proceed with a refinement radius smaller than 1.");
+
+	typedef Eigen::Matrix<float, Eigen::Dynamic, 2*refineRadius+1> TypeMatrixA;
+	typedef Eigen::Matrix<float, Eigen::Dynamic, 2*refineRadius> TypeMatrixM;
+
+	typedef Eigen::Matrix<float, 2*refineRadius, 1> TypeVectorAlpha;
+
+	constexpr disp_t deltaSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	Multidim::Array<float, 3> const& source_zfeature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_r : feature_vol_l;
+	Multidim::Array<float, 3> const& target_zfeature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_l : feature_vol_r;
+
+	auto d_shape = selectedIndex.shape();
+	auto t_shape = target_zfeature_volume.shape();
+
+	Multidim::Array<float, 2> refinedDisp(d_shape);
+
+	#pragma omp parallel for
+	for (int i = 0; i < d_shape[0]; i++) {
+
+		#pragma omp simd
+		for (int j = 0; j < d_shape[1]; j++) {
+
+			disp_t d = selectedIndex.value<Nc>(i,j);
+
+			int jd = j + deltaSign*d;
+
+			if (j < 0 or j + 1 >= d_shape[1]) { // if the source patch is partially outside the image
+				refinedDisp.at<Nc>(i,j) = d;
+			} else if (jd - refineRadius < 0 or jd + 1 > d_shape[1] - refineRadius) { // if the target patch is partially outside the image
+				refinedDisp.at<Nc>(i,j) = d;
+			} else if (d == 0 or d+1 >= disp_width) {
+				refinedDisp.at<Nc>(i,j) = d;
+			} else {
+
+				Eigen::VectorXf source(t_shape[2]);
+
+				for (int c = 0 ; c < t_shape[2]; c++) {
+					source(c) = source_zfeature_volume.value<Nc>(i,j,c);
+				}
+
+				TypeMatrixA A(t_shape[2],2*refineRadius+1);
+
+				for (int p = -refineRadius; p <= refineRadius; p++) {
+					for (int c = 0 ; c < t_shape[2]; c++) {
+						A(c, p+refineRadius) = target_zfeature_volume.value<Nc>(i,jd+p,c);
+					}
+				}
+
+				Eigen::FullPivHouseholderQR<TypeMatrixA> QRA(A);
+
+				Eigen::VectorXf fsPerp = A*QRA.solve(source);
+
+				TypeMatrixM M(t_shape[2],2*refineRadius);
+
+				for (int p = -refineRadius; p < refineRadius; p++) {
+					for (int c = 0 ; c < t_shape[2]; c++) {
+						M(c, p+refineRadius) = target_zfeature_volume.value<Nc>(i,jd+p,c) - target_zfeature_volume.value<Nc>(i,jd+refineRadius,c);
+					}
+				}
+
+				Eigen::FullPivHouseholderQR<TypeMatrixM> QRM(M);
+
+				Eigen::VectorXf ftPerp = A.col(2*refineRadius) - M*QRM.solve(A.col(2*refineRadius));
+
+				float g = (ftPerp.dot(ftPerp))/(ftPerp.dot(fsPerp));
+
+				TypeVectorAlpha alpha = QRM.solve(g*fsPerp - A.col(2*refineRadius));
+
+				float delta_d = refineRadius;
+				for (int p = -refineRadius; p < refineRadius; p++) {
+					delta_d += alpha(p+refineRadius)*float(p - refineRadius);
+				}
+
+				if (std::fabs(delta_d) < 1) { //subpixel adjustement is in the interval
+					refinedDisp.at<Nc>(i,j) = d + delta_d;
+				} else {
+					refinedDisp.at<Nc>(i,j) = d;
+				}
+			}
+
+		}
+
+	}
+
+	return refinedDisp;
+
+
+}
+
 template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
 Multidim::Array<float, 2> refinedUnfoldNCCDisp(Multidim::Array<T_L, nImDim> const& img_l,
-												   Multidim::Array<T_R, nImDim> const& img_r,
-												   uint8_t h_radius,
-												   uint8_t v_radius,
-												   disp_t disp_width)
+											   Multidim::Array<T_R, nImDim> const& img_r,
+											   uint8_t h_radius,
+											   uint8_t v_radius,
+											   disp_t disp_width,
+											   bool preNormalize = false)
 {
 	auto l_shape = img_l.shape();
 	auto r_shape = img_r.shape();
@@ -1420,14 +1660,22 @@ Multidim::Array<float, 2> refinedUnfoldNCCDisp(Multidim::Array<T_L, nImDim> cons
 
 	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Score>(CV);
 
+	if (preNormalize) {
+		Multidim::Array<float,3> normalized_left = normalizedFeatureVolume(zeromeanFeatureVolume(left_feature_volume, mean_left), sigma_left);
+		Multidim::Array<float,3> normalized_right = normalizedFeatureVolume(zeromeanFeatureVolume(right_feature_volume, mean_right), sigma_right);
+
+		return refineZeroMeanNormalizedFeatureVolumeNCCDisp(normalized_left, normalized_right, disp, disp_width);
+	}
+
 	return refineFeatureVolumeNCCDisp<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, sigma_left, sigma_right, disp, disp_width);
 }
 
 template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
 Multidim::Array<float, 2> refinedUnfoldNCCDisp(Multidim::Array<T_L, nImDim> const& img_l,
-												   Multidim::Array<T_R, nImDim> const& img_r,
-												   UnFoldCompressor const& compressor,
-												   disp_t disp_width)
+											   Multidim::Array<T_R, nImDim> const& img_r,
+											   UnFoldCompressor const& compressor,
+											   disp_t disp_width,
+											   bool preNormalize = false)
 {
 	auto l_shape = img_l.shape();
 	auto r_shape = img_r.shape();
@@ -1454,6 +1702,13 @@ Multidim::Array<float, 2> refinedUnfoldNCCDisp(Multidim::Array<T_L, nImDim> cons
 	Multidim::Array<float, 3> CV = nccFeatureVolume2CostVolume<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, sigma_left, sigma_right, disp_width);
 
 	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Score>(CV);
+
+	if (preNormalize) {
+		Multidim::Array<float,3> normalized_left = normalizedFeatureVolume(zeromeanFeatureVolume(left_feature_volume, mean_left), sigma_left);
+		Multidim::Array<float,3> normalized_right = normalizedFeatureVolume(zeromeanFeatureVolume(right_feature_volume, mean_right), sigma_right);
+
+		return refineZeroMeanNormalizedFeatureVolumeNCCDisp(normalized_left, normalized_right, disp, disp_width);
+	}
 
 	return refineFeatureVolumeNCCDisp<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, sigma_left, sigma_right, disp, disp_width);
 }
@@ -1463,7 +1718,8 @@ Multidim::Array<float, 2> refinedBarycentricSymmetricNCCDisp(Multidim::Array<T_L
 															 Multidim::Array<T_R, nImDim> const& img_r,
 															 uint8_t h_radius,
 															 uint8_t v_radius,
-															 disp_t disp_width)
+															 disp_t disp_width,
+															 bool preNormalize = false)
 {
 
 	static_assert (refineRadius > 0, "Barycentric symmetric refinement cannot run with a refinement radius smaller than 1 !");
@@ -1494,6 +1750,13 @@ Multidim::Array<float, 2> refinedBarycentricSymmetricNCCDisp(Multidim::Array<T_L
 
 	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Score>(CV);
 
+	if (preNormalize) {
+		Multidim::Array<float,3> normalized_left = normalizedFeatureVolume(zeromeanFeatureVolume(left_feature_volume, mean_left), sigma_left);
+		Multidim::Array<float,3> normalized_right = normalizedFeatureVolume(zeromeanFeatureVolume(right_feature_volume, mean_right), sigma_right);
+
+		return refineBarycentricSymmetricZeroMeanNCCDisp(normalized_left, normalized_right, disp, disp_width);
+	}
+
 	return refineBarycentricSymmetricNCCDisp<refineRadius, dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp, disp_width);
 
 }
@@ -1502,7 +1765,8 @@ template<class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirectio
 Multidim::Array<float, 2> refinedBarycentricSymmetricNCCDisp(Multidim::Array<T_L, nImDim> const& img_l,
 															 Multidim::Array<T_R, nImDim> const& img_r,
 															 UnFoldCompressor const& compressor,
-															 disp_t disp_width)
+															 disp_t disp_width,
+															 bool preNormalize = false)
 {
 
 	static_assert (refineRadius > 0, "Barycentric symmetric refinement cannot run with a refinement radius smaller than 1 !");
@@ -1532,6 +1796,13 @@ Multidim::Array<float, 2> refinedBarycentricSymmetricNCCDisp(Multidim::Array<T_L
 	Multidim::Array<float, 3> CV = nccFeatureVolume2CostVolume<dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, sigma_left, sigma_right, disp_width);
 
 	Multidim::Array<disp_t, 2> disp = extractSelectedIndex<dispExtractionStartegy::Score>(CV);
+
+	if (preNormalize) {
+		Multidim::Array<float,3> normalized_left = normalizedFeatureVolume(zeromeanFeatureVolume(left_feature_volume, mean_left), sigma_left);
+		Multidim::Array<float,3> normalized_right = normalizedFeatureVolume(zeromeanFeatureVolume(right_feature_volume, mean_right), sigma_right);
+
+		return refineBarycentricSymmetricZeroMeanNCCDisp(normalized_left, normalized_right, disp, disp_width);
+	}
 
 	return refineBarycentricSymmetricNCCDisp<refineRadius, dDir>(left_feature_volume, right_feature_volume, mean_left, mean_right, disp, disp_width);
 
