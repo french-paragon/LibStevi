@@ -1,8 +1,6 @@
 #include <QtTest/QtTest>
 
-#include "correlation/ncc.h"
-#include "correlation/ssd.h"
-#include "correlation/sad.h"
+#include "correlation/cross_correlations.h"
 
 typedef Multidim::Array<int,2> CompressorMask;
 typedef std::array<float,3> SymmetricWeightsSplit;
@@ -385,7 +383,8 @@ void TestCorrelationFilters::testCrossCorrelationFilter() {
 		}
 	}
 
-	Multidim::Array<float, 3> CV = StereoVision::Correlation::ccCostVolume(randLeft, randRight, h_radius, v_radius, disp_w);
+	constexpr auto matchFunc = StereoVision::Correlation::matchingFunctions::ZCC;
+	Multidim::Array<float, 3> CV = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc>(randLeft, randRight, h_radius, v_radius, disp_w);
 
 	Multidim::Array<float, 2> window1 = randRight.subView(Multidim::DimSlice(0,2*v_radius+1), Multidim::DimSlice(0,2*h_radius+1));
 
@@ -438,7 +437,8 @@ void TestCorrelationFilters::testNCCFilter() {
 		}
 	}
 
-	Multidim::Array<float, 3> CV = StereoVision::Correlation::nccCostVolume(randLeft, randRight, h_radius, v_radius, disp_w);
+	constexpr auto matchFunc = StereoVision::Correlation::matchingFunctions::ZNCC;
+	Multidim::Array<float, 3> CV = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc>(randLeft, randRight, h_radius, v_radius, disp_w);
 
 	Multidim::Array<float, 2> window1 = randRight.subView(Multidim::DimSlice(0,2*v_radius+1), Multidim::DimSlice(0,2*h_radius+1));
 
@@ -495,8 +495,9 @@ void TestCorrelationFilters::benchmarkNCCFilter() {
 		}
 	}
 
+	constexpr auto matchFunc = StereoVision::Correlation::matchingFunctions::ZNCC;
 	QBENCHMARK_ONCE {
-		Multidim::Array<float, 3> CV = StereoVision::Correlation::nccCostVolume(randLeft, randRight, h_radius, v_radius, disp_w);
+		Multidim::Array<float, 3> CV = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc>(randLeft, randRight, h_radius, v_radius, disp_w);
 	}
 }
 
@@ -656,7 +657,8 @@ void TestCorrelationFilters::testUnfoldNCCFilter() {
 		}
 	}
 
-	Multidim::Array<float, 3> CV = StereoVision::Correlation::nccUnfoldBasedCostVolume(randLeft, randRight, h_radius, v_radius, disp_w);
+	constexpr auto matchFunc = StereoVision::Correlation::matchingFunctions::ZNCC;
+	Multidim::Array<float, 3> CV = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc>(randLeft, randRight, h_radius, v_radius, disp_w);
 
 	Multidim::Array<float, 2> window1 = randRight.subView(Multidim::DimSlice(0,2*v_radius+1), Multidim::DimSlice(0,2*h_radius+1));
 
@@ -712,8 +714,9 @@ void TestCorrelationFilters::benchmarkUnfoldNCCFilter() {
 		}
 	}
 
+	constexpr auto matchFunc = StereoVision::Correlation::matchingFunctions::ZNCC;
 	QBENCHMARK_ONCE {
-		Multidim::Array<float, 3> CV = StereoVision::Correlation::nccUnfoldBasedCostVolume(randLeft, randRight, h_radius, v_radius, disp_w);
+		Multidim::Array<float, 3> CV = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc>(randLeft, randRight, h_radius, v_radius, disp_w);
 	}
 
 }
@@ -843,8 +846,9 @@ void TestCorrelationFilters::benchmarkCompressedNCCFilter() {
 
 	StereoVision::Correlation::UnFoldCompressor compressor(compressor_mask);
 
+	constexpr auto matchFunc = StereoVision::Correlation::matchingFunctions::ZNCC;
 	QBENCHMARK_ONCE {
-		Multidim::Array<float, 3> CV = StereoVision::Correlation::nccUnfoldBasedCostVolume(randLeft, randRight, compressor, disp_w);
+		Multidim::Array<float, 3> CV = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc>(randLeft, randRight, compressor, disp_w);
 	}
 }
 
@@ -930,7 +934,9 @@ void TestCorrelationFilters::testBarycentricNccRefinement() {
 		source.at<Nc>(0,0,c) = val;
 	}
 
-	Multidim::Array<float, 2> disparity = StereoVision::Correlation::refinedBarycentricSymmetricNCCDisp<float,
+	constexpr auto matchFunc = StereoVision::Correlation::matchingFunctions::ZNCC;
+	Multidim::Array<float, 2> disparity = StereoVision::Correlation::refinedBarycentricSymmetricDisp<matchFunc,
+																			float,
 																			float,
 																			3,
 																			StereoVision::Correlation::dispDirection::RightToLeft,
@@ -1015,7 +1021,9 @@ void TestCorrelationFilters::testBarycentricSsdRefinement() {
 		source.at<Nc>(0,0,c) = val;
 	}
 
-	Multidim::Array<float, 2> disparity = StereoVision::Correlation::refinedBarycentricSymmetricZSSDDisp<float,
+	constexpr auto matchFunc = StereoVision::Correlation::matchingFunctions::ZSSD;
+	Multidim::Array<float, 2> disparity = StereoVision::Correlation::refinedBarycentricSymmetricDisp<matchFunc,
+																			float,
 																			float,
 																			3,
 																			StereoVision::Correlation::dispDirection::RightToLeft,
@@ -1100,7 +1108,9 @@ void TestCorrelationFilters::testBarycentricSadRefinement() {
 		source.at<Nc>(0,0,c) = val;
 	}
 
-	Multidim::Array<float, 2> disparity = StereoVision::Correlation::refinedBarycentricSymmetricZSADDisp<float,
+	constexpr auto matchFunc = StereoVision::Correlation::matchingFunctions::ZSAD;
+	Multidim::Array<float, 2> disparity = StereoVision::Correlation::refinedBarycentricSymmetricDisp<matchFunc,
+																			float,
 																			float,
 																			3,
 																			StereoVision::Correlation::dispDirection::RightToLeft,

@@ -6,6 +6,8 @@
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/QR>
 
+#include "./l2optimization.h"
+
 namespace StereoVision {
 namespace Optimization {
 
@@ -44,6 +46,7 @@ T weighted_median(std::vector<T> const& elements, std::vector<float> const& weig
 	return elements[weighted_median_index(elements, weights)];
 }
 
+
 template<int dims>
 inline Eigen::Matrix<float,dims,1> constrainVectorToSubspace(Eigen::Matrix<float,dims,1> const& unconstrained,
 															 Eigen::Matrix<float,dims-1,dims> const& constaints) {
@@ -75,11 +78,13 @@ inline Eigen::Matrix<float,2,1> constrainVectorToSubspace<2>(Eigen::Matrix<float
  * leastAbsoluteDifferences solve a problem of the form argmin_x || Ax - b ||_1 using dimensionality reduction and weigthed median.
  * \return The optimal x.
  */
-template<int dims>
-Eigen::Matrix<float,dims,1> leastAbsoluteDifferences(Eigen::Matrix<float,Eigen::Dynamic,dims> const& A,
-													 Eigen::VectorXf const& b,
-													 float tol=1e-6,
-													 int maxIters = 100) {
+template<int dimsIn, int dimsOuts = Eigen::Dynamic>
+Eigen::Matrix<float,dimsIn,1> leastAbsoluteDifferences(Eigen::Matrix<float,dimsOuts,dimsIn> const& A,
+													   Eigen::Matrix<float,dimsOuts,1> const& b,
+													   float tol=1e-6,
+													   int maxIters = 100) {
+
+	static_assert (dimsIn >= 2, "leastAbsoluteDifferences expect x dimension to be greather or equal to 2.");
 
 	auto softSignFunc = [tol] (float val) -> float {
 		if (val > tol) {
@@ -90,12 +95,12 @@ Eigen::Matrix<float,dims,1> leastAbsoluteDifferences(Eigen::Matrix<float,Eigen::
 		return 0;
 	};
 
-	typedef Eigen::Matrix<float,Eigen::Dynamic,dims> TypeMatrixA;
-	typedef Eigen::Matrix<float,dims,1> TypeVectorX;
-	typedef Eigen::Matrix<float,1,dims> TypeConstraintRow;
+	typedef Eigen::Matrix<float,dimsOuts,dimsIn> TypeMatrixA;
+	typedef Eigen::Matrix<float,dimsIn,1> TypeVectorX;
+	typedef Eigen::Matrix<float,1,dimsIn> TypeConstraintRow;
 
-	constexpr int maxNConstraints = dims-1;
-	typedef Eigen::Matrix<float,dims-1,dims> TypeMatrixZ;
+	constexpr int maxNConstraints = dimsIn-1;
+	typedef Eigen::Matrix<float,dimsIn-1,dimsIn> TypeMatrixZ;
 	typedef std::array<int, maxNConstraints> TypeConstraintsInputs;
 	typedef std::set<int> TypeUnconstrainedInputs;
 
@@ -108,15 +113,15 @@ Eigen::Matrix<float,dims,1> leastAbsoluteDifferences(Eigen::Matrix<float,Eigen::
 								int & nextConstraint) -> TypeVectorX {
 
 		TypeVectorX d = TypeVectorX::Random();
-		d = constrainVectorToSubspace<dims>(d, constraints).eval();
+		d = constrainVectorToSubspace<dimsIn>(d, constraints).eval();
 
 		float d_norm = d.template lpNorm<1>();
 
-		while (d_norm < dims*tol) {
+		while (d_norm < dimsIn*tol) {
 			//if the algorithm get stuck before ending we just take an optimization step in a random direction
 			//TODO: test if this is clever and implement a better variable selection if need there is.
 			d = TypeVectorX::Random();
-			d = constrainVectorToSubspace<dims>(d, constraints).eval();
+			d = constrainVectorToSubspace<dimsIn>(d, constraints).eval();
 			d_norm = d.template lpNorm<1>();
 		}
 
@@ -153,16 +158,13 @@ Eigen::Matrix<float,dims,1> leastAbsoluteDifferences(Eigen::Matrix<float,Eigen::
 
 	};
 
-	Eigen::FullPivHouseholderQR<TypeMatrixA> QRA(A);
-
-	TypeVectorX x = QRA.solve(b); //start on the reference feature vector.
+	TypeVectorX x = leastSquares(A, b); //start with the l2 solution.
 
 	TypeMatrixZ Z = TypeMatrixZ::Zero();
 	TypeMatrixZ prevZ = TypeMatrixZ::Zero();
 	TypeConstraintsInputs constraintInputs;
 	std::fill(constraintInputs.begin(), constraintInputs.end(), -1);
 	int idNextConstraint = 0;
-	int idPrevConstraint = 0;
 	bool constraintsFull = false;
 
 	TypeVectorX d = TypeVectorX::Zero();
@@ -180,7 +182,7 @@ Eigen::Matrix<float,dims,1> leastAbsoluteDifferences(Eigen::Matrix<float,Eigen::
 
 		if (constraintsFull) {
 			float incr_norm = incr.template lpNorm<1>();
-			if (incr_norm < dims*tol) {// check all possible edges, if all lead to 0 increment then global minimum is reached.
+			if (incr_norm < dimsIn*tol) {// check all possible edges, if all lead to 0 increment then global minimum is reached.
 				prevZ = Z;
 				bool sucess = true;
 				unconstrainedInputs.erase(nextConstraint);
@@ -196,7 +198,7 @@ Eigen::Matrix<float,dims,1> leastAbsoluteDifferences(Eigen::Matrix<float,Eigen::
 					TypeVectorX incr2 = nextIncrement(A,x,b,Z,unconstrainedInputs, tol, nnextConstraint);
 					float incr2_norm = incr2.template lpNorm<1>();
 
-					if (incr2_norm > dims*tol) {
+					if (incr2_norm > dimsIn*tol) {
 						sucess = false;
 						constraintInputs[n] = nextConstraint;
 						idNextConstraint = (n+1)%maxNConstraints;
@@ -233,6 +235,61 @@ Eigen::Matrix<float,dims,1> leastAbsoluteDifferences(Eigen::Matrix<float,Eigen::
 
 	return x;
 
+}
+
+template<int dimsOuts = Eigen::Dynamic>
+Eigen::Matrix<float,1,1> leastAbsoluteDifferences(Eigen::Matrix<float,dimsOuts,1> const& A,
+												  Eigen::Matrix<float,dimsOuts,1> const& b,
+												  float tol=1e-6,
+												  int maxIters = 100) {
+
+	(void) tol;
+	(void) maxIters;
+
+	int nInputs = A.rows();
+
+	std::vector<float> t_breaks(nInputs);
+	std::vector<float> t_weights(nInputs);
+
+	for (int i = 0; i < b.rows(); i++) {
+		float o = A(i);
+		t_weights[i] = std::abs(o);
+		t_breaks[i] = b(i)/o;
+		if (std::isnan(t_breaks.back()) or std::isinf(t_breaks.back())) {
+			t_weights[i] = 0;
+			t_breaks[i] = -std::numeric_limits<float>::infinity();
+		}
+	}
+
+	float alpha = weighted_median(t_breaks, t_weights);
+	return Eigen::Matrix<float,1,1>(alpha);
+
+}
+
+/*!
+ * affineBestL1Approximation solve a problem of the form argmin_x || Ax - b ||_1 with the constraint that sum(x) == 1 using a dense solver.
+ * The function is optimized for small problems.
+ * The function, while it is guaranteed to reach the global optimum in finite time, is not perfectly robust to numerical imprecision and might converge in a really long time.
+ * This is why a maximal number of iterations, as well as a floating point tolerance, have been added.
+ * \return The optimal x.
+ */
+template<int dimsIn, int dimsOuts = Eigen::Dynamic>
+inline Eigen::Matrix<float,dimsIn,1> affineBestL1Approximation(Eigen::Matrix<float,dimsOuts,dimsIn> const& A,
+															   Eigen::Matrix<float,dimsOuts,1> const& b,
+															   float tol=1e-6,
+															   int maxIters = 100) {
+
+	static_assert (dimsIn >= 2, "affineBestL1Approximation expect x dimension to be greather or equal to 2.");
+
+	constexpr int referenceId = -1;
+	typedef AffineSpace<dimsIn, dimsOuts, float, referenceId> AffineSpaceA ;
+
+	typedef Eigen::Matrix<float,dimsOuts,dimsIn> TypeMatrixA;
+	typedef typename AffineSpaceA::TypeVectorCoeffs TypeVectorAlpha;
+
+	AffineSpaceA AffineA(A);
+	TypeVectorAlpha alpha = leastAbsoluteDifferences(AffineA.M(), (b - AffineA.b()).eval(), tol, maxIters);
+	return AffineSpaceA::fullCoeffs(alpha);
 }
 
 } // namespace Optimization

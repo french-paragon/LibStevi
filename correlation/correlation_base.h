@@ -508,6 +508,79 @@ Multidim::Array<float, 2> meanFilter2D (uint8_t h_radius,
 }
 
 template<class T_I>
+Multidim::Array<float, 2> sigmaFilter(uint8_t h_radius,
+									  uint8_t v_radius,
+									  Multidim::Array<float, 2> const& mean,
+									  Multidim::Array<T_I, 2> const& in_data) {
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	Multidim::Array<float, 2> sigma(in_data.shape()[0], in_data.shape()[1]);
+
+	auto shape = in_data.shape();
+
+	#pragma omp parallel for
+	for(long i = v_radius; i < shape[0]-v_radius; i++){
+		#pragma omp simd
+		for(long j = h_radius; j < shape[1]-h_radius; j++){
+
+			float s = 0.;
+
+			for(int k = -v_radius; k <= v_radius; k++) {
+
+				for (int l = -h_radius; l <= h_radius; l++) {
+
+					float tmp = in_data.template value<Nc>(i+k, j+l) - mean.value<Nc>(i,j);
+					s += tmp*tmp;
+				}
+			}
+
+			sigma.at<Nc>(i, j) = sqrtf(s);
+		}
+	}
+
+	return sigma;
+}
+
+template<class T_I>
+Multidim::Array<float, 2> sigmaFilter(uint8_t h_radius,
+									  uint8_t v_radius,
+									  Multidim::Array<float, 2> const& mean,
+									  Multidim::Array<T_I, 3> const& in_data) {
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	Multidim::Array<float, 2> sigma(in_data.shape()[0], in_data.shape()[1]);
+
+	auto shape = in_data.shape();
+
+	#pragma omp parallel for
+	for(long i = v_radius; i < shape[0]-v_radius; i++){
+		#pragma omp simd
+		for(long j = h_radius; j < shape[1]-h_radius; j++){
+
+			float s = 0.;
+
+			for(int k = -v_radius; k <= v_radius; k++) {
+
+				for (int l = -h_radius; l <= h_radius; l++) {
+
+					for (int c = 0; c < shape[2]; c++) {
+
+						float tmp = in_data.template value<Nc>(i+k, j+l, c) - mean.value<Nc>(i,j);
+						s += tmp*tmp;
+					}
+				}
+			}
+
+			sigma.at<Nc>(i, j) = sqrtf(s);
+		}
+	}
+
+	return sigma;
+}
+
+template<class T_I>
 Multidim::Array<float, 2> channelsMean (Multidim::Array<T_I, 3> const& in_data) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
