@@ -972,14 +972,11 @@ Multidim::Array<float, 2> refineBarycentricDisp(Multidim::Array<float, 3> const&
 	return refinedDisp;
 }
 
-template<matchingFunctions matchFunc, int refineRadius = 1, dispDirection dDir = dispDirection::RightToLeft>
+template<matchingFunctions matchFunc, dispDirection dDir = dispDirection::RightToLeft>
 Multidim::Array<float, 2> refineCostSymmetricDisp(Multidim::Array<float, 3> const& feature_vol_l,
 												  Multidim::Array<float, 3> const& feature_vol_r,
 												  Multidim::Array<disp_t, 2> const& selectedIndex,
 												  Multidim::Array<float, 3> const& cost_volume) {
-
-	typedef Eigen::Matrix<float, Eigen::Dynamic, 2> TypeMatrixA;
-	typedef Eigen::Matrix<float, 2, 1> TypeVectorAlpha;
 
 	constexpr disp_t deltaSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
