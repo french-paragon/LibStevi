@@ -1,17 +1,6 @@
 #ifndef STEREOVISION_CORE_H
 #define STEREOVISION_CORE_H
 
-#include <eigen3/Eigen/Core>
-
-namespace StereoVision {
-namespace Geometry {
-
-Eigen::Matrix3f skew(Eigen::Vector3f const& v);
-Eigen::Vector3f unskew(Eigen::Matrix3f const& m);
-
-Eigen::Matrix3d skewD(Eigen::Vector3d const& v);
-Eigen::Vector3d unskewD(Eigen::Matrix3d const& m);
-
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 
 Copyright (C) 2021  Paragon<french.paragon@gmail.com>
@@ -29,6 +18,17 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
+#include <eigen3/Eigen/Core>
+
+namespace StereoVision {
+namespace Geometry {
+
+Eigen::Matrix3f skew(Eigen::Vector3f const& v);
+Eigen::Vector3f unskew(Eigen::Matrix3f const& m);
+
+Eigen::Matrix3d skewD(Eigen::Vector3d const& v);
+Eigen::Vector3d unskewD(Eigen::Matrix3d const& m);
 
 enum class Axis : char {
 	X,

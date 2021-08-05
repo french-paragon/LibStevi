@@ -1,11 +1,6 @@
 #ifndef STEREOVISION_ROTATIONS_H
 #define STEREOVISION_ROTATIONS_H
 
-#include "geometry/core.h"
-
-namespace StereoVision {
-namespace Geometry {
-
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 
 Copyright (C) 2021  Paragon<french.paragon@gmail.com>
@@ -23,6 +18,11 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
+#include "geometry/core.h"
+
+namespace StereoVision {
+namespace Geometry {
 
 class ShapePreservingTransform
 {
