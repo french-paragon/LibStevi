@@ -853,9 +853,7 @@ Multidim::Array<float, 2> refineBarycentricDisp(Multidim::Array<float, 3> const&
 
 			int jd = j + deltaSign*d;
 
-			if (j < 1 or j + 1 >= d_shape[1]) { // if the source patch is partially outside the image
-				refinedDisp.at<Nc>(i,j) = d;
-			} else if (jd < 1 or jd + 1 >= d_shape[1]) { // if the source patch is partially outside the image
+			if (jd < 1 or jd + 1 >= d_shape[1]) { // if the source patch is partially outside the image
 				refinedDisp.at<Nc>(i,j) = d;
 			} else if (d == 0 or d+1 >= disp_width) {
 				refinedDisp.at<Nc>(i,j) = d;
@@ -899,7 +897,7 @@ Multidim::Array<float, 2> refineBarycentricDisp(Multidim::Array<float, 3> const&
 				norm = Ap.col(0).norm();
 
 				for (int c = 0; c < f; c++) {
-					float s = source_feature_volume.value<Nc>(i,jd,c);
+					float s = target_feature_volume.value<Nc>(i,jd,c);
 					if (MatchingFunctionTraits<matchFunc>::Normalized) {
 						target_feature_vector0.at<Nc>(c) = s/norm;
 					}
@@ -911,8 +909,8 @@ Multidim::Array<float, 2> refineBarycentricDisp(Multidim::Array<float, 3> const&
 				TypeVectorAlpha coeffsP = MatchingFunctionTraits<matchFunc>::barycentricBestApproximation(Ap, source);
 				TypeVectorAlpha coeffsM = MatchingFunctionTraits<matchFunc>::barycentricBestApproximation(Am, source);
 
-				float DeltaD_plus = coeffsP(0);
-				float DeltaD_minus = -coeffsM(1);
+				float DeltaD_plus = coeffsP(1);
+				float DeltaD_minus = coeffsM(0);
 
 				Eigen::VectorXf src = source;
 
@@ -937,9 +935,16 @@ Multidim::Array<float, 2> refineBarycentricDisp(Multidim::Array<float, 3> const&
 
 					float tmpScore = MatchingFunctionTraits<matchFunc>::featureComparison(source_feature_vector, target_feature_vector_interp);
 
-					if (tmpScore > score) {
-						score = tmpScore;
-						DeltaD = DeltaD_plus;
+					if (MatchingFunctionTraits<matchFunc>::extractionStrategy == dispExtractionStartegy::Score) {
+						if (tmpScore > score) {
+							score = tmpScore;
+							DeltaD = DeltaD_plus;
+						}
+					} else {
+						if (tmpScore < score) {
+							score = tmpScore;
+							DeltaD = DeltaD_plus;
+						}
 					}
 
 				}
@@ -955,9 +960,16 @@ Multidim::Array<float, 2> refineBarycentricDisp(Multidim::Array<float, 3> const&
 
 					float tmpScore = MatchingFunctionTraits<matchFunc>::featureComparison(source_feature_vector, target_feature_vector_interp);
 
-					if (tmpScore > score) {
-						score = tmpScore;
-						DeltaD = DeltaD_minus - 1;
+					if (MatchingFunctionTraits<matchFunc>::extractionStrategy == dispExtractionStartegy::Score) {
+						if (tmpScore > score) {
+							score = tmpScore;
+							DeltaD = -DeltaD_minus;
+						}
+					} else {
+						if (tmpScore < score) {
+							score = tmpScore;
+							DeltaD = -DeltaD_minus;
+						}
 					}
 
 				}

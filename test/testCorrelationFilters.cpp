@@ -155,6 +155,15 @@ private Q_SLOTS:
 	void testBarycentricSadRefinement_data();
 	void testBarycentricSadRefinement();
 
+	void testBarycentricSymmetricNccRefinement_data();
+	void testBarycentricSymmetricNccRefinement();
+
+	void testBarycentricSymmetricSsdRefinement_data();
+	void testBarycentricSymmetricSsdRefinement();
+
+	void testBarycentricSymmetricSadRefinement_data();
+	void testBarycentricSymmetricSadRefinement();
+
 private:
 	std::default_random_engine re;
 
@@ -855,6 +864,254 @@ void TestCorrelationFilters::benchmarkCompressedNCCFilter() {
 void TestCorrelationFilters::testBarycentricNccRefinement_data() {
 
 	QTest::addColumn<int>("c_radius");
+	QTest::addColumn<float>("subpixel_adjustement");
+
+	QTest::newRow("small_l") << 1 << -0.3f;
+	QTest::newRow("small_r") << 1 << 0.3f;
+	QTest::newRow("avg_l") << 3 << -0.25f;
+	QTest::newRow("avg_r") << 3 << 0.25f;
+	QTest::newRow("large_l") << 5 << -0.3f;
+	QTest::newRow("large_r") << 5 << 0.3f;
+
+
+}
+void TestCorrelationFilters::testBarycentricNccRefinement() {
+
+	QFETCH(int, c_radius);
+	QFETCH(float, subpixel_adjustement);
+
+	int h_radius = c_radius;
+	int v_radius = c_radius;
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	int h = 2*v_radius + 1;
+	int w = 2*h_radius + 3;
+
+	int f = (2*v_radius + 1)*(2*h_radius + 1);
+
+	std::uniform_real_distribution<float> uniformDist(-1, 1);
+
+	Multidim::Array<float, 2> rand(h,w);
+
+	for(int i = 0; i < h; i++) {
+		for(int j = 0; j < w; j++) {
+			float val = uniformDist(re);
+			rand.at<Nc>(i,j) = val;
+		}
+	}
+
+	Multidim::Array<float, 3> unfolded = StereoVision::Correlation::unfold(h_radius,
+																		   v_radius,
+																		   rand,
+																		   StereoVision::Correlation::PaddingMargins(0));
+
+	//Multidim::Array<float, 2> mean = StereoVision::Correlation::channelsMean(unfolded);
+	//for (int c = 0; c < f; c++) {
+	//	for (int i = 0; i < 3; i++) {
+	//		unfolded.at<Nc>(0,i,c) = unfolded.value<Nc>(0,i,c) - mean.value<Nc>(0,i);
+	//	}
+	//}
+
+	Multidim::Array<float, 3> source(1,3,f);
+
+	for (int c = 0; c < f; c++) {
+		float val = 0;
+		if (subpixel_adjustement < 0) {
+			val = (1+subpixel_adjustement)*unfolded.value<Nc>(0,1,c) - subpixel_adjustement*unfolded.value<Nc>(0,0,c);
+		} else {
+			val = (1-subpixel_adjustement)*unfolded.value<Nc>(0,1,c) + subpixel_adjustement*unfolded.value<Nc>(0,2,c);
+		}
+		source.at<Nc>(0,0,c) = val;
+	}
+
+	constexpr auto matchFunc = StereoVision::Correlation::matchingFunctions::NCC;
+	Multidim::Array<float, 2> disparity = StereoVision::Correlation::refinedBarycentricDisp<matchFunc,
+																			float,
+																			float,
+																			3,
+																			StereoVision::Correlation::dispDirection::RightToLeft>(unfolded, source, 0, 0, 3);
+
+	float missalignement = disparity.value<Nc>(0) - (1+subpixel_adjustement);
+	QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Matching not done properly (subpixel position of first feature vector = %1, expected = %2)").arg(disparity.value<Nc>(0)).arg(1+subpixel_adjustement)));
+
+
+	constexpr auto matchFunc2 = StereoVision::Correlation::matchingFunctions::ZNCC;
+	Multidim::Array<float, 2> disparity2 = StereoVision::Correlation::refinedBarycentricDisp<matchFunc2,
+																			float,
+																			float,
+																			3,
+																			StereoVision::Correlation::dispDirection::RightToLeft>(unfolded, source, 0, 0, 3);
+
+	missalignement = disparity2.value<Nc>(0) - (1+subpixel_adjustement);
+	QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Matching not done properly (subpixel position of first feature vector = %1, expected = %2)").arg(disparity2.value<Nc>(0)).arg(1+subpixel_adjustement)));
+
+}
+
+void TestCorrelationFilters::testBarycentricSsdRefinement_data() {
+
+	QTest::addColumn<int>("c_radius");
+	QTest::addColumn<float>("subpixel_adjustement");
+
+	QTest::newRow("small_l") << 1 << -0.3f;
+	QTest::newRow("small_r") << 1 << 0.3f;
+	QTest::newRow("avg_l") << 3 << -0.25f;
+	QTest::newRow("avg_r") << 3 << 0.25f;
+	QTest::newRow("large_l") << 5 << -0.3f;
+	QTest::newRow("large_r") << 5 << 0.3f;
+
+
+}
+void TestCorrelationFilters::testBarycentricSsdRefinement() {
+
+	QFETCH(int, c_radius);
+	QFETCH(float, subpixel_adjustement);
+
+	int h_radius = c_radius;
+	int v_radius = c_radius;
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	int h = 2*v_radius + 1;
+	int w = 2*h_radius + 3;
+
+	int f = (2*v_radius + 1)*(2*h_radius + 1);
+
+	std::uniform_real_distribution<float> uniformDist(-1, 1);
+
+	Multidim::Array<float, 2> rand(h,w);
+
+	for(int i = 0; i < h; i++) {
+		for(int j = 0; j < w; j++) {
+			float val = uniformDist(re);
+			rand.at<Nc>(i,j) = val;
+		}
+	}
+
+	Multidim::Array<float, 3> unfolded = StereoVision::Correlation::unfold(h_radius,
+																		   v_radius,
+																		   rand,
+																		   StereoVision::Correlation::PaddingMargins(0));
+
+	Multidim::Array<float, 3> source(1,3,f);
+
+	for (int c = 0; c < f; c++) {
+		float val = 0;
+		if (subpixel_adjustement < 0) {
+			val = (1+subpixel_adjustement)*unfolded.value<Nc>(0,1,c) - subpixel_adjustement*unfolded.value<Nc>(0,0,c);
+		} else {
+			val = (1-subpixel_adjustement)*unfolded.value<Nc>(0,1,c) + subpixel_adjustement*unfolded.value<Nc>(0,2,c);
+		}
+		source.at<Nc>(0,0,c) = val;
+	}
+
+	constexpr auto matchFunc = StereoVision::Correlation::matchingFunctions::SSD;
+	Multidim::Array<float, 2> disparity = StereoVision::Correlation::refinedBarycentricDisp<matchFunc,
+																			float,
+																			float,
+																			3,
+																			StereoVision::Correlation::dispDirection::RightToLeft>(unfolded, source, 0, 0, 3);
+
+	float missalignement = disparity.value<Nc>(0) - (1+subpixel_adjustement);
+	QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Matching not done properly (subpixel position of first feature vector = %1, expected = %2)").arg(disparity.value<Nc>(0)).arg(1+subpixel_adjustement)));
+
+
+	constexpr auto matchFunc2 = StereoVision::Correlation::matchingFunctions::ZSSD;
+	Multidim::Array<float, 2> disparity2 = StereoVision::Correlation::refinedBarycentricDisp<matchFunc2,
+																			float,
+																			float,
+																			3,
+																			StereoVision::Correlation::dispDirection::RightToLeft>(unfolded, source, 0, 0, 3);
+
+	missalignement = disparity2.value<Nc>(0) - (1+subpixel_adjustement);
+	QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Matching not done properly (subpixel position of first feature vector = %1, expected = %2)").arg(disparity2.value<Nc>(0)).arg(1+subpixel_adjustement)));
+
+}
+
+void TestCorrelationFilters::testBarycentricSadRefinement_data() {
+
+	QTest::addColumn<int>("c_radius");
+	QTest::addColumn<float>("subpixel_adjustement");
+
+	QTest::newRow("small_l") << 1 << -0.3f;
+	QTest::newRow("small_r") << 1 << 0.3f;
+	QTest::newRow("avg_l") << 3 << -0.25f;
+	QTest::newRow("avg_r") << 3 << 0.25f;
+	QTest::newRow("large_l") << 5 << -0.3f;
+	QTest::newRow("large_r") << 5 << 0.3f;
+
+
+}
+void TestCorrelationFilters::testBarycentricSadRefinement() {
+
+
+	QFETCH(int, c_radius);
+	QFETCH(float, subpixel_adjustement);
+
+	int h_radius = c_radius;
+	int v_radius = c_radius;
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	int h = 2*v_radius + 1;
+	int w = 2*h_radius + 3;
+
+	int f = (2*v_radius + 1)*(2*h_radius + 1);
+
+	std::uniform_real_distribution<float> uniformDist(-1, 1);
+
+	Multidim::Array<float, 2> rand(h,w);
+
+	for(int i = 0; i < h; i++) {
+		for(int j = 0; j < w; j++) {
+			float val = uniformDist(re);
+			rand.at<Nc>(i,j) = val;
+		}
+	}
+
+	Multidim::Array<float, 3> unfolded = StereoVision::Correlation::unfold(h_radius,
+																		   v_radius,
+																		   rand,
+																		   StereoVision::Correlation::PaddingMargins(0));
+
+	Multidim::Array<float, 3> source(1,3,f);
+
+	for (int c = 0; c < f; c++) {
+		float val = 0;
+		if (subpixel_adjustement < 0) {
+			val = (1+subpixel_adjustement)*unfolded.value<Nc>(0,1,c) - subpixel_adjustement*unfolded.value<Nc>(0,0,c);
+		} else {
+			val = (1-subpixel_adjustement)*unfolded.value<Nc>(0,1,c) + subpixel_adjustement*unfolded.value<Nc>(0,2,c);
+		}
+		source.at<Nc>(0,0,c) = val;
+	}
+
+	constexpr auto matchFunc = StereoVision::Correlation::matchingFunctions::SAD;
+	Multidim::Array<float, 2> disparity = StereoVision::Correlation::refinedBarycentricDisp<matchFunc,
+																			float,
+																			float,
+																			3,
+																			StereoVision::Correlation::dispDirection::RightToLeft>(unfolded, source, 0, 0, 3);
+
+	float missalignement = disparity.value<Nc>(0) - (1+subpixel_adjustement);
+	QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Matching not done properly (subpixel position of first feature vector = %1, expected = %2)").arg(disparity.value<Nc>(0)).arg(1+subpixel_adjustement)));
+
+
+	constexpr auto matchFunc2 = StereoVision::Correlation::matchingFunctions::ZSAD;
+	Multidim::Array<float, 2> disparity2 = StereoVision::Correlation::refinedBarycentricDisp<matchFunc2,
+																			float,
+																			float,
+																			3,
+																			StereoVision::Correlation::dispDirection::RightToLeft>(unfolded, source, 0, 0, 3);
+
+	missalignement = disparity2.value<Nc>(0) - (1+subpixel_adjustement);
+	QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Matching not done properly (subpixel position of first feature vector = %1, expected = %2)").arg(disparity2.value<Nc>(0)).arg(1+subpixel_adjustement)));
+
+}
+
+void TestCorrelationFilters::testBarycentricSymmetricNccRefinement_data() {
+
+	QTest::addColumn<int>("c_radius");
 	QTest::addColumn<SymmetricWeightsSplit>("split");
 
 	QTest::newRow("small_l") << 1 << SymmetricWeightsSplit({0.2, 0.7, 0.1});
@@ -872,7 +1129,7 @@ void TestCorrelationFilters::testBarycentricNccRefinement_data() {
 
 
 }
-void TestCorrelationFilters::testBarycentricNccRefinement() {
+void TestCorrelationFilters::testBarycentricSymmetricNccRefinement() {
 
 	QFETCH(int, c_radius);
 	QFETCH(SymmetricWeightsSplit, split);
@@ -943,10 +1200,11 @@ void TestCorrelationFilters::testBarycentricNccRefinement() {
 																			1>(unfolded, source, 0, 0, 3);
 
 	float missalignement = disparity.value<Nc>(0) - posWeigthed;
-	QVERIFY2(missalignement < 1e-4, qPrintable(QString("Matching not done properly (subpixel position of first feature vector = %1, expected = %2)").arg(disparity.value<Nc>(0)).arg(posWeigthed)));
+	QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Matching not done properly (subpixel position of first feature vector = %1, expected = %2)").arg(disparity.value<Nc>(0)).arg(posWeigthed)));
+
 }
 
-void TestCorrelationFilters::testBarycentricSsdRefinement_data() {
+void TestCorrelationFilters::testBarycentricSymmetricSsdRefinement_data() {
 
 	QTest::addColumn<int>("c_radius");
 	QTest::addColumn<SymmetricWeightsSplit>("split");
@@ -966,7 +1224,7 @@ void TestCorrelationFilters::testBarycentricSsdRefinement_data() {
 
 
 }
-void TestCorrelationFilters::testBarycentricSsdRefinement() {
+void TestCorrelationFilters::testBarycentricSymmetricSsdRefinement() {
 
 	QFETCH(int, c_radius);
 	QFETCH(SymmetricWeightsSplit, split);
@@ -1030,10 +1288,11 @@ void TestCorrelationFilters::testBarycentricSsdRefinement() {
 																			1>(unfolded, source, 0, 0, 3);
 
 	float missalignement = disparity.value<Nc>(0) - posWeigthed;
-	QVERIFY2(missalignement < 1e-4, qPrintable(QString("Matching not done properly (subpixel position of first feature vector = %1, expected = %2)").arg(disparity.value<Nc>(0)).arg(posWeigthed)));
+	QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Matching not done properly (subpixel position of first feature vector = %1, expected = %2)").arg(disparity.value<Nc>(0)).arg(posWeigthed)));
+
 }
 
-void TestCorrelationFilters::testBarycentricSadRefinement_data() {
+void TestCorrelationFilters::testBarycentricSymmetricSadRefinement_data() {
 
 	QTest::addColumn<int>("c_radius");
 	QTest::addColumn<SymmetricWeightsSplit>("split");
@@ -1053,7 +1312,7 @@ void TestCorrelationFilters::testBarycentricSadRefinement_data() {
 
 
 }
-void TestCorrelationFilters::testBarycentricSadRefinement() {
+void TestCorrelationFilters::testBarycentricSymmetricSadRefinement() {
 
 	QFETCH(int, c_radius);
 	QFETCH(SymmetricWeightsSplit, split);
@@ -1117,7 +1376,7 @@ void TestCorrelationFilters::testBarycentricSadRefinement() {
 																			1>(unfolded, source, 0, 0, 3);
 
 	float missalignement = disparity.value<Nc>(0) - posWeigthed;
-	QVERIFY2(missalignement < 1e-4, qPrintable(QString("Matching not done properly (subpixel position of first feature vector = %1, expected = %2)").arg(disparity.value<Nc>(0)).arg(posWeigthed)));
+	QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Matching not done properly (subpixel position of first feature vector = %1, expected = %2)").arg(disparity.value<Nc>(0)).arg(posWeigthed)));
 }
 
 QTEST_MAIN(TestCorrelationFilters)
