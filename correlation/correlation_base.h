@@ -46,6 +46,92 @@ enum class truncatedCostVolumeDirection{
 
 typedef int32_t disp_t;
 
+static_assert (std::is_integral<disp_t>::value, "The typedef for disp_t should be an integer type !");
+static_assert (std::is_signed<disp_t>::value, "The typedef for disp_t should be a signed integer !");
+
+template<int nDim>
+class searchOffset{
+public:
+
+	searchOffset()
+	{
+		std::fill(_upperOffsets.begin(), _upperOffsets.end(), 0);
+		std::fill(_lowerOffsets.begin(), _lowerOffsets.end(), 0);
+	}
+
+	template<typename... Ds>
+	searchOffset(disp_t lowerOffset0, disp_t upperOffset0, Ds... nextOffsets)
+	{
+		static_assert(sizeof...(nextOffsets) == 2*(nDim-1),
+				"The number of offsets provided to the constructor should be twice the number of dimensions !");
+
+		std::array<disp_t, 2*(nDim-1)> nOffsets({nextOffsets...});
+
+		_lowerOffsets[0] = lowerOffset0;
+		_upperOffsets[0] = upperOffset0;
+
+		for (int i = 1; i < nDim; i++) {
+			_lowerOffsets[i] = nOffsets[2*(i-1)];
+			_upperOffsets[i] = nOffsets[2*(i-1)+1];
+		}
+	}
+
+	template<int dim>
+	int& upperOffset() {
+		return _upperOffsets[dim];
+	}
+
+	template<int dim>
+	int& lowerOffset() {
+		return _lowerOffsets[dim];
+	}
+
+	template<int dim>
+	int const& upperOffset() const {
+		return _upperOffsets[dim];
+	}
+
+	template<int dim>
+	int const& lowerOffset() const {
+		return _lowerOffsets[dim];
+	}
+
+	int& upperOffset(int dim) {
+		return _upperOffsets[dim];
+	}
+
+	int& lowerOffset(int dim) {
+		return _lowerOffsets[dim];
+	}
+
+	int const& upperOffset(int dim) const {
+		return _upperOffsets[dim];
+	}
+
+	int const& lowerOffset(int dim) const {
+		return _lowerOffsets[dim];
+	}
+
+private:
+	std::array<disp_t,nDim> _upperOffsets;
+	std::array<disp_t,nDim> _lowerOffsets;
+};
+
+template<typename SearchRangeType>
+struct searchRangeTypeInfos {
+
+};
+
+template<>
+struct searchRangeTypeInfos<disp_t> {
+	static const int CostVolumeDims = 3;
+};
+
+template<int nDim>
+struct searchRangeTypeInfos<searchOffset<nDim> > {
+	static const int CostVolumeDims = 2*nDim;
+};
+
 
 template<dispExtractionStartegy strategy, class T_CV>
 Multidim::Array<disp_t, 2> extractSelectedIndex(Multidim::Array<T_CV, 3> const& costVolume) {
@@ -86,6 +172,51 @@ Multidim::Array<disp_t, 2> extractSelectedIndex(Multidim::Array<T_CV, 3> const& 
 	return disp;
 }
 
+template<dispExtractionStartegy strategy, class T_CV>
+Multidim::Array<disp_t, 3> extractSelected2dIndex(Multidim::Array<T_CV, 4> const& costVolume) {
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	auto cv_shape = costVolume.shape();
+
+	Multidim::Array<disp_t, 3> disp(cv_shape[0], cv_shape[1], 2);
+
+	#pragma omp parallel for
+	for (int i = 0; i < cv_shape[0]; i++) {
+		#pragma omp simd
+		for (int j = 0; j < cv_shape[1]; j++) {
+
+			T_CV selectedScore = costVolume.template value<Nc>(i,j,0);
+			disp_t selectedDisp1 = 0;
+			disp_t selectedDisp2 = 0;
+
+			for (uint32_t d1 = 1; d1 < cv_shape[2]; d1++) {
+				for (uint32_t d2 = 1; d2 < cv_shape[3]; d2++) {
+					if (strategy == dispExtractionStartegy::Cost) {
+						if (costVolume.template value<Nc>(i,j,d1,d2) <= selectedScore) {
+							selectedScore = costVolume.template value<Nc>(i,j,d1,d2);
+							selectedDisp1 = d1;
+							selectedDisp1 = d2;
+						}
+					} else {
+						if (costVolume.template value<Nc>(i,j,d1,d2) >= selectedScore) {
+							selectedScore = costVolume.template value<Nc>(i,j,d1,d2);
+							selectedDisp1 = d1;
+							selectedDisp1 = d2;
+						}
+					}
+				}
+			}
+
+			disp.at<Nc>(i,j,0) = selectedDisp1;
+			disp.at<Nc>(i,j,1) = selectedDisp2;
+
+		}
+	}
+
+	return disp;
+}
+
 template<typename DT, dispDirection dDir = dispDirection::RightToLeft>
 Multidim::Array<DT, 2> selectedIndexToDisp(Multidim::Array<DT, 2> const& selectedIndex,
 											   disp_t disp_offset = 0) {
@@ -102,6 +233,29 @@ Multidim::Array<DT, 2> selectedIndexToDisp(Multidim::Array<DT, 2> const& selecte
 		#pragma omp simd
 		for (int j = 0; j < shape[1]; j++) {
 			disp.template at<Nc>(i,j) = deltaSign*selectedIndex.template value<Nc>(i,j) + disp_offset;
+		}
+	}
+
+	return disp;
+
+}
+
+template<typename DT>
+Multidim::Array<DT, 3> selected2dIndexToDisp(Multidim::Array<DT, 3> const& selectedIndex,
+											 searchOffset<2> const& offset) {
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	auto shape = selectedIndex.shape();
+
+	Multidim::Array<DT, 2> disp(shape[0], shape[1]);
+
+	#pragma omp parallel for
+	for(int i = 0; i < shape[0]; i++) {
+		#pragma omp simd
+		for (int j = 0; j < shape[1]; j++) {
+			disp.template at<Nc>(i,j,0) = selectedIndex.template value<Nc>(i,j, 0) + offset.lowerOffset(0);
+			disp.template at<Nc>(i,j,1) = selectedIndex.template value<Nc>(i,j, 1) + offset.lowerOffset(1);
 		}
 	}
 

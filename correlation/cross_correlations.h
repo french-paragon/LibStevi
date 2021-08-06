@@ -82,7 +82,7 @@ inline float SumAbsDiff(Multidim::Array<T_S,1> const& source,
 
 	for (int i = 0; i < source.shape()[0]; i++) {
 		float tmp = source.valueUnchecked(i) - target.valueUnchecked(i);
-		score += tmp*tmp;
+		score += std::fabs(tmp);
 	}
 
 	return score;
@@ -329,90 +329,6 @@ Multidim::Array<float, 2> channelsNorm (Multidim::Array<T_I, 3> const& in_data) 
 }
 
 
-template<int nDim>
-class searchOffset{
-public:
-
-	searchOffset()
-	{
-		std::fill(_upperOffsets.begin(), _upperOffsets.end(), 0);
-		std::fill(_lowerOffsets.begin(), _lowerOffsets.end(), 0);
-	}
-
-	template<typename... Ds>
-	searchOffset(int upperOffset0, int lowerOffset0, Ds... nextOffsets)
-	{
-		static_assert(sizeof...(nextOffsets) == 2*(nDim-1),
-				"The number of offsets provided to the constructor should be twice the number of dimensions !");
-
-		std::array<int, 2*(nDim-1)> nOffsets({nextOffsets...});
-
-		_upperOffsets[0] = upperOffset0;
-		_lowerOffsets[0] = lowerOffset0;
-
-		for (int i = 1; i < nDim; i++) {
-			_upperOffsets[i] = nOffsets[2*(i-1)];
-			_lowerOffsets[i] = nOffsets[2*(i-1)+1];
-		}
-	}
-
-	template<int dim>
-	int& upperOffset() {
-		return _upperOffsets[dim];
-	}
-
-	template<int dim>
-	int& lowerOffset() {
-		return _lowerOffsets[dim];
-	}
-
-	template<int dim>
-	int const& upperOffset() const {
-		return _upperOffsets[dim];
-	}
-
-	template<int dim>
-	int const& lowerOffset() const {
-		return _lowerOffsets[dim];
-	}
-
-	int& upperOffset(int dim) {
-		return _upperOffsets[dim];
-	}
-
-	int& lowerOffset(int dim) {
-		return _lowerOffsets[dim];
-	}
-
-	int const& upperOffset(int dim) const {
-		return _upperOffsets[dim];
-	}
-
-	int const& lowerOffset(int dim) const {
-		return _lowerOffsets[dim];
-	}
-
-private:
-	std::array<int,nDim> _upperOffsets;
-	std::array<int,nDim> _lowerOffsets;
-};
-
-template<typename SearchRangeType>
-struct searchRangeTypeInfos {
-
-};
-
-template<>
-struct searchRangeTypeInfos<disp_t> {
-	static const int CostVolumeDims = 3;
-};
-
-template<int nDim>
-struct searchRangeTypeInfos<searchOffset<nDim> > {
-	static const int CostVolumeDims = 2*nDim;
-};
-
-
 template<matchingFunctions matchFunc, dispDirection dDir = dispDirection::RightToLeft>
 inline Multidim::Array<float, 3> aggregateCost(Multidim::Array<float, 3> const& feature_vol_l,
 											   Multidim::Array<float, 3> const& feature_vol_r,
@@ -494,14 +410,14 @@ inline Multidim::Array<float, 4> aggregateCost(Multidim::Array<float, 3> const& 
 	int w = source_feature_volume.shape()[1];
 	int f = source_feature_volume.shape()[2];
 
-	int disp_width = searchRange.upperOffset<0>() - searchRange.lowerOffset<0>();
-	int disp_height = searchRange.upperOffset<1>() - searchRange.lowerOffset<1>();
+	int disp_height = searchRange.upperOffset<0>() - searchRange.lowerOffset<0>();
+	int disp_width = searchRange.upperOffset<1>() - searchRange.lowerOffset<1>();
 
 	if (disp_width <= 0 or disp_height <= 0) {
 		return Multidim::Array<float, 4>();
 	}
 
-	Multidim::Array<float, 4> costVolume({h,w,disp_width,disp_height}, {w*disp_width*disp_height, 1, w*disp_height, w}); //TODO: check if those stides are otpimal
+	Multidim::Array<float, 4> costVolume({h,w,disp_height,disp_width}, {w*disp_width*disp_height, 1, w*disp_width, w}); //TODO: check if those stides are otpimal
 
 	#pragma omp parallel for
 	for (int i = 0; i < h; i++) {
@@ -515,18 +431,18 @@ inline Multidim::Array<float, 4> aggregateCost(Multidim::Array<float, 3> const& 
 				source_feature_vector.at<Nc>(c) = s;
 			}
 
-			for (int dw = 0; dw < disp_width; dw++) {
+			for (int dh = 0; dh < disp_height; dh++) {
 
-				for (int dh = 0; dh < disp_height; dh++) {
+				for (int dw = 0; dw < disp_width; dw++) {
 
 					Multidim::Array<float, 1> target_feature_vector(f);
 
 					for (int c = 0; c < f; c++) {
-						float t = target_feature_volume.valueOrAlt({i+dh+searchRange.lowerOffset<1>(),j+dw+searchRange.lowerOffset<0>(),c}, 0);
+						float t = target_feature_volume.valueOrAlt({i+dh+searchRange.lowerOffset<0>(),j+dw+searchRange.lowerOffset<1>(),c}, 0);
 						target_feature_vector.at<Nc>(c) = t;
 					}
 
-					costVolume.at<Nc>(i,j,dw,dh) = MatchingFunctionTraits<matchFunc>::featureComparison(source_feature_vector, target_feature_vector);
+					costVolume.at<Nc>(i,j,dh,dw) = MatchingFunctionTraits<matchFunc>::featureComparison(source_feature_vector, target_feature_vector);
 				}
 
 			}
@@ -737,12 +653,41 @@ Multidim::Array<float, 4> unfoldBased2dDisparityCostVolume(Multidim::Array<T_L, 
 
 	if (nImDim == 3) {
 		if (l_shape[2] != r_shape[2]) {
-			return Multidim::Array<float, 3>();
+			return Multidim::Array<float, 4>();
 		}
 	}
 
 	Multidim::Array<float, 3> left_feature_volume = unfold(h_radius, v_radius, img_l);
 	Multidim::Array<float, 3> right_feature_volume = unfold(h_radius, v_radius, img_r);
+
+	return featureVolume2CostVolume<matchFunc, searchOffset<2>, dDir>(left_feature_volume, right_feature_volume, searchWindows);
+}
+
+template<matchingFunctions matchFunc, class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 4> unfoldBased2dDisparityCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
+														   Multidim::Array<T_R, nImDim> const& img_r,
+														   UnFoldCompressor const& compressor,
+														   searchOffset<2> const& searchWindows) {
+
+	auto l_shape = img_l.shape();
+	auto r_shape = img_r.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<float, 4>();
+	}
+
+	if (l_shape[1] != r_shape[1]) {
+		return Multidim::Array<float, 4>();
+	}
+
+	if (nImDim == 3) {
+		if (l_shape[2] != r_shape[2]) {
+			return Multidim::Array<float, 3>();
+		}
+	}
+
+	Multidim::Array<float, 3> left_feature_volume = unfold(compressor, img_l);
+	Multidim::Array<float, 3> right_feature_volume = unfold(compressor, img_r);
 
 	return featureVolume2CostVolume<matchFunc, searchOffset<2>, dDir>(left_feature_volume, right_feature_volume, searchWindows);
 }

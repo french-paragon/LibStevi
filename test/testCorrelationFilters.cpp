@@ -1,5 +1,6 @@
 #include <QtTest/QtTest>
 
+#include "test_correlation_utils.h"
 #include "correlation/cross_correlations.h"
 
 typedef Multidim::Array<int,2> CompressorMask;
@@ -11,98 +12,6 @@ Q_DECLARE_METATYPE(SymmetricWeightsSplit);
 class TestCorrelationFilters: public QObject
 {
 	Q_OBJECT
-private:
-
-	float InneficientCrossCorrelation(Multidim::Array<float, 2> const& windows1,
-												Multidim::Array<float, 2> const& windows2) {
-
-		constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
-
-		int h = windows1.shape()[0];
-		int w = windows1.shape()[1];
-
-		if (h != windows2.shape()[0] or w != windows2.shape()[1]) {
-			return std::nanf("");
-		}
-
-		float mean1 = 0;
-		float mean2 = 0;
-
-		for (int i = 0; i < h; i++) {
-			for (int j = 0; j < w; j++) {
-
-				mean1 += windows1.value<Nc>(i,j);
-				mean2 += windows2.value<Nc>(i,j);
-
-			}
-		}
-
-		mean1 /= h*w;
-		mean2 /= h*w;
-
-		float cc = 0;
-
-		for (int i = 0; i < h; i++) {
-			for (int j = 0; j < w; j++) {
-
-				float v1 = windows1.value<Nc>(i,j) - mean1;
-				float v2 = windows2.value<Nc>(i,j) - mean2;
-
-				cc += v1*v2;
-
-			}
-		}
-
-		return cc;
-	}
-
-	float InneficientNormalizedCrossCorrelation(Multidim::Array<float, 2> const& windows1,
-												Multidim::Array<float, 2> const& windows2) {
-
-		constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
-
-		int h = windows1.shape()[0];
-		int w = windows1.shape()[1];
-
-		if (h != windows2.shape()[0] or w != windows2.shape()[1]) {
-			return std::nanf("");
-		}
-
-		float mean1 = 0;
-		float mean2 = 0;
-
-		for (int i = 0; i < h; i++) {
-			for (int j = 0; j < w; j++) {
-
-				mean1 += windows1.value<Nc>(i,j);
-				mean2 += windows2.value<Nc>(i,j);
-
-			}
-		}
-
-		mean1 /= h*w;
-		mean2 /= h*w;
-
-		float cc = 0;
-		float s1 = 0;
-		float s2 = 0;
-
-		for (int i = 0; i < h; i++) {
-			for (int j = 0; j < w; j++) {
-
-				float v1 = windows1.value<Nc>(i,j) - mean1;
-				float v2 = windows2.value<Nc>(i,j) - mean2;
-
-				cc += v1*v2;
-				s1 += v1*v1;
-				s2 += v2*v2;
-
-			}
-		}
-
-		return cc/(sqrtf(s1)*sqrtf(s2));
-
-	}
 
 private Q_SLOTS:
 	void initTestCase();
@@ -401,7 +310,7 @@ void TestCorrelationFilters::testCrossCorrelationFilter() {
 
 		Multidim::Array<float, 2> window2 = randLeft.subView(Multidim::DimSlice(0,2*v_radius+1), Multidim::DimSlice(i,i+2*h_radius+1));
 
-		float unnefectiveVal = InneficientCrossCorrelation(window1, window2);
+		float unnefectiveVal = InneficientZeromeanCrossCorrelation(window1, window2);
 		float effectiveVal = CV.value<Nc>(v_radius, h_radius, i);
 
 		float missalignement = std::abs(unnefectiveVal - effectiveVal);
@@ -455,7 +364,7 @@ void TestCorrelationFilters::testNCCFilter() {
 
 		Multidim::Array<float, 2> window2 = randLeft.subView(Multidim::DimSlice(0,2*v_radius+1), Multidim::DimSlice(i,i+2*h_radius+1));
 
-		float unnefectiveVal = InneficientNormalizedCrossCorrelation(window1, window2);
+		float unnefectiveVal = InneficientZeromeanNormalizedCrossCorrelation(window1, window2);
 		float effectiveVal = CV.value<Nc>(v_radius, h_radius, i);
 
 		float missalignement = std::abs(unnefectiveVal - effectiveVal);
@@ -675,7 +584,7 @@ void TestCorrelationFilters::testUnfoldNCCFilter() {
 
 		Multidim::Array<float, 2> window2 = randLeft.subView(Multidim::DimSlice(0,2*v_radius+1), Multidim::DimSlice(i,i+2*h_radius+1));
 
-		float unnefectiveVal = InneficientNormalizedCrossCorrelation(window1, window2);
+		float unnefectiveVal = InneficientZeromeanNormalizedCrossCorrelation(window1, window2);
 		float effectiveVal = CV.value<Nc>(v_radius, h_radius, i);
 
 		float missalignement = std::abs(unnefectiveVal - effectiveVal);
