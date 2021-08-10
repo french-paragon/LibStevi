@@ -70,7 +70,7 @@ inline Eigen::Matrix<float,dims,1> constrainVectorToSubspace(Eigen::Matrix<float
 															 Eigen::Matrix<float,dims-1,dims> const& constaints) {
 	static_assert (dims >= 2, "The vector space should have a least two dimensions !");
 
-	Eigen::FullPivHouseholderQR<Eigen::Matrix<float,dims-1,dims>> QRZ(constaints.transpose());
+	Eigen::FullPivHouseholderQR<Eigen::Matrix<float,dims,dims-1>> QRZ(constaints.transpose());
 	Eigen::Matrix<float,dims,1> result = unconstrained - constaints.transpose()*QRZ.solve(unconstrained);
 
 	return result;
@@ -115,7 +115,6 @@ Eigen::Matrix<float,dimsIn,1> leastAbsoluteDifferences(Eigen::Matrix<float,dimsO
 
 	typedef Eigen::Matrix<float,dimsOuts,dimsIn> TypeMatrixA;
 	typedef Eigen::Matrix<float,dimsIn,1> TypeVectorX;
-	typedef Eigen::Matrix<float,1,dimsIn> TypeConstraintRow;
 
 	constexpr int maxNConstraints = dimsIn-1;
 	typedef Eigen::Matrix<float,dimsIn-1,dimsIn> TypeMatrixZ;

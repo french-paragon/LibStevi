@@ -32,7 +32,6 @@ enum class dispExtractionStartegy{
 	Score = 1
 };
 
-
 enum class dispDirection{
 	LeftToRight = 0,
 	RightToLeft = 1
@@ -186,23 +185,23 @@ Multidim::Array<disp_t, 3> extractSelected2dIndex(Multidim::Array<T_CV, 4> const
 		#pragma omp simd
 		for (int j = 0; j < cv_shape[1]; j++) {
 
-			T_CV selectedScore = costVolume.template value<Nc>(i,j,0);
+			T_CV selectedScore = costVolume.template value<Nc>(i,j,0,0);
 			disp_t selectedDisp1 = 0;
 			disp_t selectedDisp2 = 0;
 
-			for (uint32_t d1 = 1; d1 < cv_shape[2]; d1++) {
-				for (uint32_t d2 = 1; d2 < cv_shape[3]; d2++) {
+			for (uint32_t d1 = 0; d1 < cv_shape[2]; d1++) {
+				for (uint32_t d2 = 0; d2 < cv_shape[3]; d2++) {
 					if (strategy == dispExtractionStartegy::Cost) {
 						if (costVolume.template value<Nc>(i,j,d1,d2) <= selectedScore) {
 							selectedScore = costVolume.template value<Nc>(i,j,d1,d2);
 							selectedDisp1 = d1;
-							selectedDisp1 = d2;
+							selectedDisp2 = d2;
 						}
 					} else {
 						if (costVolume.template value<Nc>(i,j,d1,d2) >= selectedScore) {
 							selectedScore = costVolume.template value<Nc>(i,j,d1,d2);
 							selectedDisp1 = d1;
-							selectedDisp1 = d2;
+							selectedDisp2 = d2;
 						}
 					}
 				}
@@ -248,7 +247,7 @@ Multidim::Array<DT, 3> selected2dIndexToDisp(Multidim::Array<DT, 3> const& selec
 
 	auto shape = selectedIndex.shape();
 
-	Multidim::Array<DT, 2> disp(shape[0], shape[1]);
+	Multidim::Array<DT, 3> disp(shape[0], shape[1], 2);
 
 	#pragma omp parallel for
 	for(int i = 0; i < shape[0]; i++) {

@@ -76,7 +76,7 @@ void TestL1OptimizationMethods::testLeastAbsoluteDifferences() {
 		}
 	}
 
-	TypeVectorX eX = leastAbsoluteDifferences(A,b,tol,inputs*100);
+	TypeVectorX eX = leastAbsoluteDifferences(A,b,tol,inputs*1000);
 
 	auto diff = trueX - eX;
 

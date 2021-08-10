@@ -27,6 +27,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../optimization/l2optimization.h"
 #include "../optimization/sphericaloptimization.h"
 
+#include "../utils/contiguity.h"
+
 namespace StereoVision {
 namespace Correlation {
 
@@ -410,8 +412,8 @@ inline Multidim::Array<float, 4> aggregateCost(Multidim::Array<float, 3> const& 
 	int w = source_feature_volume.shape()[1];
 	int f = source_feature_volume.shape()[2];
 
-	int disp_height = searchRange.upperOffset<0>() - searchRange.lowerOffset<0>();
-	int disp_width = searchRange.upperOffset<1>() - searchRange.lowerOffset<1>();
+	int disp_height = searchRange.upperOffset<0>() - searchRange.lowerOffset<0>() + 1;
+	int disp_width = searchRange.upperOffset<1>() - searchRange.lowerOffset<1>() + 1;
 
 	if (disp_width <= 0 or disp_height <= 0) {
 		return Multidim::Array<float, 4>();
@@ -929,6 +931,357 @@ Multidim::Array<float, 2> refineBarycentricDisp(Multidim::Array<float, 3> const&
 	return refinedDisp;
 }
 
+template<matchingFunctions matchFunc,
+		 Contiguity::bidimensionalContiguity contiguity = Contiguity::Queen,
+		 dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 3> refineBarycentric2dDisp(Multidim::Array<float, 3> const& feature_vol_l,
+												  Multidim::Array<float, 3> const& feature_vol_r,
+												  Multidim::Array<disp_t, 3> const& selectedIndices,
+												  searchOffset<2> const& searchWindows) {
+
+	constexpr int nDirs = Contiguity::nCornerDirections(contiguity)+1;
+
+	typedef Eigen::Matrix<float, Eigen::Dynamic, nDirs> TypeMatrixA;
+	typedef Eigen::Matrix<float, nDirs, 1> TypeVectorAlpha;
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	Multidim::Array<float, 3> const& source_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_r : feature_vol_l;
+	Multidim::Array<float, 3> const& target_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_l : feature_vol_r;
+
+	auto d_shape = selectedIndices.shape();
+	auto t_shape = target_feature_volume.shape();
+
+	Multidim::Array<float, 3> refinedDisp(d_shape);
+
+	#pragma omp parallel for
+	for (int i = 0; i < d_shape[0]; i++) {
+
+		#pragma omp simd
+		for (int j = 0; j < d_shape[1]; j++) {
+
+			disp_t d0 = selectedIndices.value<Nc>(i,j,0);
+			disp_t d1 = selectedIndices.value<Nc>(i,j,1);
+
+			int id = i + d0;
+			int jd = j + d1;
+
+			if (id < 1 or id + 1 >= d_shape[0]) { // if the source patch is partially outside the image
+				refinedDisp.at<Nc>(i,j,0) = d0;
+				refinedDisp.at<Nc>(i,j,1) = d1;
+			} else if (jd < 1 or jd + 1 >= d_shape[1]) { // if the source patch is partially outside the image
+				refinedDisp.at<Nc>(i,j,0) = d0;
+				refinedDisp.at<Nc>(i,j,1) = d1;
+			}  else if (d0 < searchWindows.lowerOffset<0>() or d0 > searchWindows.upperOffset<0>()) {
+				refinedDisp.at<Nc>(i,j,0) = d0;
+				refinedDisp.at<Nc>(i,j,1) = d1;
+			}   else if (d1 < searchWindows.lowerOffset<1>() or d1 > searchWindows.upperOffset<1>()) {
+				refinedDisp.at<Nc>(i,j,0) = d0;
+				refinedDisp.at<Nc>(i,j,1) = d1;
+			} else {
+
+				int f = t_shape[2];
+
+				Eigen::VectorXf source(f);
+
+				for (int c = 0 ; c < f; c++) {
+					source(c) = source_feature_volume.value<Nc>(i,j,c);
+				}
+
+				Multidim::Array<float, 1> source_feature_vector(f);
+				float norm = source.norm();
+
+				for (int c = 0; c < f; c++) {
+					float s = source_feature_volume.value<Nc>(i,j,c);
+					if (MatchingFunctionTraits<matchFunc>::Normalized) {
+						source_feature_vector.at<Nc>(c) = s/norm;
+					}
+					else {
+						source_feature_vector.at<Nc>(c) = s;
+					}
+				}
+
+				Multidim::Array<float, 1> target_feature_vector0(f);
+				norm = 1;
+				if (MatchingFunctionTraits<matchFunc>::Normalized) {
+					norm = 0;
+					for (int c = 0; c < f; c++) {
+						float s = target_feature_volume.value<Nc>(id,jd,c);
+						norm += s*s;
+					}
+					norm = std::sqrt(norm);
+				}
+
+				for (int c = 0; c < f; c++) {
+					float s = target_feature_volume.value<Nc>(id,jd,c);
+					if (MatchingFunctionTraits<matchFunc>::Normalized) {
+						target_feature_vector0.at<Nc>(c) = s/norm;
+					}
+					else {
+						target_feature_vector0.at<Nc>(c) = s;
+					}
+				}
+
+				float score = MatchingFunctionTraits<matchFunc>::featureComparison(source_feature_vector, target_feature_vector0);
+
+				constexpr std::array<int,2> dirShifts = {1,-1};
+				constexpr auto searchDirs = Contiguity::getCornerDirections<contiguity>();
+
+				float deltaD0 = 0;
+				float deltaD1 = 0;
+
+				for (int dir_x : dirShifts) {
+					for (int dir_y : dirShifts) {
+
+						TypeMatrixA A(f,nDirs);
+
+						int i = 0;
+						for (auto sDir : searchDirs) {
+							int di = sDir[0]*dir_x;
+							int dj = sDir[1]*dir_y;
+
+							for (int c = 0 ; c < f; c++) {
+								A(c,i) = target_feature_volume.value<Nc>(id+di,jd+dj,c);
+							}
+
+							i++;
+						}
+
+						for (int c = 0 ; c < f; c++) {
+							A(c,i) = target_feature_volume.value<Nc>(id,jd,c);
+						}
+
+						TypeVectorAlpha alphas = MatchingFunctionTraits<matchFunc>::barycentricBestApproximation(A, source);
+
+						if ( (alphas.array() > 0).all() ) { // consider the interpolation only if the barycentric coordinates are all greather than 0.
+							Eigen::VectorXf interpFeatures = A*alphas;
+							if (MatchingFunctionTraits<matchFunc>::Normalized) {
+								interpFeatures.normalize();
+							}
+
+							Multidim::Array<float, 1> target_feature_vector_interp(&interpFeatures(0),{f},{1});
+
+							float tmpScore = MatchingFunctionTraits<matchFunc>::featureComparison(source_feature_vector, target_feature_vector_interp);
+
+							bool better = false;
+
+							if (MatchingFunctionTraits<matchFunc>::extractionStrategy == dispExtractionStartegy::Score) {
+								if (tmpScore > score) {
+									better = true;
+								}
+							} else {
+								if (tmpScore < score) {
+									better = true;
+								}
+							}
+
+							if (better) {
+
+								deltaD0 = 0;
+								deltaD1 = 0;
+
+								int i = 0;
+								for (auto sDir : searchDirs) {
+									int di = sDir[0]*dir_x;
+									int dj = sDir[1]*dir_y;
+
+									deltaD0 += alphas(i)*di;
+									deltaD1 += alphas(i)*dj;
+
+									i++;
+								}
+
+								score = tmpScore;
+
+							}
+						}
+					}
+
+				}
+
+				refinedDisp.at<Nc>(i,j,0) = d0 + deltaD0;
+				refinedDisp.at<Nc>(i,j,1) = d1 + deltaD1;
+
+			}
+
+		}
+	}
+
+	return refinedDisp;
+}
+
+template<matchingFunctions matchFunc,
+		 Contiguity::bidimensionalContiguity contiguity = Contiguity::Queen,
+		 dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 3> refineBarycentricSymmetric2dDisp(Multidim::Array<float, 3> const& feature_vol_l,
+														   Multidim::Array<float, 3> const& feature_vol_r,
+														   Multidim::Array<disp_t, 3> const& selectedIndices,
+														   searchOffset<2> const& searchWindows) {
+
+	constexpr int nDirs = Contiguity::nDirections(contiguity)+1;
+
+	typedef Eigen::Matrix<float, Eigen::Dynamic, nDirs> TypeMatrixA;
+	typedef Eigen::Matrix<float, nDirs, 1> TypeVectorAlpha;
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	Multidim::Array<float, 3> const& source_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_r : feature_vol_l;
+	Multidim::Array<float, 3> const& target_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_l : feature_vol_r;
+
+	auto d_shape = selectedIndices.shape();
+	auto t_shape = target_feature_volume.shape();
+
+	Multidim::Array<float, 3> refinedDisp(d_shape);
+
+	#pragma omp parallel for
+	for (int i = 0; i < d_shape[0]; i++) {
+
+		#pragma omp simd
+		for (int j = 0; j < d_shape[1]; j++) {
+
+			disp_t d0 = selectedIndices.value<Nc>(i,j,0);
+			disp_t d1 = selectedIndices.value<Nc>(i,j,1);
+
+			int id = i + d0;
+			int jd = j + d1;
+
+			if (id < 1 or id + 1 >= d_shape[0]) { // if the source patch is partially outside the image
+				refinedDisp.at<Nc>(i,j,0) = d0;
+				refinedDisp.at<Nc>(i,j,1) = d1;
+			} else if (jd < 1 or jd + 1 >= d_shape[1]) { // if the source patch is partially outside the image
+				refinedDisp.at<Nc>(i,j,0) = d0;
+				refinedDisp.at<Nc>(i,j,1) = d1;
+			}  else if (d0 < searchWindows.lowerOffset<0>() or d0 > searchWindows.upperOffset<0>()) {
+				refinedDisp.at<Nc>(i,j,0) = d0;
+				refinedDisp.at<Nc>(i,j,1) = d1;
+			}   else if (d1 < searchWindows.lowerOffset<1>() or d1 > searchWindows.upperOffset<1>()) {
+				refinedDisp.at<Nc>(i,j,0) = d0;
+				refinedDisp.at<Nc>(i,j,1) = d1;
+			} else {
+
+				int f = t_shape[2];
+
+				Eigen::VectorXf source(f);
+
+				for (int c = 0 ; c < f; c++) {
+					source(c) = source_feature_volume.value<Nc>(i,j,c);
+				}
+
+				Multidim::Array<float, 1> source_feature_vector(f);
+				float norm = source.norm();
+
+				for (int c = 0; c < f; c++) {
+					float s = source_feature_volume.value<Nc>(i,j,c);
+					if (MatchingFunctionTraits<matchFunc>::Normalized) {
+						source_feature_vector.at<Nc>(c) = s/norm;
+					}
+					else {
+						source_feature_vector.at<Nc>(c) = s;
+					}
+				}
+
+				Multidim::Array<float, 1> target_feature_vector0(f);
+				norm = 1;
+				if (MatchingFunctionTraits<matchFunc>::Normalized) {
+					norm = 0;
+					for (int c = 0; c < f; c++) {
+						float s = target_feature_volume.value<Nc>(id,jd,c);
+						norm += s*s;
+					}
+					norm = std::sqrt(norm);
+				}
+
+				for (int c = 0; c < f; c++) {
+					float s = target_feature_volume.value<Nc>(id,jd,c);
+					if (MatchingFunctionTraits<matchFunc>::Normalized) {
+						target_feature_vector0.at<Nc>(c) = s/norm;
+					}
+					else {
+						target_feature_vector0.at<Nc>(c) = s;
+					}
+				}
+
+				float score = MatchingFunctionTraits<matchFunc>::featureComparison(source_feature_vector, target_feature_vector0);
+
+				constexpr auto searchDirs = Contiguity::getDirections<contiguity>();
+
+				float deltaD0 = 0;
+				float deltaD1 = 0;
+
+				TypeMatrixA A(f,nDirs);
+
+				int col = 0;
+				for (auto sDir : searchDirs) {
+					int di = sDir[0];
+					int dj = sDir[1];
+
+					for (int c = 0 ; c < f; c++) {
+						A(c,col) = target_feature_volume.value<Nc>(id+di,jd+dj,c);
+					}
+
+					col++;
+				}
+
+				for (int c = 0 ; c < f; c++) {
+					A(c,col) = target_feature_volume.value<Nc>(id,jd,c);
+				}
+
+				TypeVectorAlpha alphas = MatchingFunctionTraits<matchFunc>::barycentricBestApproximation(A, source);
+
+				if ( (alphas.array() > 0).all() ) { // consider the interpolation only if the barycentric coordinates are all greather than 0.
+					Eigen::VectorXf interpFeatures = A*alphas;
+					if (MatchingFunctionTraits<matchFunc>::Normalized) {
+						interpFeatures.normalize();
+					}
+
+					Multidim::Array<float, 1> target_feature_vector_interp(&interpFeatures(0),{f},{1});
+
+					float tmpScore = MatchingFunctionTraits<matchFunc>::featureComparison(source_feature_vector, target_feature_vector_interp);
+
+					bool better = false;
+
+					if (MatchingFunctionTraits<matchFunc>::extractionStrategy == dispExtractionStartegy::Score) {
+						if (tmpScore > score) {
+							better = true;
+						}
+					} else {
+						if (tmpScore < score) {
+							better = true;
+						}
+					}
+
+					if (better) {
+
+						deltaD0 = 0;
+						deltaD1 = 0;
+
+						int i = 0;
+						for (auto sDir : searchDirs) {
+							int di = sDir[0];
+							int dj = sDir[1];
+
+							deltaD0 += alphas(i)*di;
+							deltaD1 += alphas(i)*dj;
+
+							i++;
+						}
+
+						score = tmpScore;
+
+					}
+				}
+
+				refinedDisp.at<Nc>(i,j,0) = d0 + deltaD0;
+				refinedDisp.at<Nc>(i,j,1) = d1 + deltaD1;
+
+			}
+
+		}
+	}
+
+	return refinedDisp;
+}
+
 template<matchingFunctions matchFunc, dispDirection dDir = dispDirection::RightToLeft>
 Multidim::Array<float, 2> refineCostSymmetricDisp(Multidim::Array<float, 3> const& feature_vol_l,
 												  Multidim::Array<float, 3> const& feature_vol_r,
@@ -1180,6 +1533,160 @@ Multidim::Array<float, 2> refinedBarycentricDispFeatureVol(Multidim::Array<float
 	return Multidim::Array<float, 2>();
 }
 
+template<matchingFunctions matchFunc,
+		 Contiguity::bidimensionalContiguity contiguity = Contiguity::Queen,
+		 dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 3> refinedBarycentric2dDispFeatureVol(Multidim::Array<float, 3> const& feature_vol_l,
+															 Multidim::Array<float, 3> const& feature_vol_r,
+															 searchOffset<2> const& searchWindows,
+															 bool preNormalize = false) {
+
+	typedef MatchingFunctionTraits<matchFunc> mFTraits;
+
+	if (MatchingFunctionTraits<matchFunc>::ZeroMean and MatchingFunctionTraits<matchFunc>::Normalized) {
+
+		Multidim::Array<float, 2> mean_left = channelsMean(feature_vol_l);
+		Multidim::Array<float, 2> mean_right = channelsMean(feature_vol_r);
+
+		Multidim::Array<float, 2> sigma_left = channelsSigma(feature_vol_l, mean_left);
+		Multidim::Array<float, 2> sigma_right = channelsSigma(feature_vol_r, mean_right);
+
+		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
+		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
+
+		Multidim::Array<float, 3> normalized_feature_volume_l = normalizedFeatureVolume(zeroMean_feature_volume_l, sigma_left);
+		Multidim::Array<float, 3> normalized_feature_volume_r = normalizedFeatureVolume(zeroMean_feature_volume_r, sigma_right);
+
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchWindows);
+
+		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
+
+		if (preNormalize) {
+			return refineBarycentric2dDisp<matchFunc, contiguity, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, disp, searchWindows);
+		}
+
+		return refineBarycentric2dDisp<matchFunc, contiguity, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, disp, searchWindows);
+
+	} else if (MatchingFunctionTraits<matchFunc>::ZeroMean) {
+
+		Multidim::Array<float, 2> mean_left = channelsMean(feature_vol_l);
+		Multidim::Array<float, 2> mean_right = channelsMean(feature_vol_r);
+
+		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
+		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
+
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchWindows);
+
+		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
+
+		return refineBarycentric2dDisp<matchFunc, contiguity, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, disp, searchWindows);
+
+	} else if (MatchingFunctionTraits<matchFunc>::Normalized) {
+
+		Multidim::Array<float, 2> sigma_left = channelsNorm(feature_vol_l);
+		Multidim::Array<float, 2> sigma_right = channelsNorm(feature_vol_r);
+
+		Multidim::Array<float, 3> normalized_feature_volume_l = normalizedFeatureVolume(feature_vol_l, sigma_left);
+		Multidim::Array<float, 3> normalized_feature_volume_r = normalizedFeatureVolume(feature_vol_r, sigma_right);
+
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchWindows);
+
+		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
+
+		if (preNormalize) {
+			return refineBarycentric2dDisp<matchFunc, contiguity, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, disp, searchWindows);
+		}
+
+		return refineBarycentric2dDisp<matchFunc, contiguity, dDir>(feature_vol_l, feature_vol_r, disp, searchWindows);
+
+	} else {
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchWindows);
+
+		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
+
+		return refineBarycentric2dDisp<matchFunc, contiguity, dDir>(feature_vol_l, feature_vol_r, disp, searchWindows);
+	}
+
+	return Multidim::Array<float, 3>();
+}
+
+template<matchingFunctions matchFunc,
+		 Contiguity::bidimensionalContiguity contiguity = Contiguity::Queen,
+		 dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 3> refinedBarycentricSymmetric2dDispFeatureVol(Multidim::Array<float, 3> const& feature_vol_l,
+																	  Multidim::Array<float, 3> const& feature_vol_r,
+																	  searchOffset<2> const& searchWindows,
+																	  bool preNormalize = false) {
+
+	typedef MatchingFunctionTraits<matchFunc> mFTraits;
+
+	if (MatchingFunctionTraits<matchFunc>::ZeroMean and MatchingFunctionTraits<matchFunc>::Normalized) {
+
+		Multidim::Array<float, 2> mean_left = channelsMean(feature_vol_l);
+		Multidim::Array<float, 2> mean_right = channelsMean(feature_vol_r);
+
+		Multidim::Array<float, 2> sigma_left = channelsSigma(feature_vol_l, mean_left);
+		Multidim::Array<float, 2> sigma_right = channelsSigma(feature_vol_r, mean_right);
+
+		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
+		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
+
+		Multidim::Array<float, 3> normalized_feature_volume_l = normalizedFeatureVolume(zeroMean_feature_volume_l, sigma_left);
+		Multidim::Array<float, 3> normalized_feature_volume_r = normalizedFeatureVolume(zeroMean_feature_volume_r, sigma_right);
+
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchWindows);
+
+		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
+
+		if (preNormalize) {
+			return refineBarycentricSymmetric2dDisp<matchFunc, contiguity, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, disp, searchWindows);
+		}
+
+		return refineBarycentricSymmetric2dDisp<matchFunc, contiguity, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, disp, searchWindows);
+
+	} else if (MatchingFunctionTraits<matchFunc>::ZeroMean) {
+
+		Multidim::Array<float, 2> mean_left = channelsMean(feature_vol_l);
+		Multidim::Array<float, 2> mean_right = channelsMean(feature_vol_r);
+
+		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
+		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
+
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchWindows);
+
+		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
+
+		return refineBarycentricSymmetric2dDisp<matchFunc, contiguity, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, disp, searchWindows);
+
+	} else if (MatchingFunctionTraits<matchFunc>::Normalized) {
+
+		Multidim::Array<float, 2> sigma_left = channelsNorm(feature_vol_l);
+		Multidim::Array<float, 2> sigma_right = channelsNorm(feature_vol_r);
+
+		Multidim::Array<float, 3> normalized_feature_volume_l = normalizedFeatureVolume(feature_vol_l, sigma_left);
+		Multidim::Array<float, 3> normalized_feature_volume_r = normalizedFeatureVolume(feature_vol_r, sigma_right);
+
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchWindows);
+
+		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
+
+		if (preNormalize) {
+			return refineBarycentricSymmetric2dDisp<matchFunc, contiguity, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, disp, searchWindows);
+		}
+
+		return refineBarycentricSymmetric2dDisp<matchFunc, contiguity, dDir>(feature_vol_l, feature_vol_r, disp, searchWindows);
+
+	} else {
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchWindows);
+
+		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
+
+		return refineBarycentricSymmetric2dDisp<matchFunc, contiguity, dDir>(feature_vol_l, feature_vol_r, disp, searchWindows);
+	}
+
+	return Multidim::Array<float, 3>();
+}
+
 template<matchingFunctions matchFunc, dispDirection dDir = dispDirection::RightToLeft>
 Multidim::Array<float, 2> refinedCostSymmetricDispFeatureVol(Multidim::Array<float, 3> const& feature_vol_l,
 															 Multidim::Array<float, 3> const& feature_vol_r,
@@ -1420,6 +1927,135 @@ Multidim::Array<float, 2> refinedCostSymmetricDisp(Multidim::Array<T_L, nImDim> 
 	Multidim::Array<float, 3> feature_vol_r = unfold(compressor, img_r);
 
 	return refinedCostSymmetricDispFeatureVol<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchRange, preNormalize);
+}
+
+template<matchingFunctions matchFunc,
+		 class T_L,
+		 class T_R,
+		 int nImDim = 2,
+		 Contiguity::bidimensionalContiguity contiguity = Contiguity::Queen,
+		 dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 3> refinedBarycentric2dDisp(Multidim::Array<T_L, nImDim> const& img_l,
+												   Multidim::Array<T_R, nImDim> const& img_r,
+												   uint8_t h_radius,
+												   uint8_t v_radius,
+												   searchOffset<2> const& searchWindows,
+												   bool preNormalize = false) {
+
+	auto l_shape = img_l.shape();
+	auto r_shape = img_r.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<float, 3>();
+	}
+
+	if (nImDim == 3) {
+		if (l_shape[2] != r_shape[2]) {
+			return Multidim::Array<float, 3>();
+		}
+	}
+
+	Multidim::Array<float, 3> feature_vol_l = unfold(h_radius, v_radius, img_l);
+	Multidim::Array<float, 3> feature_vol_r = unfold(h_radius, v_radius, img_r);
+
+	return refinedBarycentric2dDispFeatureVol<matchFunc, contiguity, dDir>(feature_vol_l, feature_vol_r, searchWindows, preNormalize);
+
+}
+
+template<matchingFunctions matchFunc,
+		 class T_L,
+		 class T_R,
+		 int nImDim = 2,
+		 Contiguity::bidimensionalContiguity contiguity = Contiguity::Queen,
+		 dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 3> refinedBarycentric2dDisp(Multidim::Array<T_L, nImDim> const& img_l,
+												   Multidim::Array<T_R, nImDim> const& img_r,
+												   UnFoldCompressor const& compressor,
+												   searchOffset<2> const& searchWindows,
+												   bool preNormalize = false) {
+
+	auto l_shape = img_l.shape();
+	auto r_shape = img_r.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<float, 3>();
+	}
+
+	if (nImDim == 3) {
+		if (l_shape[2] != r_shape[2]) {
+			return Multidim::Array<float, 3>();
+		}
+	}
+
+	Multidim::Array<float, 3> feature_vol_l = unfold(compressor, img_l);
+	Multidim::Array<float, 3> feature_vol_r = unfold(compressor, img_r);
+
+	return refinedBarycentric2dDispFeatureVol<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchWindows, preNormalize);
+
+}
+template<matchingFunctions matchFunc,
+		 class T_L,
+		 class T_R,
+		 int nImDim = 2,
+		 Contiguity::bidimensionalContiguity contiguity = Contiguity::Queen,
+		 dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 3> refinedBarycentricSymmetric2dDisp(Multidim::Array<T_L, nImDim> const& img_l,
+															Multidim::Array<T_R, nImDim> const& img_r,
+															uint8_t h_radius,
+															uint8_t v_radius,
+															searchOffset<2> const& searchWindow,
+															bool preNormalize = false) {
+
+	auto l_shape = img_l.shape();
+	auto r_shape = img_r.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<float, 3>();
+	}
+
+	if (nImDim == 3) {
+		if (l_shape[2] != r_shape[2]) {
+			return Multidim::Array<float, 3>();
+		}
+	}
+
+	Multidim::Array<float, 3> feature_vol_l = unfold(h_radius, v_radius, img_l);
+	Multidim::Array<float, 3> feature_vol_r = unfold(h_radius, v_radius, img_r);
+
+	return refinedBarycentricSymmetric2dDispFeatureVol<matchFunc, contiguity, dDir>(feature_vol_l, feature_vol_r, searchWindow, preNormalize);
+
+}
+
+template<matchingFunctions matchFunc,
+		 class T_L,
+		 class T_R,
+		 int nImDim = 2,
+		 Contiguity::bidimensionalContiguity contiguity = Contiguity::Queen,
+		 dispDirection dDir = dispDirection::RightToLeft>
+Multidim::Array<float, 3> refinedBarycentricSymmetric2dDisp(Multidim::Array<T_L, nImDim> const& img_l,
+															Multidim::Array<T_R, nImDim> const& img_r,
+															UnFoldCompressor const& compressor,
+															searchOffset<2> const& searchWindow,
+															bool preNormalize = false) {
+
+	auto l_shape = img_l.shape();
+	auto r_shape = img_r.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<float, 3>();
+	}
+
+	if (nImDim == 3) {
+		if (l_shape[2] != r_shape[2]) {
+			return Multidim::Array<float, 3>();
+		}
+	}
+
+	Multidim::Array<float, 3> feature_vol_l = unfold(compressor, img_l);
+	Multidim::Array<float, 3> feature_vol_r = unfold(compressor, img_r);
+
+	return refinedBarycentricSymmetric2dDispFeatureVol<matchFunc, contiguity, dDir>(feature_vol_l, feature_vol_r, searchWindow, preNormalize);
+
 }
 
 } // namespace Correlation

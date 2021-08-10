@@ -55,6 +55,7 @@ set(LIB_SRC
         optimization/l2optimization.h
         optimization/sphericaloptimization.h
         optimization/affine_utils.h
+        utils/contiguity.h
 )
 
 add_library(
