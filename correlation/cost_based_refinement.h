@@ -24,23 +24,50 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace StereoVision {
 namespace Correlation {
 
-Multidim::Array<float, 2> refineDispEquiangularCostInterpolation(Multidim::Array<float, 3> const& truncatedCostVolume,
-																 Multidim::Array<disp_t, 2> const& rawDisparity);
+enum class InterpolationKernel
+{
+	Equiangular,
+	Parabola,
+	Gaussian
+};
 
-Multidim::Array<float, 2> refineDispParabolaCostInterpolation(Multidim::Array<float, 3> const& truncatedCostVolume,
-															  Multidim::Array<disp_t, 2> const& rawDisparity);
+enum class IsotropyHypothesis
+{
+	Isotropic,
+	Anisotropic
+};
 
-template<class T_S, class T_T, CostFunctionType costFunction, dispExtractionStartegy strat, disp_t deltaSign = 1, bool rmIncompleteRanges = false>
-Multidim::Array<float, 2> refineDispParabolaSymmetricCostInterpolation(Multidim::Array<T_S, 2> const& img_s,
-																	   Multidim::Array<T_T, 2> const& img_t,
-																	   Multidim::Array<float, 2> const& s_mean,
-																	   Multidim::Array<float, 2> const& t_mean,
-																	   Multidim::Array<float, 3> const& truncatedCostVolume,
-																	   Multidim::Array<disp_t, 2> const& rawDisparity,
-																	   uint8_t h_radius,
-																	   uint8_t v_radius,
-																	   disp_t disp_offset = 0) {
+template<InterpolationKernel kernel>
+inline float refineCostTriplet(float cm1, float c0, float c1) {
 
+	float val = 0;
+	switch (kernel) {
+	case InterpolationKernel::Equiangular:
+	{
+		float alpha = std::copysign(1.f,c0-cm1);
+		alpha *= std::max(std::fabs(c0-cm1), std::fabs(c1-c0));
+
+		val = (c1 - cm1)/(2*alpha);
+	}
+		break;
+	case InterpolationKernel::Parabola:
+	{
+		val = (cm1 - c1)/(2*(c1 - 2*c0 + cm1));
+	}
+		break;
+	case InterpolationKernel::Gaussian:
+	{
+		val = (std::log(cm1) - std::log(c1))/(2*(std::log(c1) - 2*std::log(c0) + std::log(cm1)));
+	}
+		break;
+	}
+	return val;
+
+}
+
+template<InterpolationKernel kernel>
+Multidim::Array<float, 2> refineDispCostInterpolation(Multidim::Array<float, 3> const& truncatedCostVolume,
+													  Multidim::Array<disp_t, 2> const& rawDisparity) {
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
 	auto shape = rawDisparity.shape();
@@ -56,141 +83,114 @@ Multidim::Array<float, 2> refineDispParabolaSymmetricCostInterpolation(Multidim:
 			float c0 = truncatedCostVolume.value<Nc>(i,j,1);
 			float c1 = truncatedCostVolume.value<Nc>(i,j,2);
 
-			float delta = (cm1 - c1)/(2*(c1 - 2*c0 + cm1));
+			float delta = refineCostTriplet<kernel>(cm1, c0, c1);
 
-			disp_t d = rawDisparity.value<Nc>(i,j);
-
-			if (j + disp_offset + std::abs(deltaSign*d) + h_radius + 1 < img_t.shape()[1] and j + disp_offset + std::abs(deltaSign*d) - h_radius - 1 > 0 and
-				i - v_radius > 0 and i + v_radius < img_t.shape()[0] and std::isfinite(cm1) and std::isfinite(c0) and std::isfinite(c1)) {
-
-				float fm1 = 0;
-				float f0 = 0;
-				float f1 = 0;
-
-				disp_t dir = 1;
-
-				if (delta > 0) {
-					dir = -1;
-				}
-
-				for(int k = -v_radius; k <= v_radius; k++) {
-
-					for (int l = -h_radius; l <= h_radius; l++) {
-						float source = (img_s.template value<Nc>(i+k, j+l) - s_mean.value<Nc>(i,j) + img_s.template value<Nc>(i+k, j+l+dir) - s_mean.value<Nc>(i,j+dir))/2.;
-
-						float targetm1 = img_t.template value<Nc>(i+k, j + disp_offset + deltaSign*d + l-1) - t_mean.value<Nc>(i,j + disp_offset + deltaSign*d-1);
-						float target0 = img_t.template value<Nc>(i+k, j + disp_offset + deltaSign*d + l) - t_mean.value<Nc>(i,j + disp_offset + deltaSign*d);
-						float target1 = img_t.template value<Nc>(i+k, j + disp_offset + deltaSign*d + l+1) - t_mean.value<Nc>(i,j + disp_offset + deltaSign*d+1);
-
-						fm1 += costFunction(source, targetm1);
-						f0 += costFunction(source, target0);
-						f1 += costFunction(source, target1);
-					}
-				}
-
-				float delta2 = (fm1 - f1)/(2*(f1 - 2*f0 + fm1)) - dir*0.5;
-
-				if (std::fabs(delta2) < 1.) {
-					delta = (delta + delta2)/2;
-				}
-			}
-
-			refined.at<Nc>(i,j) = d + delta;
+			refined.at<Nc>(i,j) = rawDisparity.value<Nc>(i,j) + delta;
 
 		}
 
 	}
 
 	return refined;
-
 }
 
-template<class T_S, class T_T, CostFunctionType costFunction, dispExtractionStartegy strat, disp_t deltaSign = 1, bool rmIncompleteRanges = false>
-Multidim::Array<float, 2> refineDispParabolaSymmetricCostInterpolation(Multidim::Array<T_S, 3> const& img_s,
-																	   Multidim::Array<T_T, 3> const& img_t,
-																	   Multidim::Array<float, 2> const& s_mean,
-																	   Multidim::Array<float, 2> const& t_mean,
-																	   Multidim::Array<float, 3> const& truncatedCostVolume,
-																	   Multidim::Array<disp_t, 2> const& rawDisparity,
-																	   uint8_t h_radius,
-																	   uint8_t v_radius,
-																	   disp_t disp_offset = 0) {
+
+template<InterpolationKernel kernel, IsotropyHypothesis isotropHypothesis = IsotropyHypothesis::Isotropic>
+Multidim::Array<float, 2> refineDisp2dCostInterpolation(Multidim::Array<float, 4> const& truncatedCostVolume,
+														Multidim::Array<disp_t, 3> const& rawDisparity) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
 	auto shape = rawDisparity.shape();
 
-	auto s_shape = img_s.shape();
-	auto t_shape = img_t.shape();
-
-	if (s_shape[2] != t_shape[2]) {
-		return Multidim::Array<float, 2>(0,0);
-	}
-
-	Multidim::Array<float, 2> refined(shape);
+	Multidim::Array<float, 3> refined(shape);
 
 	#pragma omp parallel for
 	for (int i = 0; i < shape[0]; i++) {
 
 		for (int j = 0; j < shape[1]; j++) {
 
-			float cm1 = truncatedCostVolume.value<Nc>(i,j,0);
-			float c0 = truncatedCostVolume.value<Nc>(i,j,1);
-			float c1 = truncatedCostVolume.value<Nc>(i,j,2);
+			float delta0 = 0;
+			float delta1 = 0;
 
-			float delta = (cm1 - c1)/(2*(c1 - 2*c0 + cm1));
+			if (isotropHypothesis == IsotropyHypothesis::Isotropic) {
 
-			disp_t d = rawDisparity.value<Nc>(i,j);
+				float c0_m1 = truncatedCostVolume.value<Nc>(i,j,0,1);
+				float c0_0 = truncatedCostVolume.value<Nc>(i,j,1,1);
+				float c0_1 = truncatedCostVolume.value<Nc>(i,j,2,1);
 
-			if (j + disp_offset + std::abs(deltaSign*d) + h_radius + 1 < img_t.shape()[1] and j - h_radius - 1 > 0 and
-				i - v_radius > 0 and i + v_radius < img_t.shape()[0] and std::isfinite(cm1) and std::isfinite(c0) and std::isfinite(c1)) {
+				float c1_m1 = truncatedCostVolume.value<Nc>(i,j,1,0);
+				float c1_0 = truncatedCostVolume.value<Nc>(i,j,1,1);
+				float c1_1 = truncatedCostVolume.value<Nc>(i,j,1,2);
 
-				float fm1 = 0;
-				float f0 = 0;
-				float f1 = 0;
+				delta0 = refineCostTriplet<kernel>(c0_m1, c0_0, c0_1);
+				delta1 = refineCostTriplet<kernel>(c1_m1, c1_0, c1_1);
 
-				disp_t dir = 1;
+			} else {
 
-				if (delta > 0) {
-					dir = -1;
-				}
+				float c0_0_m1 = truncatedCostVolume.value<Nc>(i,j,0,0);
+				float c0_0_0 = truncatedCostVolume.value<Nc>(i,j,1,0);
+				float c0_0_1 = truncatedCostVolume.value<Nc>(i,j,2,0);
 
-				for(int k = -v_radius; k <= v_radius; k++) {
+				float c0_1_m1 = truncatedCostVolume.value<Nc>(i,j,0,1);
+				float c0_1_0 = truncatedCostVolume.value<Nc>(i,j,1,1);
+				float c0_1_1 = truncatedCostVolume.value<Nc>(i,j,2,1);
 
-					for (int l = -h_radius; l <= h_radius; l++) {
+				float c0_2_m1 = truncatedCostVolume.value<Nc>(i,j,0,2);
+				float c0_2_0 = truncatedCostVolume.value<Nc>(i,j,1,2);
+				float c0_2_1 = truncatedCostVolume.value<Nc>(i,j,2,2);
 
-						for (int c = 0; c < s_shape[2]; c++) {
+				float delta0_0 = refineCostTriplet<kernel>(c0_0_m1, c0_0_0, c0_0_1);
+				float delta0_1 = refineCostTriplet<kernel>(c0_1_m1, c0_1_0, c0_1_1);
+				float delta0_2 = refineCostTriplet<kernel>(c0_2_m1, c0_2_0, c0_2_1);
 
-							float source = (img_s.template value<Nc>(i+k, j+l, c) - s_mean.value<Nc>(i,j) + img_s.template value<Nc>(i+k, j+l+dir, c) - s_mean.value<Nc>(i,j+dir))/2.;
+				// fit a line delta0 = a0*delta1 + b0
+				float a0 = (delta0_2 - delta0_0)/2;
+				float b0 = (delta0_0 + delta0_1 + delta0_2)/3;
 
-							float targetm1 = img_t.template value<Nc>(i+k, j + disp_offset + deltaSign*d + l-1, c) - t_mean.value<Nc>(i,j + disp_offset + deltaSign*d-1);
-							float target0 = img_t.template value<Nc>(i+k, j + disp_offset + deltaSign*d + l, c) - t_mean.value<Nc>(i,j + disp_offset + deltaSign*d);
-							float target1 = img_t.template value<Nc>(i+k, j + disp_offset + deltaSign*d + l+1, c) - t_mean.value<Nc>(i,j + disp_offset + deltaSign*d+1);
 
-							fm1 += costFunction(source, targetm1);
-							f0 += costFunction(source, target0);
-							f1 += costFunction(source, target1);
-						}
-					}
-				}
+				float c1_0_m1 = truncatedCostVolume.value<Nc>(i,j,0,0);
+				float c1_0_0 = truncatedCostVolume.value<Nc>(i,j,0,1);
+				float c1_0_1 = truncatedCostVolume.value<Nc>(i,j,0,2);
 
-				float delta2 = (fm1 - f1)/(2*(f1 - 2*f0 + fm1)) - dir*0.5;
+				float c1_1_m1 = truncatedCostVolume.value<Nc>(i,j,1,0);
+				float c1_1_0 = truncatedCostVolume.value<Nc>(i,j,1,1);
+				float c1_1_1 = truncatedCostVolume.value<Nc>(i,j,1,2);
 
-				if (std::fabs(delta2) < 1.) {
-					delta = (delta + delta2)/2;
-				}
+				float c1_2_m1 = truncatedCostVolume.value<Nc>(i,j,2,0);
+				float c1_2_0 = truncatedCostVolume.value<Nc>(i,j,2,1);
+				float c1_2_1 = truncatedCostVolume.value<Nc>(i,j,2,2);
+
+				float delta1_0 = refineCostTriplet<kernel>(c1_0_m1, c1_0_0, c1_0_1);
+				float delta1_1 = refineCostTriplet<kernel>(c1_1_m1, c1_1_0, c1_1_1);
+				float delta1_2 = refineCostTriplet<kernel>(c1_2_m1, c1_2_0, c1_2_1);
+
+				// fit a line delta1 = a1*delta0 + b1
+				float a1 = (delta1_2 - delta1_0)/2;
+				float b1 = (delta1_0 + delta1_1 + delta1_2)/3;
+
+
+				// solve for delta0, delta1, such that both delta0 = a0*delta1 + b0 and delta1 = a1*delta0 + b1 are true
+				delta0 = (a0*b1 + b0)/(1-a0*a1);
+				delta1 = a1*delta0 + b1;
+
 			}
 
-			refined.at<Nc>(i,j) = d + delta;
+			if (std::abs(delta0) > 1 or std::abs(delta1) > 1
+					or std::isnan(delta0) or std::isnan(delta1)) {
+				delta0 = 0;
+				delta1 = 0;
+			}
+
+			refined.at<Nc>(i,j,0) = rawDisparity.value<Nc>(i,j,0) + delta0;
+			refined.at<Nc>(i,j,1) = rawDisparity.value<Nc>(i,j,1) + delta1;
 
 		}
 
 	}
 
 	return refined;
-
 }
-
 
 } //namespace Correlation
 } //namespace StereoVision

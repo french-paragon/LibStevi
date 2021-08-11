@@ -49,7 +49,6 @@ set(LIB_SRC
         correlation/cross_correlations.h
         correlation/cross_correlations.cpp
         correlation/census.h
-        correlation/cost_based_refinement.cpp
         correlation/cost_based_refinement.h
         optimization/l1optimization.h
         optimization/l2optimization.h

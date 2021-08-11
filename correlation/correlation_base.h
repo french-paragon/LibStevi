@@ -381,6 +381,57 @@ Multidim::Array<T_CV, 3> truncatedCostVolume(Multidim::Array<T_CV, 3> const& cos
 
 }
 
+
+template<class T_CV,
+		 dispDirection dir = dispDirection::RightToLeft>
+Multidim::Array<T_CV, 4> truncatedBidirectionaCostVolume(Multidim::Array<T_CV, 4> const& costVolume,
+														 Multidim::Array<disp_t, 2> const& selectedIndex,
+														 uint8_t cost_vol_radius0 = -1,
+														 uint8_t cost_vol_radius1 = -1)
+{
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	uint8_t cv_radius0 = cost_vol_radius0;
+	uint8_t cv_radius1 = cost_vol_radius1;
+
+	if (cv_radius0 < 1) {
+		cv_radius0 = 1;
+	}
+
+	if (cv_radius1 < 1) {
+		cv_radius1 = cv_radius0;
+	}
+
+	auto cv_shape = costVolume.shape();
+
+	Multidim::Array<T_CV, 4> tcv(cv_shape[0],
+								cv_shape[1],
+								cv_radius0*2+1,
+								cv_radius1*2+1);
+
+	#pragma omp parallel for
+	for (int i = 0; i < cv_shape[0]; i++) {
+		#pragma omp simd
+		for (int j = 0; j < cv_shape[1]; j++) {
+
+			for (int32_t d0 = 0; d0 <= 2*cv_radius0; d0++) {
+
+				int32_t p0 = selectedIndex.value<Nc>(i,j,0)+d0-cv_radius0;
+
+				for (int32_t d1 = 0; d1 <= 2*cv_radius1; d1++) {
+
+					int32_t p1 = selectedIndex.value<Nc>(i,j,1)+d1-cv_radius1;
+
+					tcv.template at<Nc>(i,j,d0,d1) = costVolume.valueOrAlt({i,j,p0,p1},0);
+				}
+			}
+		}
+	}
+
+	return tcv;
+}
+
 template<class T_IB,
 		 dispDirection dir = dispDirection::RightToLeft,
 		 truncatedCostVolumeDirection sdir = truncatedCostVolumeDirection::Same>
