@@ -684,7 +684,7 @@ Multidim::Array<float, 4> unfoldBased2dDisparityCostVolume(Multidim::Array<T_L, 
 
 	if (nImDim == 3) {
 		if (l_shape[2] != r_shape[2]) {
-			return Multidim::Array<float, 3>();
+			return Multidim::Array<float, 4>();
 		}
 	}
 
@@ -1990,7 +1990,7 @@ Multidim::Array<float, 3> refinedBarycentric2dDisp(Multidim::Array<T_L, nImDim> 
 	Multidim::Array<float, 3> feature_vol_l = unfold(compressor, img_l);
 	Multidim::Array<float, 3> feature_vol_r = unfold(compressor, img_r);
 
-	return refinedBarycentric2dDispFeatureVol<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchWindows, preNormalize);
+	return refinedBarycentric2dDispFeatureVol<matchFunc, contiguity, dDir>(feature_vol_l, feature_vol_r, searchWindows, preNormalize);
 
 }
 template<matchingFunctions matchFunc,

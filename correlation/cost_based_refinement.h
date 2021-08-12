@@ -96,7 +96,7 @@ Multidim::Array<float, 2> refineDispCostInterpolation(Multidim::Array<float, 3> 
 
 
 template<InterpolationKernel kernel, IsotropyHypothesis isotropHypothesis = IsotropyHypothesis::Isotropic>
-Multidim::Array<float, 2> refineDisp2dCostInterpolation(Multidim::Array<float, 4> const& truncatedCostVolume,
+Multidim::Array<float, 3> refineDisp2dCostInterpolation(Multidim::Array<float, 4> const& truncatedCostVolume,
 														Multidim::Array<disp_t, 3> const& rawDisparity) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;

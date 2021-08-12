@@ -385,7 +385,7 @@ Multidim::Array<T_CV, 3> truncatedCostVolume(Multidim::Array<T_CV, 3> const& cos
 template<class T_CV,
 		 dispDirection dir = dispDirection::RightToLeft>
 Multidim::Array<T_CV, 4> truncatedBidirectionaCostVolume(Multidim::Array<T_CV, 4> const& costVolume,
-														 Multidim::Array<disp_t, 2> const& selectedIndex,
+														 Multidim::Array<disp_t, 3> const& selectedIndex,
 														 uint8_t cost_vol_radius0 = -1,
 														 uint8_t cost_vol_radius1 = -1)
 {
