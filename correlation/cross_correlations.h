@@ -1053,7 +1053,23 @@ Multidim::Array<float, 3> refineBarycentric2dDisp(Multidim::Array<float, 3> cons
 
 						TypeVectorAlpha alphas = MatchingFunctionTraits<matchFunc>::barycentricBestApproximation(A, source);
 
-						if ( (alphas.array() > 0).all() ) { // consider the interpolation only if the barycentric coordinates are all greather than 0.
+						float tmp_deltaD0 = 0;
+						float tmp_deltaD1 = 0;
+
+						int pos = 0;
+						for (auto sDir : searchDirs) {
+							int di = sDir[0]*dir_x;
+							int dj = sDir[1]*dir_y;
+
+							tmp_deltaD0 += alphas(pos)*di;
+							tmp_deltaD1 += alphas(pos)*dj;
+
+							pos++;
+						}
+
+						if ( std::fabs(tmp_deltaD0) <= 1. and std::fabs(tmp_deltaD1) <= 1. ) { // consider the interpolation only if the interpolated position is in the area of interest.
+							//Note that if the search space is a 2d simplex, this is true if all barycentric coordinates are greather than or equal 0, but in the general case this is not true.
+
 							Eigen::VectorXf interpFeatures = A*alphas;
 							if (MatchingFunctionTraits<matchFunc>::Normalized) {
 								interpFeatures.normalize();
@@ -1077,19 +1093,8 @@ Multidim::Array<float, 3> refineBarycentric2dDisp(Multidim::Array<float, 3> cons
 
 							if (better) {
 
-								deltaD0 = 0;
-								deltaD1 = 0;
-
-								int i = 0;
-								for (auto sDir : searchDirs) {
-									int di = sDir[0]*dir_x;
-									int dj = sDir[1]*dir_y;
-
-									deltaD0 += alphas(i)*di;
-									deltaD1 += alphas(i)*dj;
-
-									i++;
-								}
+								deltaD0 = tmp_deltaD0;
+								deltaD1 = tmp_deltaD1;
 
 								score = tmpScore;
 
@@ -1228,7 +1233,21 @@ Multidim::Array<float, 3> refineBarycentricSymmetric2dDisp(Multidim::Array<float
 
 				TypeVectorAlpha alphas = MatchingFunctionTraits<matchFunc>::barycentricBestApproximation(A, source);
 
-				if ( (alphas.array() > 0).all() ) { // consider the interpolation only if the barycentric coordinates are all greather than 0.
+				float tmp_deltaD0 = 0;
+				float tmp_deltaD1 = 0;
+
+				int pos = 0;
+				for (auto sDir : searchDirs) {
+					int di = sDir[0];
+					int dj = sDir[1];
+
+					tmp_deltaD0 += alphas(pos)*di;
+					tmp_deltaD1 += alphas(pos)*dj;
+
+					pos++;
+				}
+
+				if ( std::fabs(tmp_deltaD0) <= 1. and std::fabs(tmp_deltaD1) <= 1. ) { // consider the interpolation only if the barycentric coordinates are all greather than 0.
 					Eigen::VectorXf interpFeatures = A*alphas;
 					if (MatchingFunctionTraits<matchFunc>::Normalized) {
 						interpFeatures.normalize();
@@ -1252,19 +1271,8 @@ Multidim::Array<float, 3> refineBarycentricSymmetric2dDisp(Multidim::Array<float
 
 					if (better) {
 
-						deltaD0 = 0;
-						deltaD1 = 0;
-
-						int i = 0;
-						for (auto sDir : searchDirs) {
-							int di = sDir[0];
-							int dj = sDir[1];
-
-							deltaD0 += alphas(i)*di;
-							deltaD1 += alphas(i)*dj;
-
-							i++;
-						}
+						deltaD0 = tmp_deltaD0;
+						deltaD1 = tmp_deltaD1;
 
 						score = tmpScore;
 
