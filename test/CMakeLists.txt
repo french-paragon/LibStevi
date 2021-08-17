@@ -41,3 +41,8 @@ add_executable(testOptimizationUtils testOptimizationUtils.cpp)
 target_link_libraries(testOptimizationUtils ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestOptimizationUtils testOptimizationUtils)
 
+
+add_executable(testCostRefinement testCostRefinement.cpp)
+target_link_libraries(testCostRefinement ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestCostRefinement testCostRefinement)
+
