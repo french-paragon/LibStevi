@@ -314,7 +314,7 @@ Multidim::Array<T_CV, 3> truncatedCostVolume(Multidim::Array<T_CV, 3> const& cos
 					if (p < 0 or p >= cv_shape[2]
 							or j < h_radius or j+p+h_radius >= cv_shape[1]
 							or i < v_radius or i+v_radius >= cv_shape[0]) {
-						tcv.template at<Nc>(i,j,d) = 0;
+						tcv.template at<Nc>(i,j,d) = std::nanf("");
 					} else {
 						tcv.template at<Nc>(i,j,d) = costVolume.template value<Nc>(i,j,p);
 					}
@@ -331,7 +331,7 @@ Multidim::Array<T_CV, 3> truncatedCostVolume(Multidim::Array<T_CV, 3> const& cos
 					if (p < 0 or p >= cv_shape[2]
 							or std::min(jp, j) < h_radius or std::max(jp, j) + h_radius >= cv_shape[1]
 							or i < v_radius or i+v_radius >= cv_shape[0]) {
-						tcv.template at<Nc>(i,j,d) = 0;
+						tcv.template at<Nc>(i,j,d) = std::nanf("");
 					} else {
 						tcv.template at<Nc>(i,j,d) = costVolume.template value<Nc>(i,jp,p);
 					}
@@ -360,7 +360,7 @@ Multidim::Array<T_CV, 3> truncatedCostVolume(Multidim::Array<T_CV, 3> const& cos
 					if (p < 0 or p >= cv_shape[2]
 							or j < h_radius or j+p+h_radius >= cv_shape[1]
 							or i < v_radius or i+v_radius >= cv_shape[0]) {
-						tcv.template at<Nc>(i,j,d_d) = 0;
+						tcv.template at<Nc>(i,j,d_d) = std::nanf("");
 					} else {
 						tcv.template at<Nc>(i,j,d_d) = costVolume.template value<Nc>(i,j,p);
 					}
@@ -368,7 +368,7 @@ Multidim::Array<T_CV, 3> truncatedCostVolume(Multidim::Array<T_CV, 3> const& cos
 					if (p < 0 or p >= cv_shape[2]
 							or std::min(jp, j) < h_radius or std::max(jp, j) + h_radius >= cv_shape[1]
 							or i < v_radius or i+v_radius >= cv_shape[0]) {
-						tcv.template at<Nc>(i,j,d_r) = 0;
+						tcv.template at<Nc>(i,j,d_r) = std::nanf("");
 					} else {
 						tcv.template at<Nc>(i,j,d_r) = costVolume.template value<Nc>(i,jp,p);
 					}
@@ -423,7 +423,7 @@ Multidim::Array<T_CV, 4> truncatedBidirectionaCostVolume(Multidim::Array<T_CV, 4
 
 					int32_t p1 = selectedIndex.value<Nc>(i,j,1)+d1-cv_radius1;
 
-					tcv.template at<Nc>(i,j,d0,d1) = costVolume.valueOrAlt({i,j,p0,p1},0);
+					tcv.template at<Nc>(i,j,d0,d1) = costVolume.valueOrAlt({i,j,p0,p1},std::nanf(""));
 				}
 			}
 		}

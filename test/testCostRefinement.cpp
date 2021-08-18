@@ -132,7 +132,7 @@ void TestCostRefinement::test2dCostAnisotropicParabola() {
 	Eigen::Vector2f expected_deltas = b;
 
 	Multidim::Array<StereoVision::Correlation::disp_t,3> rawDisp(1,1,2);
-	Multidim::Array<float,4> truncated_cost_volume(1,1,3,3);
+	Multidim::Array<float,4> truncated_cost_volume(1,1,5,5);
 
 	rawDisp.at(0,0,0) = 0;
 	rawDisp.at(0,0,1) = 0;
@@ -142,17 +142,11 @@ void TestCostRefinement::test2dCostAnisotropicParabola() {
 		return p.dot(A*p);
 	};
 
-	truncated_cost_volume.at(0,0,0,0) = cost(-1,-1);
-	truncated_cost_volume.at(0,0,1,0) = cost(0,-1);
-	truncated_cost_volume.at(0,0,2,0) = cost(1,-1);
-
-	truncated_cost_volume.at(0,0,0,1) = cost(-1,0);
-	truncated_cost_volume.at(0,0,1,1) = cost(0,0);
-	truncated_cost_volume.at(0,0,2,1) = cost(1,0);
-
-	truncated_cost_volume.at(0,0,0,2) = cost(-1,1);
-	truncated_cost_volume.at(0,0,1,2) = cost(0,1);
-	truncated_cost_volume.at(0,0,2,2) = cost(1,1);
+	for (int i = 0; i < 5; i++) {
+		for (int j = 0; j < 5; j++) {
+			truncated_cost_volume.at(0,0,i,j) = cost(i-2,j-2);
+		}
+	}
 
 	Multidim::Array<float,3> ref = StereoVision::Correlation::refineDisp2dCostInterpolation<StereoVision::Correlation::InterpolationKernel::Parabola,
 																							StereoVision::Correlation::IsotropyHypothesis::Anisotropic>
@@ -164,8 +158,10 @@ void TestCostRefinement::test2dCostAnisotropicParabola() {
 	float expectedx = expected_deltas(0);
 	float expectedy = expected_deltas(1);
 
-	QCOMPARE(refinedx, expectedx);
-	QCOMPARE(refinedy, expectedy);
+	float tol = 1e-6;
+
+	QVERIFY2(std::fabs(refinedx - expectedx) < tol, qPrintable(QString("Refined x position not close enought to expected (actual = %1, expected = %2)").arg(refinedx).arg(expectedx)));
+	QVERIFY2(std::fabs(refinedy - expectedy) < tol, qPrintable(QString("Refined x position not close enought to expected (actual = %1, expected = %2)").arg(refinedy).arg(expectedy)));
 
 }
 

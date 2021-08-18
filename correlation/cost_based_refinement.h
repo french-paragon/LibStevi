@@ -105,6 +105,80 @@ Multidim::Array<float, 3> refineDisp2dCostInterpolation(Multidim::Array<float, 4
 
 	Multidim::Array<float, 3> refined(shape);
 
+	auto cv_shape = truncatedCostVolume.shape();
+
+	int cv_radius0 = (cv_shape[2]-1)/2;
+	int cv_radius1 = (cv_shape[3]-1)/2;
+
+	if (cv_radius0 < 1 or cv_radius1 < 1 or 2*cv_radius0+1 != cv_shape[2] or 2*cv_radius1+1 != cv_shape[3]) {
+		return Multidim::Array<float, 3>();
+	}
+
+	bool isScoreVolume = false;
+
+	float v0 = truncatedCostVolume.value<Nc>(cv_shape[0]/2, cv_shape[1]/2, cv_radius0, cv_radius1);
+	float v1 = truncatedCostVolume.value<Nc>(cv_shape[0]/2, cv_shape[1]/2, cv_radius0+1, cv_radius1);
+	float v2 = truncatedCostVolume.value<Nc>(cv_shape[0]/2, cv_shape[1]/2, cv_radius0-1, cv_radius1);
+	float v3 = truncatedCostVolume.value<Nc>(cv_shape[0]/2, cv_shape[1]/2, cv_radius0, cv_radius1+1);
+	float v4 = truncatedCostVolume.value<Nc>(cv_shape[0]/2, cv_shape[1]/2, cv_radius0, cv_radius1-1);
+	// compare with multiple values to account for nans
+	if (v0 > v1) {
+		isScoreVolume = true;
+	}
+	if (v0 > v2) {
+		isScoreVolume = true;
+	}
+	if (v0 > v3) {
+		isScoreVolume = true;
+	}
+	if (v0 > v4) {
+		isScoreVolume = true;
+	}
+
+	auto argminForRow = [&truncatedCostVolume, &cv_shape, isScoreVolume] (int i, int j, int row) -> disp_t {
+
+		float cost_hat = (isScoreVolume) ? -std::numeric_limits<float>::infinity() : std::numeric_limits<float>::infinity();
+		disp_t argmin = 0;
+		for (int a = 0; a < cv_shape[2]; a++) {
+			if (isScoreVolume) {
+				if (truncatedCostVolume.value<Nc>(i,j,a,row) > cost_hat) {
+					cost_hat = truncatedCostVolume.value<Nc>(i,j,a,row);
+					argmin = a;
+				}
+			} else {
+				if (truncatedCostVolume.value<Nc>(i,j,a,row) < cost_hat) {
+					cost_hat = truncatedCostVolume.value<Nc>(i,j,a,row);
+					argmin = a;
+				}
+			}
+		}
+
+		return argmin;
+
+	};
+
+	auto argminForCol = [&truncatedCostVolume, &cv_shape, isScoreVolume] (int i, int j, int col) -> disp_t {
+
+		float cost_hat = (isScoreVolume) ? -std::numeric_limits<float>::infinity() : std::numeric_limits<float>::infinity();
+		disp_t argmin = 0;
+		for (int a = 0; a < cv_shape[2]; a++) {
+			if (isScoreVolume) {
+				if (truncatedCostVolume.value<Nc>(i,j,col,a) > cost_hat) {
+					cost_hat = truncatedCostVolume.value<Nc>(i,j,col,a);
+					argmin = a;
+				}
+			} else {
+				if (truncatedCostVolume.value<Nc>(i,j,col,a) < cost_hat) {
+					cost_hat = truncatedCostVolume.value<Nc>(i,j,col,a);
+					argmin = a;
+				}
+			}
+		}
+
+		return argmin;
+
+	};
+
 	#pragma omp parallel for
 	for (int i = 0; i < shape[0]; i++) {
 
@@ -115,55 +189,96 @@ Multidim::Array<float, 3> refineDisp2dCostInterpolation(Multidim::Array<float, 4
 
 			if (isotropHypothesis == IsotropyHypothesis::Isotropic) {
 
-				float c0_m1 = truncatedCostVolume.value<Nc>(i,j,0,1);
-				float c0_0 = truncatedCostVolume.value<Nc>(i,j,1,1);
-				float c0_1 = truncatedCostVolume.value<Nc>(i,j,2,1);
+				float c0_m1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0-1,cv_radius1);
+				float c0_0 = truncatedCostVolume.value<Nc>(i,j,cv_radius0,cv_radius1);
+				float c0_1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0+1,cv_radius1);
 
-				float c1_m1 = truncatedCostVolume.value<Nc>(i,j,1,0);
-				float c1_0 = truncatedCostVolume.value<Nc>(i,j,1,1);
-				float c1_1 = truncatedCostVolume.value<Nc>(i,j,1,2);
+				float c1_m1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0,cv_radius1-1);
+				float c1_0 = truncatedCostVolume.value<Nc>(i,j,cv_radius0,cv_radius1);
+				float c1_1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0,cv_radius1+1);
 
 				delta0 = refineCostTriplet<kernel>(c0_m1, c0_0, c0_1);
 				delta1 = refineCostTriplet<kernel>(c1_m1, c1_0, c1_1);
 
 			} else {
 
-				float c0_0_m1 = truncatedCostVolume.value<Nc>(i,j,0,0);
-				float c0_0_0 = truncatedCostVolume.value<Nc>(i,j,1,0);
-				float c0_0_1 = truncatedCostVolume.value<Nc>(i,j,2,0);
+				//get the vertical refinement line
 
-				float c0_1_m1 = truncatedCostVolume.value<Nc>(i,j,0,1);
-				float c0_1_0 = truncatedCostVolume.value<Nc>(i,j,1,1);
-				float c0_1_1 = truncatedCostVolume.value<Nc>(i,j,2,1);
+				disp_t argmin0_0 = argminForRow(i,j,cv_radius1-1);
 
-				float c0_2_m1 = truncatedCostVolume.value<Nc>(i,j,0,2);
-				float c0_2_0 = truncatedCostVolume.value<Nc>(i,j,1,2);
-				float c0_2_1 = truncatedCostVolume.value<Nc>(i,j,2,2);
+				float delta0_0 = argmin0_0 - cv_radius0;
 
-				float delta0_0 = refineCostTriplet<kernel>(c0_0_m1, c0_0_0, c0_0_1);
+				if (argmin0_0 > 0 and argmin0_0 < cv_shape[2]-1) {
+
+					float c0_0_m1 = truncatedCostVolume.value<Nc>(i,j,argmin0_0-1,cv_radius1-1);
+					float c0_0_0 = truncatedCostVolume.value<Nc>(i,j,argmin0_0,cv_radius1-1);
+					float c0_0_1 = truncatedCostVolume.value<Nc>(i,j,argmin0_0+1,cv_radius1-1);
+
+					delta0_0 += refineCostTriplet<kernel>(c0_0_m1, c0_0_0, c0_0_1);
+
+				}
+
+				float c0_1_m1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0-1,cv_radius1);
+				float c0_1_0 = truncatedCostVolume.value<Nc>(i,j,cv_radius0,cv_radius1);
+				float c0_1_1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0+1,cv_radius1);
+
 				float delta0_1 = refineCostTriplet<kernel>(c0_1_m1, c0_1_0, c0_1_1);
-				float delta0_2 = refineCostTriplet<kernel>(c0_2_m1, c0_2_0, c0_2_1);
+
+
+				disp_t argmin0_2 = argminForRow(i,j,cv_radius1+1);
+
+				float delta0_2 = argmin0_2 - cv_radius0;
+
+				if (argmin0_2 > 0 and argmin0_2 < cv_shape[2]-1) {
+
+					float c0_2_m1 = truncatedCostVolume.value<Nc>(i,j,argmin0_2-1,cv_radius1+1);
+					float c0_2_0 = truncatedCostVolume.value<Nc>(i,j,argmin0_2,cv_radius1+1);
+					float c0_2_1 = truncatedCostVolume.value<Nc>(i,j,argmin0_2+1,cv_radius1+1);
+
+					delta0_2 += refineCostTriplet<kernel>(c0_2_m1, c0_2_0, c0_2_1);
+
+				}
 
 				// fit a line delta0 = a0*delta1 + b0
 				float a0 = (delta0_2 - delta0_0)/2;
 				float b0 = (delta0_0 + delta0_1 + delta0_2)/3;
 
+				//get the horizontal refinement line
 
-				float c1_0_m1 = truncatedCostVolume.value<Nc>(i,j,0,0);
-				float c1_0_0 = truncatedCostVolume.value<Nc>(i,j,0,1);
-				float c1_0_1 = truncatedCostVolume.value<Nc>(i,j,0,2);
+				disp_t argmin1_0 = argminForCol(i,j,cv_radius0-1);
 
-				float c1_1_m1 = truncatedCostVolume.value<Nc>(i,j,1,0);
-				float c1_1_0 = truncatedCostVolume.value<Nc>(i,j,1,1);
-				float c1_1_1 = truncatedCostVolume.value<Nc>(i,j,1,2);
+				float delta1_0 = argmin1_0 - cv_radius1;
 
-				float c1_2_m1 = truncatedCostVolume.value<Nc>(i,j,2,0);
-				float c1_2_0 = truncatedCostVolume.value<Nc>(i,j,2,1);
-				float c1_2_1 = truncatedCostVolume.value<Nc>(i,j,2,2);
+				if (argmin1_0 > 0 and argmin1_0 < cv_shape[3]-1) {
 
-				float delta1_0 = refineCostTriplet<kernel>(c1_0_m1, c1_0_0, c1_0_1);
+					float c1_0_m1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0-1,argmin1_0-1);
+					float c1_0_0 = truncatedCostVolume.value<Nc>(i,j,cv_radius0-1,argmin1_0);
+					float c1_0_1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0-1,argmin0_0+1);
+
+					delta1_0 += refineCostTriplet<kernel>(c1_0_m1, c1_0_0, c1_0_1);
+
+				}
+
+				float c1_1_m1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0,cv_radius1-1);
+				float c1_1_0 = truncatedCostVolume.value<Nc>(i,j,cv_radius0,cv_radius1);
+				float c1_1_1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0,cv_radius1+1);
+
 				float delta1_1 = refineCostTriplet<kernel>(c1_1_m1, c1_1_0, c1_1_1);
-				float delta1_2 = refineCostTriplet<kernel>(c1_2_m1, c1_2_0, c1_2_1);
+
+
+				disp_t argmin1_2 = argminForCol(i,j,cv_radius0+1);
+
+				float delta1_2 = argmin1_2 - cv_radius0;
+
+				if (argmin1_2 > 0 and argmin1_2 < cv_shape[3]-1) {
+
+					float c1_2_m1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0+1,argmin1_2-1);
+					float c1_2_0 = truncatedCostVolume.value<Nc>(i,j,cv_radius0+1,argmin1_2);
+					float c1_2_1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0+1,argmin1_2+1);
+
+					delta1_2 += refineCostTriplet<kernel>(c1_2_m1, c1_2_0, c1_2_1);
+
+				}
 
 				// fit a line delta1 = a1*delta0 + b1
 				float a1 = (delta1_2 - delta1_0)/2;
