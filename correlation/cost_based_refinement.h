@@ -148,12 +148,12 @@ Multidim::Array<float, 3> refineDisp2dCostInterpolation(Multidim::Array<float, 4
 		disp_t argmin = 0;
 		for (int a = 0; a < cv_shape[2]; a++) {
 			if (isScoreVolume) {
-				if (truncatedCostVolume.value<Nc>(i,j,a,row) > cost_hat) {
+				if (truncatedCostVolume.value<Nc>(i,j,a,row) >= cost_hat) {
 					cost_hat = truncatedCostVolume.value<Nc>(i,j,a,row);
 					argmin = a;
 				}
 			} else {
-				if (truncatedCostVolume.value<Nc>(i,j,a,row) < cost_hat) {
+				if (truncatedCostVolume.value<Nc>(i,j,a,row) <= cost_hat) {
 					cost_hat = truncatedCostVolume.value<Nc>(i,j,a,row);
 					argmin = a;
 				}
@@ -170,12 +170,12 @@ Multidim::Array<float, 3> refineDisp2dCostInterpolation(Multidim::Array<float, 4
 		disp_t argmin = 0;
 		for (int a = 0; a < cv_shape[3]; a++) {
 			if (isScoreVolume) {
-				if (truncatedCostVolume.value<Nc>(i,j,col,a) > cost_hat) {
+				if (truncatedCostVolume.value<Nc>(i,j,col,a) >= cost_hat) {
 					cost_hat = truncatedCostVolume.value<Nc>(i,j,col,a);
 					argmin = a;
 				}
 			} else {
-				if (truncatedCostVolume.value<Nc>(i,j,col,a) < cost_hat) {
+				if (truncatedCostVolume.value<Nc>(i,j,col,a) <= cost_hat) {
 					cost_hat = truncatedCostVolume.value<Nc>(i,j,col,a);
 					argmin = a;
 				}
@@ -211,20 +211,6 @@ Multidim::Array<float, 3> refineDisp2dCostInterpolation(Multidim::Array<float, 4
 
 				//get the vertical refinement line
 
-				disp_t argmin0_0 = argminForRow(i,j,cv_radius1-1);
-
-				float delta0_0 = argmin0_0 - cv_radius0;
-
-				if (argmin0_0 > 0 and argmin0_0 < cv_shape[2]-1) {
-
-					float c0_0_m1 = truncatedCostVolume.value<Nc>(i,j,argmin0_0-1,cv_radius1-1);
-					float c0_0_0 = truncatedCostVolume.value<Nc>(i,j,argmin0_0,cv_radius1-1);
-					float c0_0_1 = truncatedCostVolume.value<Nc>(i,j,argmin0_0+1,cv_radius1-1);
-
-					delta0_0 += refineCostTriplet<kernel>(c0_0_m1, c0_0_0, c0_0_1);
-
-				}
-
 				float c0_1_m1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0-1,cv_radius1);
 				float c0_1_0 = truncatedCostVolume.value<Nc>(i,j,cv_radius0,cv_radius1);
 				float c0_1_1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0+1,cv_radius1);
@@ -232,9 +218,24 @@ Multidim::Array<float, 3> refineDisp2dCostInterpolation(Multidim::Array<float, 4
 				float delta0_1 = refineCostTriplet<kernel>(c0_1_m1, c0_1_0, c0_1_1);
 
 
+				disp_t argmin0_0 = argminForRow(i,j,cv_radius1-1);
+
+				float delta0_0 = delta0_1;
+
+				if (argmin0_0 > 0 and argmin0_0 < cv_shape[2]-1) {
+
+					float c0_0_m1 = truncatedCostVolume.value<Nc>(i,j,argmin0_0-1,cv_radius1-1);
+					float c0_0_0 = truncatedCostVolume.value<Nc>(i,j,argmin0_0,cv_radius1-1);
+					float c0_0_1 = truncatedCostVolume.value<Nc>(i,j,argmin0_0+1,cv_radius1-1);
+
+					delta0_0 = argmin0_0 - cv_radius0 + refineCostTriplet<kernel>(c0_0_m1, c0_0_0, c0_0_1);
+
+				}
+
+
 				disp_t argmin0_2 = argminForRow(i,j,cv_radius1+1);
 
-				float delta0_2 = argmin0_2 - cv_radius0;
+				float delta0_2 = delta0_1;
 
 				if (argmin0_2 > 0 and argmin0_2 < cv_shape[2]-1) {
 
@@ -242,7 +243,7 @@ Multidim::Array<float, 3> refineDisp2dCostInterpolation(Multidim::Array<float, 4
 					float c0_2_0 = truncatedCostVolume.value<Nc>(i,j,argmin0_2,cv_radius1+1);
 					float c0_2_1 = truncatedCostVolume.value<Nc>(i,j,argmin0_2+1,cv_radius1+1);
 
-					delta0_2 += refineCostTriplet<kernel>(c0_2_m1, c0_2_0, c0_2_1);
+					delta0_2 = argmin0_2 - cv_radius0 + refineCostTriplet<kernel>(c0_2_m1, c0_2_0, c0_2_1);
 
 				}
 
@@ -252,29 +253,30 @@ Multidim::Array<float, 3> refineDisp2dCostInterpolation(Multidim::Array<float, 4
 
 				//get the horizontal refinement line
 
-
-				disp_t argmin1_0 = argminForCol(i,j,cv_radius0-1);
-
-				float delta1_0 = argmin1_0 - cv_radius1;
-				if (argmin1_0 > 0 and argmin1_0 < cv_shape[3]-1) {
-
-					float c1_0_m1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0-1,argmin1_0-1);
-					float c1_0_0 = truncatedCostVolume.value<Nc>(i,j,cv_radius0-1,argmin1_0);
-					float c1_0_1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0-1,argmin1_0+1);
-
-					delta1_0 += refineCostTriplet<kernel>(c1_0_m1, c1_0_0, c1_0_1);
-
-				}
-
 				float c1_1_m1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0,cv_radius1-1);
 				float c1_1_0 = truncatedCostVolume.value<Nc>(i,j,cv_radius0,cv_radius1);
 				float c1_1_1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0,cv_radius1+1);
 
 				float delta1_1 = refineCostTriplet<kernel>(c1_1_m1, c1_1_0, c1_1_1);
 
+
+				disp_t argmin1_0 = argminForCol(i,j,cv_radius0-1);
+
+				float delta1_0 = delta1_1 ;
+
+				if (argmin1_0 > 0 and argmin1_0 < cv_shape[3]-1) {
+
+					float c1_0_m1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0-1,argmin1_0-1);
+					float c1_0_0 = truncatedCostVolume.value<Nc>(i,j,cv_radius0-1,argmin1_0);
+					float c1_0_1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0-1,argmin1_0+1);
+
+					delta1_0 = argmin1_0 - cv_radius1 + refineCostTriplet<kernel>(c1_0_m1, c1_0_0, c1_0_1);
+
+				}
+
 				disp_t argmin1_2 = argminForCol(i,j,cv_radius0+1);
 
-				float delta1_2 = argmin1_2 - cv_radius1;
+				float delta1_2 = delta1_1;
 
 				if (argmin1_2 > 0 and argmin1_2 < cv_shape[3]-1) {
 
@@ -282,7 +284,7 @@ Multidim::Array<float, 3> refineDisp2dCostInterpolation(Multidim::Array<float, 4
 					float c1_2_0 = truncatedCostVolume.value<Nc>(i,j,cv_radius0+1,argmin1_2);
 					float c1_2_1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0+1,argmin1_2+1);
 
-					delta1_2 += refineCostTriplet<kernel>(c1_2_m1, c1_2_0, c1_2_1);
+					delta1_2 = argmin1_2 - cv_radius1 + refineCostTriplet<kernel>(c1_2_m1, c1_2_0, c1_2_1);
 
 				}
 
