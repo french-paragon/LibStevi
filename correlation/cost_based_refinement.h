@@ -20,7 +20,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include "./correlation_base.h"
+
 #include <Eigen/Core>
+#include <Eigen/LU>
 
 namespace StereoVision {
 namespace Correlation {
