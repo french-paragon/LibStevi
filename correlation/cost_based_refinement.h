@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include "./correlation_base.h"
+#include <Eigen/Core>
 
 namespace StereoVision {
 namespace Correlation {
@@ -62,6 +63,63 @@ inline float refineCostTriplet(float cm1, float c0, float c1) {
 		break;
 	}
 	return val;
+
+}
+
+template<InterpolationKernel kernel>
+inline Eigen::Vector2f refineCostPatch(float c_m1_m1, float c_m1_0, float c_m1_1,
+									   float c_0_m1, float c_0_0, float c_0_1,
+									   float c_1_m1, float c_1_0, float c_1_1) {
+
+	constexpr int patchSize = 9;
+	constexpr int paramSize = 6;
+
+	typedef Eigen::Matrix<float,patchSize,paramSize> MatrixAType;
+	typedef Eigen::Matrix<float,paramSize,1> VectorXType;
+	typedef Eigen::Matrix<float,patchSize,1> VectorLType;
+
+	static_assert (kernel == InterpolationKernel::Parabola or kernel == InterpolationKernel::Gaussian, "Unsupported kernel used for patch cost refinement");
+
+	if (kernel == InterpolationKernel::Parabola) {
+
+		VectorLType L;
+		L << c_m1_m1, c_m1_0, c_m1_1, c_0_m1, c_0_0, c_0_1, c_1_m1, c_1_0, c_1_1;
+
+		//Many of this could be precomputed -> trust the compiler for that for the moment .
+		VectorLType vertDeltas;
+		vertDeltas << -1, -1, -1, 0, 0, 0, 1, 1, 1;
+		VectorLType horzDeltas;
+		horzDeltas << -1, 0, 1, -1, 0, 1, -1, 0, 1;
+
+		MatrixAType A;
+
+		for (int i = 0; i < patchSize; i++) {
+			A(i,0) = vertDeltas(i)*vertDeltas(i);
+			A(i,1) = vertDeltas(i)*horzDeltas(i);
+			A(i,2) = horzDeltas(i)*horzDeltas(i);
+			A(i,3) = vertDeltas(i);
+			A(i,4) = horzDeltas(i);
+			A(i,5) = 1;
+		}
+
+		VectorXType fitted = ((A.transpose()*A).inverse() * A.transpose())*L;
+
+		Eigen::Matrix2f M;
+		M << 2*fitted(0), fitted(1),
+				fitted(1), 2*fitted(2);
+
+		Eigen::Vector2f v;
+		v << -fitted(3), -fitted(4);
+
+		return M.inverse()*v;
+
+	} else if (kernel == InterpolationKernel::Gaussian) {
+		return refineCostPatch<InterpolationKernel::Parabola>(std::log(c_m1_m1), std::log(c_m1_0), std::log(c_m1_1),
+															  std::log(c_0_m1), std::log(c_0_0), std::log(c_0_1),
+															  std::log(c_1_m1), std::log(c_1_0), std::log(c_1_1));
+	}
+
+	return Eigen::Vector2f::Zero();
 
 }
 
@@ -310,6 +368,66 @@ Multidim::Array<float, 3> refineDisp2dCostInterpolation(Multidim::Array<float, 4
 
 		}
 
+	}
+
+	return refined;
+}
+
+template<InterpolationKernel kernel>
+Multidim::Array<float, 3> refineDisp2dCostPatchInterpolation(Multidim::Array<float, 4> const& truncatedCostVolume,
+															 Multidim::Array<disp_t, 3> const& rawDisparity) {
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	auto shape = rawDisparity.shape();
+
+	Multidim::Array<float, 3> refined(shape);
+
+	auto cv_shape = truncatedCostVolume.shape();
+
+	int cv_radius0 = (cv_shape[2]-1)/2;
+	int cv_radius1 = (cv_shape[3]-1)/2;
+
+	if (cv_radius0 < 1 or cv_radius1 < 1 or 2*cv_radius0+1 != cv_shape[2] or 2*cv_radius1+1 != cv_shape[3]) {
+		return Multidim::Array<float, 3>();
+	}
+
+	#pragma omp parallel for
+	for (int i = 0; i < shape[0]; i++) {
+
+		for (int j = 0; j < shape[1]; j++) {
+
+			float delta0 = 0;
+			float delta1 = 0;
+
+			float cm1_m1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0-1,cv_radius1-1);
+			float cm1_0 = truncatedCostVolume.value<Nc>(i,j,cv_radius0-1,cv_radius1);
+			float cm1_1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0-1,cv_radius1+1);
+
+			float c0_m1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0,cv_radius1-1);
+			float c0_0 = truncatedCostVolume.value<Nc>(i,j,cv_radius0,cv_radius1);
+			float c0_1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0,cv_radius1+1);
+
+			float c1_m1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0+1,cv_radius1-1);
+			float c1_0 = truncatedCostVolume.value<Nc>(i,j,cv_radius0+1,cv_radius1);
+			float c1_1 = truncatedCostVolume.value<Nc>(i,j,cv_radius0+1,cv_radius1+1);
+
+			Eigen::Vector2f deltas = refineCostPatch<kernel>(cm1_m1, cm1_0, cm1_1,
+															 c0_m1, c0_0, c0_1,
+															 c1_m1, c1_0, c1_1);
+
+			delta0 = deltas(0);
+			delta1 = deltas(1);
+
+			if (std::abs(delta0) > 1 or std::abs(delta1) > 1
+					or std::isnan(delta0) or std::isnan(delta1)) {
+				delta0 = 0;
+				delta1 = 0;
+			}
+
+			refined.at<Nc>(i,j,0) = rawDisparity.value<Nc>(i,j,0) + delta0;
+			refined.at<Nc>(i,j,1) = rawDisparity.value<Nc>(i,j,1) + delta1;
+		}
 	}
 
 	return refined;
