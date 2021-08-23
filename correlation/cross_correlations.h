@@ -1431,7 +1431,7 @@ Multidim::Array<float, 2> refinedBarycentricSymmetricDispFeatureVol(Multidim::Ar
 		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
 		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
 
-		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchRange);
+		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
@@ -1506,7 +1506,7 @@ Multidim::Array<float, 2> refinedBarycentricDispFeatureVol(Multidim::Array<float
 		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
 		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
 
-		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchRange);
+		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
@@ -1583,7 +1583,7 @@ Multidim::Array<float, 3> refinedBarycentric2dDispFeatureVol(Multidim::Array<flo
 		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
 		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
 
-		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchWindows);
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchWindows);
 
 		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
 
@@ -1660,7 +1660,7 @@ Multidim::Array<float, 3> refinedBarycentricSymmetric2dDispFeatureVol(Multidim::
 		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
 		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
 
-		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchWindows);
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchWindows);
 
 		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
 
@@ -1735,7 +1735,7 @@ Multidim::Array<float, 2> refinedCostSymmetricDispFeatureVol(Multidim::Array<flo
 		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
 		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
 
-		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchRange);
+		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
