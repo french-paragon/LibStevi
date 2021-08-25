@@ -359,8 +359,12 @@ Multidim::Array<float, 3> sgmCostVolume(Multidim::Array<T_CV, 3> const& cv_base,
 
 	Multidim::Array<float, 3> sgm_cv(cv_base.shape());
 
-	for (int i = 0; i < cv_base.flatLenght(); i++) {
-		sgm_cv.atUnchecked(i) = cv_base.valueUnchecked(i);
+	for (int i = 0; i < cv_base.shape()[0]; i++) {
+		for (int j = 0; j < cv_base.shape()[1]; j++) {
+			for (int d = 0; d < cv_base.shape()[2]; d++) {
+				sgm_cv.atUnchecked(i, j, d) = cv_base.valueUnchecked(i, j, d);
+			}
+		}
 	}
 
 	Internal::addDirectionalCost<sgmDirections::Up2Down, extractionStrategy>(cv_base, sgm_cv, P1, P2, margins, Pout);
@@ -387,8 +391,12 @@ Multidim::Array<float, 3> sgmCostVolume(Multidim::Array<T_CV, 3> const& cv_base,
 		Internal::addDirectionalCost<sgmDirections::DownLeft2Right, extractionStrategy>(cv_base, sgm_cv, P1, P2, margins, Pout);
 	}
 
-	for (int i = 0; i < cv_base.flatLenght(); i++) {
-		sgm_cv.atUnchecked(i) += cv_base.valueUnchecked(i);
+	for (int i = 0; i < cv_base.shape()[0]; i++) {
+		for (int j = 0; j < cv_base.shape()[1]; j++) {
+			for (int d = 0; d < cv_base.shape()[2]; d++) {
+				sgm_cv.atUnchecked(i, j, d) += cv_base.valueUnchecked(i, j, d);
+			}
+		}
 	}
 
 	return sgm_cv;
