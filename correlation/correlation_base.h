@@ -1,5 +1,5 @@
-#ifndef CORRELATION_BASE_H
-#define CORRELATION_BASE_H
+#ifndef STEREOVISION_CORRELATION_BASE_H
+#define STEREOVISION_CORRELATION_BASE_H
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 

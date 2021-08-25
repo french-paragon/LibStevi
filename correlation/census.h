@@ -1,5 +1,5 @@
-#ifndef CENSUS_H
-#define CENSUS_H
+#ifndef STEREOVISION_CENSUS_H
+#define STEREOVISION_CENSUS_H
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 

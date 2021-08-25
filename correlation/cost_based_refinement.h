@@ -1,5 +1,5 @@
-#ifndef COST_BASED_REFINEMENT_H
-#define COST_BASED_REFINEMENT_H
+#ifndef STEREOVISION_COST_BASED_REFINEMENT_H
+#define STEREOVISION_COST_BASED_REFINEMENT_H
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 
