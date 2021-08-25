@@ -8,7 +8,7 @@ option(buildTests "Build the test suits for the library" ON)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
@@ -50,11 +50,13 @@ set(LIB_SRC
         correlation/cross_correlations.cpp
         correlation/census.h
         correlation/cost_based_refinement.h
+        correlation/sgm.h
         optimization/l1optimization.h
         optimization/l2optimization.h
         optimization/sphericaloptimization.h
         optimization/affine_utils.h
         utils/contiguity.h
+        utils/margins.h
 )
 
 add_library(

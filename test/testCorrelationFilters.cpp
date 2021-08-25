@@ -455,7 +455,7 @@ void TestCorrelationFilters::testUnfoldOperator() {
 		}
 	}
 
-	Multidim::Array<float, 3> unfolded = StereoVision::Correlation::unfold(h_radius, v_radius, rand, StereoVision::Correlation::PaddingMargins(0));
+	Multidim::Array<float, 3> unfolded = StereoVision::Correlation::unfold(h_radius, v_radius, rand, StereoVision::PaddingMargins(0));
 
 	QCOMPARE(unfolded.shape()[0], 1);
 	QCOMPARE(unfolded.shape()[1], 1);
@@ -475,7 +475,7 @@ void TestCorrelationFilters::testUnfoldOperator() {
 		QCOMPARE(values[i], extractedVals[i]);
 	}
 
-	Multidim::Array<float, 3> unfoldedPadded = StereoVision::Correlation::unfold(h_radius, v_radius, rand, StereoVision::Correlation::PaddingMargins());
+	Multidim::Array<float, 3> unfoldedPadded = StereoVision::Correlation::unfold(h_radius, v_radius, rand, StereoVision::PaddingMargins());
 
 	QCOMPARE(unfoldedPadded.shape()[0], h);
 	QCOMPARE(unfoldedPadded.shape()[1], w);
@@ -692,7 +692,7 @@ void TestCorrelationFilters::testUnfoldCompressor() {
 
 	StereoVision::Correlation::UnFoldCompressor compressor(mask);
 
-	Multidim::Array<float, 3> unfoldedCompressed = StereoVision::Correlation::unfold(compressor, rand, StereoVision::Correlation::PaddingMargins(0));
+	Multidim::Array<float, 3> unfoldedCompressed = StereoVision::Correlation::unfold(compressor, rand, StereoVision::PaddingMargins(0));
 
 	QCOMPARE(fnum, unfoldedCompressed.shape()[2]);
 
@@ -813,7 +813,7 @@ void TestCorrelationFilters::testBarycentricNccRefinement() {
 	Multidim::Array<float, 3> unfolded = StereoVision::Correlation::unfold(h_radius,
 																		   v_radius,
 																		   rand,
-																		   StereoVision::Correlation::PaddingMargins(0));
+																		   StereoVision::PaddingMargins(0));
 
 	//Multidim::Array<float, 2> mean = StereoVision::Correlation::channelsMean(unfolded);
 	//for (int c = 0; c < f; c++) {
@@ -900,7 +900,7 @@ void TestCorrelationFilters::testBarycentricSsdRefinement() {
 	Multidim::Array<float, 3> unfolded = StereoVision::Correlation::unfold(h_radius,
 																		   v_radius,
 																		   rand,
-																		   StereoVision::Correlation::PaddingMargins(0));
+																		   StereoVision::PaddingMargins(0));
 
 	Multidim::Array<float, 3> source(1,3,f);
 
@@ -981,7 +981,7 @@ void TestCorrelationFilters::testBarycentricSadRefinement() {
 	Multidim::Array<float, 3> unfolded = StereoVision::Correlation::unfold(h_radius,
 																		   v_radius,
 																		   rand,
-																		   StereoVision::Correlation::PaddingMargins(0));
+																		   StereoVision::PaddingMargins(0));
 
 	Multidim::Array<float, 3> source(1,3,f);
 
@@ -1083,7 +1083,7 @@ void TestCorrelationFilters::testBarycentricSymmetricNccRefinement() {
 	Multidim::Array<float, 3> unfolded = StereoVision::Correlation::unfold(h_radius,
 																		   v_radius,
 																		   rand,
-																		   StereoVision::Correlation::PaddingMargins(0));
+																		   StereoVision::PaddingMargins(0));
 
 	//Multidim::Array<float, 2> mean = StereoVision::Correlation::channelsMean(unfolded);
 	//for (int c = 0; c < f; c++) {
@@ -1178,7 +1178,7 @@ void TestCorrelationFilters::testBarycentricSymmetricSsdRefinement() {
 	Multidim::Array<float, 3> unfolded = StereoVision::Correlation::unfold(h_radius,
 																		   v_radius,
 																		   rand,
-																		   StereoVision::Correlation::PaddingMargins(0));
+																		   StereoVision::PaddingMargins(0));
 
 	Multidim::Array<float, 3> source(1,3,f);
 
@@ -1266,7 +1266,7 @@ void TestCorrelationFilters::testBarycentricSymmetricSadRefinement() {
 	Multidim::Array<float, 3> unfolded = StereoVision::Correlation::unfold(h_radius,
 																		   v_radius,
 																		   rand,
-																		   StereoVision::Correlation::PaddingMargins(0));
+																		   StereoVision::PaddingMargins(0));
 
 	Multidim::Array<float, 3> source(1,3,f);
 

@@ -1,5 +1,5 @@
-#ifndef UNFOLD_H
-#define UNFOLD_H
+#ifndef STEREOVISION_UNFOLD_H
+#define STEREOVISION_UNFOLD_H
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 
@@ -19,6 +19,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "../utils/margins.h"
+
 #include <array>
 #include <vector>
 #include <MultidimArrays/MultidimArrays.h>
@@ -26,83 +28,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace StereoVision {
 namespace Correlation {
 
-class PaddingMargins {
-
-public:
-
-	PaddingMargins() :
-		_left(0),
-		_right(0),
-		_top(0),
-		_bottom(0),
-		_auto(true)
-	{
-
-	}
-	PaddingMargins(int padding) :
-		_left(padding),
-		_right(padding),
-		_top(padding),
-		_bottom(padding),
-		_auto(false)
-	{
-
-	}
-	PaddingMargins(int leftright, int topbottom) :
-		_left(leftright),
-		_right(leftright),
-		_top(topbottom),
-		_bottom(topbottom),
-		_auto(false)
-	{
-
-	}
-	PaddingMargins(int left, int top, int right, int bottom) :
-		_left(left),
-		_right(right),
-		_top(top),
-		_bottom(bottom),
-		_auto(false)
-	{
-
-	}
-
-	PaddingMargins(PaddingMargins const& other) :
-		_left(other._left),
-		_right(other._right),
-		_top(other._top),
-		_bottom(other._bottom),
-		_auto(other._auto)
-	{
-
-	}
-
-	PaddingMargins& operator=(PaddingMargins const& other)
-	{
-		_left = other._left;
-		_right = other._right;
-		_top = other._top;
-		_bottom = other._bottom;
-		_auto = other._auto;
-
-		return *this;
-	}
-
-	inline bool isAuto() const { return _auto; }
-	inline int left() const { return _left; }
-	inline int right() const { return _right; }
-	inline int top() const  { return _top; }
-	inline int bottom() const  { return _bottom; }
-
-protected:
-
-	int _left;
-	int _right;
-	int _top;
-	int _bottom;
-	bool _auto;
-
-};
 
 
 class UnFoldCompressor {
