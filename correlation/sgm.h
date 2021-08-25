@@ -212,7 +212,7 @@ void traverseLine(size_t start_i,
 	int j;
 
 	for (c = 0, i = start_i, j = start_j;
-		 (i >= margins.top() && i < cv_shape[0]-margins.bottom()) && (j >= margins.left() && j < cv_shape[0]-margins.bottom());
+		 (i >= margins.top() && i < cv_shape[0]-margins.bottom()) && (j >= margins.left() && j < cv_shape[1]-margins.right());
 		 i += stepsVertical[c%2], j += stepsHorizontal[c%2], c++) { //traverse line
 
 		if (extractionStrategy == dispExtractionStartegy::Score) {
