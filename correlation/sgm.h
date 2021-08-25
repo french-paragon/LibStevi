@@ -55,101 +55,101 @@ enum class sgmStartsPos{
 };
 
 template<sgmDirections direction>
-class directionTraits {
+struct directionTraits {
 };
 
 template<>
-class directionTraits<sgmDirections::Up2Down> {
+struct directionTraits<sgmDirections::Up2Down> {
 	static constexpr std::array<int, 2> stepsVertical = {1,1};
 	static constexpr std::array<int, 2> stepsHorizontal = {0,0};
 };
 
 template<>
-class directionTraits<sgmDirections::Down2Up> {
+struct directionTraits<sgmDirections::Down2Up> {
 	static constexpr std::array<int, 2> stepsVertical = {-1,-1};
 	static constexpr std::array<int, 2> stepsHorizontal = {0,0};
 };
 
 template<>
-class directionTraits<sgmDirections::Left2Right> {
+struct directionTraits<sgmDirections::Left2Right> {
 	static constexpr std::array<int, 2> stepsVertical = {0,0};
 	static constexpr std::array<int, 2> stepsHorizontal = {1,1};
 };
 
 template<>
-class directionTraits<sgmDirections::Right2Left> {
+struct directionTraits<sgmDirections::Right2Left> {
 	static constexpr std::array<int, 2> stepsVertical = {0,0};
 	static constexpr std::array<int, 2> stepsHorizontal = {-1,-1};
 };
 
 template<>
-class directionTraits<sgmDirections::UpLeft2DownRight> {
+struct directionTraits<sgmDirections::UpLeft2DownRight> {
 	static constexpr std::array<int, 2> stepsVertical = {1,1};
 	static constexpr std::array<int, 2> stepsHorizontal = {1,1};
 };
 
 template<>
-class directionTraits<sgmDirections::DownRight2UpLeft> {
+struct directionTraits<sgmDirections::DownRight2UpLeft> {
 	static constexpr std::array<int, 2> stepsVertical = {-1,-1};
 	static constexpr std::array<int, 2> stepsHorizontal = {-1,-1};
 };
 
 template<>
-class directionTraits<sgmDirections::UpRight2DownLeft> {
+struct directionTraits<sgmDirections::UpRight2DownLeft> {
 	static constexpr std::array<int, 2> stepsVertical = {1,1};
 	static constexpr std::array<int, 2> stepsHorizontal = {-1,-1};
 };
 
 template<>
-class directionTraits<sgmDirections::DownLeft2UpRight> {
+struct directionTraits<sgmDirections::DownLeft2UpRight> {
 	static constexpr std::array<int, 2> stepsVertical = {-1,-1};
 	static constexpr std::array<int, 2> stepsHorizontal = {1,1};
 };
 
 template<>
-class directionTraits<sgmDirections::UpLeft2Right> {
+struct directionTraits<sgmDirections::UpLeft2Right> {
 	static constexpr std::array<int, 2> stepsVertical = {0,1};
 	static constexpr std::array<int, 2> stepsHorizontal = {1,1};
 };
 
 template<>
-class directionTraits<sgmDirections::DownRight2Left> {
+struct directionTraits<sgmDirections::DownRight2Left> {
 	static constexpr std::array<int, 2> stepsVertical = {0,-1};
 	static constexpr std::array<int, 2> stepsHorizontal = {-1,-1};
 };
 
 template<>
-class directionTraits<sgmDirections::UpRight2Left> {
+struct directionTraits<sgmDirections::UpRight2Left> {
 	static constexpr std::array<int, 2> stepsVertical = {0,1};
 	static constexpr std::array<int, 2> stepsHorizontal = {-1,-1};
 };
 
 template<>
-class directionTraits<sgmDirections::DownLeft2Right> {
+struct directionTraits<sgmDirections::DownLeft2Right> {
 	static constexpr std::array<int, 2> stepsVertical = {0,-1};
 	static constexpr std::array<int, 2> stepsHorizontal = {1,1};
 };
 
 template<>
-class directionTraits<sgmDirections::UpLeft2Down> {
+struct directionTraits<sgmDirections::UpLeft2Down> {
 	static constexpr std::array<int, 2> stepsVertical = {1,1};
 	static constexpr std::array<int, 2> stepsHorizontal = {0,1};
 };
 
 template<>
-class directionTraits<sgmDirections::DownRight2Up> {
+struct directionTraits<sgmDirections::DownRight2Up> {
 	static constexpr std::array<int, 2> stepsVertical = {-1,-1};
 	static constexpr std::array<int, 2> stepsHorizontal = {0,-1};
 };
 
 template<>
-class directionTraits<sgmDirections::UpRight2Down> {
+struct directionTraits<sgmDirections::UpRight2Down> {
 	static constexpr std::array<int, 2> stepsVertical = {1,1};
 	static constexpr std::array<int, 2> stepsHorizontal = {0,-1};
 };
 
 template<>
-class directionTraits<sgmDirections::DownLeft2Up> {
+struct directionTraits<sgmDirections::DownLeft2Up> {
 	static constexpr std::array<int, 2> stepsVertical = {-1,-1};
 	static constexpr std::array<int, 2> stepsHorizontal = {0,1};
 };
@@ -195,7 +195,7 @@ void traverseLine(size_t start_i,
 
 	constexpr auto Nc = Multidim::AccessCheck::Nocheck;
 
-	auto stepsVertical = directionTraits<direction>::stepVertical;
+	auto stepsVertical = directionTraits<direction>::stepsVertical;
 	auto stepsHorizontal = directionTraits<direction>::stepsHorizontal;
 
 	auto cv_shape = cv_base.shape();
@@ -232,7 +232,7 @@ void traverseLine(size_t start_i,
 
 				for(disp_t od = 0; od < cv_shape[2]; od++) {
 
-					float c_score = static_cast<float>(cv_base.value<Nc>(i,j,nd));
+					float c_score = static_cast<float>(cv_base.template value<Nc>(i,j,nd));
 					c_score += previous_cost[od];
 					if (std::abs(static_cast<int>(od) - static_cast<int>(nd)) == 1) c_score -= P1;
 					if (std::abs(static_cast<int>(od) - static_cast<int>(nd)) > 1) c_score -= P2;
@@ -267,7 +267,7 @@ void traverseLine(size_t start_i,
 
 				for(disp_t od = 0; od < cv_shape[2]; od++) {
 
-					float c_score = static_cast<float>(cv_base.value<Nc>(i,j,nd));
+					float c_score = static_cast<float>(cv_base.template value<Nc>(i,j,nd));
 					c_score += previous_cost[od];
 					if (std::abs(static_cast<int>(od) - static_cast<int>(nd)) == 1) c_score += P1;
 					if (std::abs(static_cast<int>(od) - static_cast<int>(nd)) > 1) c_score += P2;
@@ -287,7 +287,7 @@ void traverseLine(size_t start_i,
 		}
 
 		for(disp_t d = 0; d < cv_shape[2]; d++) {
-			sgm_cv.at<Nc>(i,j,d) += actual_cost[d] - cv_base.value<Nc>(i,j,d);
+			sgm_cv.at<Nc>(i,j,d) += actual_cost[d] - cv_base.template value<Nc>(i,j,d);
 		}
 
 		float* tmp = previous_cost;
@@ -363,8 +363,6 @@ Multidim::Array<float, 3> sgmCostVolume(Multidim::Array<T_CV, 3> const& cv_base,
 		sgm_cv.atUnchecked(i) = cv_base.valueUnchecked(i);
 	}
 
-	std::fill(&sgm_cv.atUnchecked(0), &sgm_cv.atUnchecked(sgm_cv.flatLenght()), 0.f);
-
 	Internal::addDirectionalCost<sgmDirections::Up2Down, extractionStrategy>(cv_base, sgm_cv, P1, P2, margins, Pout);
 	Internal::addDirectionalCost<sgmDirections::Down2Up, extractionStrategy>(cv_base, sgm_cv, P1, P2, margins, Pout);
 	Internal::addDirectionalCost<sgmDirections::Left2Right, extractionStrategy>(cv_base, sgm_cv, P1, P2, margins, Pout);
@@ -387,6 +385,10 @@ Multidim::Array<float, 3> sgmCostVolume(Multidim::Array<T_CV, 3> const& cv_base,
 		Internal::addDirectionalCost<sgmDirections::DownRight2Left, extractionStrategy>(cv_base, sgm_cv, P1, P2, margins, Pout);
 		Internal::addDirectionalCost<sgmDirections::UpRight2Left, extractionStrategy>(cv_base, sgm_cv, P1, P2, margins, Pout);
 		Internal::addDirectionalCost<sgmDirections::DownLeft2Right, extractionStrategy>(cv_base, sgm_cv, P1, P2, margins, Pout);
+	}
+
+	for (int i = 0; i < cv_base.flatLenght(); i++) {
+		sgm_cv.atUnchecked(i) += cv_base.valueUnchecked(i);
 	}
 
 	return sgm_cv;
