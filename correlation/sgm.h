@@ -220,7 +220,8 @@ void traverseLine(size_t start_i,
 			float max_p_cost = -std::numeric_limits<float>::infinity();
 
 			for(long d = 0; d < cv_shape[2]; d++) {
-				if (previous_cost[d] > max_p_cost) {
+				float p_score = previous_cost[d];
+				if (p_score > max_p_cost and std::isfinite(p_score)) {
 					max_p_cost = previous_cost[d];
 				}
 			}
@@ -230,15 +231,15 @@ void traverseLine(size_t start_i,
 
 				float max_a_cost = -std::numeric_limits<float>::infinity();
 
+				float c_score = static_cast<float>(cv_base.template value<Nc>(i,j,nd));
+
 				for(disp_t od = 0; od < cv_shape[2]; od++) {
+					float p_score = previous_cost[od];
+					if (std::abs(static_cast<int>(od) - static_cast<int>(nd)) == 1) p_score -= P1;
+					if (std::abs(static_cast<int>(od) - static_cast<int>(nd)) > 1) p_score -= P2;
 
-					float c_score = static_cast<float>(cv_base.template value<Nc>(i,j,nd));
-					c_score += previous_cost[od];
-					if (std::abs(static_cast<int>(od) - static_cast<int>(nd)) == 1) c_score -= P1;
-					if (std::abs(static_cast<int>(od) - static_cast<int>(nd)) > 1) c_score -= P2;
-
-					if (c_score > max_a_cost) {
-						max_a_cost = c_score;
+					if (p_score > max_a_cost and std::isfinite(p_score)) {
+						max_a_cost = p_score;
 					}
 
 				}
@@ -247,7 +248,10 @@ void traverseLine(size_t start_i,
 					max_a_cost -= Pout;
 				}
 
-				actual_cost[nd] = max_a_cost - max_p_cost;
+				actual_cost[nd] = c_score;
+				if (std::isfinite(max_a_cost) and std::isfinite(max_p_cost)) {
+					actual_cost[nd] += max_a_cost - max_p_cost;
+				}
 			}
 
 		} else {
@@ -255,7 +259,8 @@ void traverseLine(size_t start_i,
 			float min_p_cost = std::numeric_limits<float>::infinity();
 
 			for(long d = 0; d < cv_shape[2]; d++) {
-				if (previous_cost[d] < min_p_cost) {
+				float p_score = previous_cost[d];
+				if (p_score < min_p_cost and std::isfinite(p_score)) {
 					min_p_cost = previous_cost[d];
 				}
 			}
@@ -265,14 +270,15 @@ void traverseLine(size_t start_i,
 
 				float min_a_cost = std::numeric_limits<float>::infinity();
 
+				float c_score = static_cast<float>(cv_base.template value<Nc>(i,j,nd));
+
 				for(disp_t od = 0; od < cv_shape[2]; od++) {
 
-					float c_score = static_cast<float>(cv_base.template value<Nc>(i,j,nd));
-					c_score += previous_cost[od];
-					if (std::abs(static_cast<int>(od) - static_cast<int>(nd)) == 1) c_score += P1;
-					if (std::abs(static_cast<int>(od) - static_cast<int>(nd)) > 1) c_score += P2;
+					float p_score = previous_cost[od];
+					if (std::abs(static_cast<int>(od) - static_cast<int>(nd)) == 1) p_score += P1;
+					if (std::abs(static_cast<int>(od) - static_cast<int>(nd)) > 1) p_score += P2;
 
-					if (c_score < min_a_cost) {
+					if (p_score < min_a_cost and std::isfinite(p_score)) {
 						min_a_cost = c_score;
 					}
 
@@ -282,7 +288,10 @@ void traverseLine(size_t start_i,
 					min_a_cost += Pout;
 				}
 
-				actual_cost[nd] = min_a_cost - min_p_cost;
+				actual_cost[nd] = c_score;
+				if (std::isfinite(min_a_cost) and std::isfinite(min_p_cost)) {
+					actual_cost[nd] += min_a_cost - min_p_cost;
+				}
 			}
 		}
 
@@ -389,14 +398,6 @@ Multidim::Array<float, 3> sgmCostVolume(Multidim::Array<T_CV, 3> const& cv_base,
 		Internal::addDirectionalCost<sgmDirections::DownRight2Left, extractionStrategy>(cv_base, sgm_cv, P1, P2, margins, Pout);
 		Internal::addDirectionalCost<sgmDirections::UpRight2Left, extractionStrategy>(cv_base, sgm_cv, P1, P2, margins, Pout);
 		Internal::addDirectionalCost<sgmDirections::DownLeft2Right, extractionStrategy>(cv_base, sgm_cv, P1, P2, margins, Pout);
-	}
-
-	for (int i = 0; i < cv_base.shape()[0]; i++) {
-		for (int j = 0; j < cv_base.shape()[1]; j++) {
-			for (int d = 0; d < cv_base.shape()[2]; d++) {
-				sgm_cv.atUnchecked(i, j, d) += cv_base.valueUnchecked(i, j, d);
-			}
-		}
 	}
 
 	return sgm_cv;
