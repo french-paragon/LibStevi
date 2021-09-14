@@ -43,6 +43,7 @@ set(LIB_SRC
         interpolation/interpolation.h
         interpolation/lensdistortionsmap.cpp
         interpolation/lensdistortionsmap.h
+        interpolation/downsampling.h
         correlation/correlation_base.h
         correlation/unfold.h
         correlation/unfold.cpp
@@ -51,6 +52,7 @@ set(LIB_SRC
         correlation/census.h
         correlation/cost_based_refinement.h
         correlation/sgm.h
+        correlation/hierarchical.h
         optimization/l1optimization.h
         optimization/l2optimization.h
         optimization/sphericaloptimization.h

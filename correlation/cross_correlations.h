@@ -534,50 +534,42 @@ inline Multidim::Array<float, 3> zeromeanFeatureVolume(Multidim::Array<float, 3>
 
 }
 
+template<matchingFunctions matchFunc, class T_I>
+Multidim::Array<float,3> getFeatureVolumeForMatchFunc(Multidim::Array<T_I, 3> const& feature_vol) {
+
+	if (MatchingFunctionTraits<matchFunc>::ZeroMean and MatchingFunctionTraits<matchFunc>::Normalized) {
+
+		Multidim::Array<float, 2> mean = channelsMean(feature_vol);
+		Multidim::Array<float, 2> sigma = channelsSigma(feature_vol, mean);
+
+		return zeromeanNormalizedFeatureVolume(feature_vol, mean, sigma);
+
+	} else if (MatchingFunctionTraits<matchFunc>::ZeroMean) {
+
+		Multidim::Array<float, 2> mean = channelsMean(feature_vol);
+
+		return zeromeanFeatureVolume(feature_vol, mean);
+
+	} else if (MatchingFunctionTraits<matchFunc>::Normalized) {
+
+		Multidim::Array<float, 2> sigma = channelsNorm(feature_vol);
+
+		return normalizedFeatureVolume(feature_vol, sigma);
+	}
+
+	return feature_vol;
+
+}
+
 template<matchingFunctions matchFunc, typename SearchRangeType, dispDirection dDir = dispDirection::RightToLeft>
 inline Multidim::Array<float, searchRangeTypeInfos<SearchRangeType>::CostVolumeDims>
 featureVolume2CostVolume(Multidim::Array<float, 3> const& feature_vol_l,
 						 Multidim::Array<float, 3> const& feature_vol_r,
 						 SearchRangeType searchRange) {
 
-	if (MatchingFunctionTraits<matchFunc>::ZeroMean and MatchingFunctionTraits<matchFunc>::Normalized) {
-
-		Multidim::Array<float, 2> mean_left = channelsMean(feature_vol_l);
-		Multidim::Array<float, 2> mean_right = channelsMean(feature_vol_r);
-
-		Multidim::Array<float, 2> sigma_left = channelsSigma(feature_vol_l, mean_left);
-		Multidim::Array<float, 2> sigma_right = channelsSigma(feature_vol_r, mean_right);
-
-		Multidim::Array<float, 3> normalized_feature_volume_l = zeromeanNormalizedFeatureVolume(feature_vol_l, mean_left, sigma_left);
-		Multidim::Array<float, 3> normalized_feature_volume_r = zeromeanNormalizedFeatureVolume(feature_vol_r, mean_right, sigma_right);
-
-		return aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchRange);
-
-	} else if (MatchingFunctionTraits<matchFunc>::ZeroMean) {
-
-		Multidim::Array<float, 2> mean_left = channelsMean(feature_vol_l);
-		Multidim::Array<float, 2> mean_right = channelsMean(feature_vol_r);
-
-		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
-		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
-
-		return aggregateCost<matchFunc, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchRange);
-
-	} else if (MatchingFunctionTraits<matchFunc>::Normalized) {
-
-		Multidim::Array<float, 2> sigma_left = channelsNorm(feature_vol_l);
-		Multidim::Array<float, 2> sigma_right = channelsNorm(feature_vol_r);
-
-		Multidim::Array<float, 3> normalized_feature_volume_l = normalizedFeatureVolume(feature_vol_l, sigma_left);
-		Multidim::Array<float, 3> normalized_feature_volume_r = normalizedFeatureVolume(feature_vol_r, sigma_right);
-
-		return aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchRange);
-
-	} else {
-		return aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchRange);
-	}
-
-	return Multidim::Array<float, searchRangeTypeInfos<SearchRangeType>::CostVolumeDims>();
+	return aggregateCost<matchFunc, dDir>(getFeatureVolumeForMatchFunc<matchFunc>(feature_vol_l),
+										  getFeatureVolumeForMatchFunc<matchFunc>(feature_vol_r),
+										  searchRange);
 
 }
 
