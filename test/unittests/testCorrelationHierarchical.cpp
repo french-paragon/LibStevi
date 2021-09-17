@@ -1,6 +1,6 @@
 #include <QtTest/QtTest>
 
-#include "test_correlation_utils.h"
+#include "../test_correlation_utils.h"
 #include "correlation/hierarchical.h"
 
 Q_DECLARE_METATYPE(StereoVision::Correlation::matchingFunctions);
@@ -11,7 +11,6 @@ class TestCorrelationHierarchical: public QObject
 
 private Q_SLOTS:
 	void initTestCase();
-
 
 	void testMatchingFilter_data();
 	void testMatchingFilter();
@@ -54,8 +53,6 @@ private:
 				 h_r,
 				 v_r,
 				 disp_w);
-
-		std::cout << result.disp_estimate << std::endl;
 
 		QVERIFY2(result.disp_estimate.shape()[0] == img_height and result.disp_estimate.shape()[1] == img_width,
 				qPrintable(QString("result disparity has wrong shape (%1, %2), expected (%3, %4)")

@@ -18,9 +18,6 @@ private Q_SLOTS:
 
 	void testLeastAbsoluteDifferences_data();
 	void testLeastAbsoluteDifferences();
-
-	void benchmarkLeastAbsoluteDifferences_data();
-	void benchmarkLeastAbsoluteDifferences();
 };
 
 
@@ -84,30 +81,6 @@ void TestL1OptimizationMethods::testLeastAbsoluteDifferences() {
 	QVERIFY2(missalignement < inputs*tol, qPrintable(QString("Reconstructed vector x not correct (norm (x^check - x^hat) = %1)").arg(missalignement)));
 
 
-}
-
-void TestL1OptimizationMethods::benchmarkLeastAbsoluteDifferences_data() {
-
-	QTest::addColumn<int>("inputs");
-
-	QTest::newRow("Minimal") << 3;
-	QTest::newRow("small") << 7;
-	QTest::newRow("big") << 32;
-	QTest::newRow("large") << 50;
-}
-void TestL1OptimizationMethods::benchmarkLeastAbsoluteDifferences() {
-
-	typedef Eigen::Matrix<float,Eigen::Dynamic,2> TypeMatrixA;
-	typedef Eigen::Matrix<float,2,1> TypeVectorX;
-
-	QFETCH(int, inputs);
-	constexpr float tol = 1e-6;
-
-	TypeMatrixA A = TypeMatrixA::Random(inputs,2);
-	Eigen::VectorXf b = Eigen::VectorXf::Random(inputs);
-
-	TypeVectorX eX;
-	QBENCHMARK(eX = leastAbsoluteDifferences(A,b,tol,100));
 }
 
 QTEST_MAIN(TestL1OptimizationMethods)

@@ -313,6 +313,12 @@ struct PatchBaseMatchingTestPair {
 	Multidim::Array<float, 2> source;
 	Multidim::Array<float, 2> target;
 	Multidim::Array<int, 2> gt_disp;
+
+	auto operator()()
+	{
+		// returns a tuple to make it work with std::tie
+		return std::tie(source, target, gt_disp);
+	}
 };
 
 template<class UniformRandomNumberGenerator>

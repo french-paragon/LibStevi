@@ -1,6 +1,6 @@
 #include <QtTest/QtTest>
 
-#include "test_correlation_utils.h"
+#include "../test_correlation_utils.h"
 #include "correlation/cross_correlations.h"
 
 typedef std::array<float,2> BidimensionalDirs;

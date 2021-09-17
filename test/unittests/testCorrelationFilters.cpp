@@ -1,6 +1,6 @@
 #include <QtTest/QtTest>
 
-#include "test_correlation_utils.h"
+#include "../test_correlation_utils.h"
 #include "correlation/cross_correlations.h"
 
 typedef Multidim::Array<int,2> CompressorMask;
@@ -34,26 +34,14 @@ private Q_SLOTS:
 	void testNCCFilter_data();
 	void testNCCFilter();
 
-	void benchmarkNCCFilter_data();
-	void benchmarkNCCFilter();
-
 	void testUnfoldOperator_data();
 	void testUnfoldOperator();
-
-	void benchmarkUnfoldOperator_data();
-	void benchmarkUnfoldOperator();
 
 	void testUnfoldNCCFilter_data();
 	void testUnfoldNCCFilter();
 
-	void benchmarkUnfoldNCCFilter_data();
-	void benchmarkUnfoldNCCFilter();
-
 	void testUnfoldCompressor_data();
 	void testUnfoldCompressor();
-
-	void benchmarkCompressedNCCFilter_data();
-	void benchmarkCompressedNCCFilter();
 
 	void testBarycentricNccRefinement_data();
 	void testBarycentricNccRefinement();
@@ -372,53 +360,6 @@ void TestCorrelationFilters::testNCCFilter() {
 	}
 }
 
-
-void TestCorrelationFilters::benchmarkNCCFilter_data() {
-
-	QTest::addColumn<int>("img_height");
-	QTest::addColumn<int>("img_width");
-	QTest::addColumn<int>("h_radius");
-	QTest::addColumn<int>("v_radius");
-	QTest::addColumn<int>("disp_w");
-
-
-	QTest::newRow("small") << 120 << 160 << 1 << 1 << 5;
-	QTest::newRow("small box") << 480 << 640 << 1 << 1 << 20;
-	QTest::newRow("medium box") << 480 << 640 << 2 << 2 << 40;
-	QTest::newRow("box") << 480 << 640 << 3 << 3 << 50;
-	QTest::newRow("large box") << 480 << 640 << 4 << 4 << 50;
-}
-void TestCorrelationFilters::benchmarkNCCFilter() {
-
-	#ifndef NDEBUG
-	QSKIP("No benchmarking in debug mode!");
-	return;
-	#endif
-
-	QFETCH(int, img_height);
-	QFETCH(int, img_width);
-	QFETCH(int, h_radius);
-	QFETCH(int, v_radius);
-	QFETCH(int, disp_w);
-
-	Multidim::Array<float, 2> randLeft(img_height,img_width);
-	Multidim::Array<float, 2> randRight(img_height,img_width);
-
-	std::uniform_real_distribution<float> uniformDist(-1, 1);
-
-	for(int i = 0; i < img_height; i++) {
-		for(int j = 0; j < img_width; j++) {
-			randLeft.at(i,j) = uniformDist(re);
-			randRight.at(i,j) = uniformDist(re);
-		}
-	}
-
-	constexpr auto matchFunc = StereoVision::Correlation::matchingFunctions::ZNCC;
-	QBENCHMARK_ONCE {
-		Multidim::Array<float, 3> CV = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc>(randLeft, randRight, h_radius, v_radius, disp_w);
-	}
-}
-
 void TestCorrelationFilters::testUnfoldOperator_data() {
 
 	QTest::addColumn<int>("h_radius");
@@ -495,50 +436,6 @@ void TestCorrelationFilters::testUnfoldOperator() {
 }
 
 
-void TestCorrelationFilters::benchmarkUnfoldOperator_data() {
-
-	QTest::addColumn<int>("img_height");
-	QTest::addColumn<int>("img_width");
-	QTest::addColumn<int>("h_radius");
-	QTest::addColumn<int>("v_radius");
-
-
-	QTest::newRow("small") << 120 << 160 << 1 << 1;
-	QTest::newRow("small box") << 480 << 640 << 1 << 1;
-	QTest::newRow("medium box") << 480 << 640 << 2 << 2;
-	QTest::newRow("box") << 480 << 640 << 3 << 3;
-	QTest::newRow("large box") << 480 << 640 << 4 << 4;
-
-}
-void TestCorrelationFilters::benchmarkUnfoldOperator() {
-
-	#ifndef NDEBUG
-	QSKIP("No benchmarking in debug mode!");
-	return;
-	#endif
-
-	QFETCH(int, img_height);
-	QFETCH(int, img_width);
-	QFETCH(int, h_radius);
-	QFETCH(int, v_radius);
-
-	Multidim::Array<float, 2> rand(img_height,img_width);
-
-	std::uniform_real_distribution<float> uniformDist(-1, 1);
-
-	for(int i = 0; i < img_height; i++) {
-		for(int j = 0; j < img_width; j++) {
-			rand.at(i,j) = uniformDist(re);
-		}
-	}
-
-	QBENCHMARK_ONCE {
-		Multidim::Array<float, 3> CV = StereoVision::Correlation::unfold(h_radius, v_radius, rand);
-	}
-
-}
-
-
 void TestCorrelationFilters::testUnfoldNCCFilter_data() {
 
 	QTest::addColumn<int>("h_radius");
@@ -590,53 +487,6 @@ void TestCorrelationFilters::testUnfoldNCCFilter() {
 		float missalignement = std::abs(unnefectiveVal - effectiveVal);
 		QVERIFY2(missalignement < 1e-3, qPrintable(QString("Reconstructed NCC is wrong (error = %1 at disp index %2)").arg(missalignement).arg(i)));
 	}
-}
-
-void TestCorrelationFilters::benchmarkUnfoldNCCFilter_data() {
-
-	QTest::addColumn<int>("img_height");
-	QTest::addColumn<int>("img_width");
-	QTest::addColumn<int>("h_radius");
-	QTest::addColumn<int>("v_radius");
-	QTest::addColumn<int>("disp_w");
-
-
-	QTest::newRow("small") << 120 << 160 << 1 << 1 << 5;
-	QTest::newRow("small box") << 480 << 640 << 1 << 1 << 20;
-	QTest::newRow("medium box") << 480 << 640 << 2 << 2 << 40;
-	QTest::newRow("box") << 480 << 640 << 3 << 3 << 50;
-	QTest::newRow("large box") << 480 << 640 << 4 << 4 << 50;
-}
-void TestCorrelationFilters::benchmarkUnfoldNCCFilter() {
-
-	#ifndef NDEBUG
-	QSKIP("No benchmarking in debug mode!");
-	return;
-	#endif
-
-	QFETCH(int, img_height);
-	QFETCH(int, img_width);
-	QFETCH(int, h_radius);
-	QFETCH(int, v_radius);
-	QFETCH(int, disp_w);
-
-	Multidim::Array<float, 2> randLeft(img_height,img_width);
-	Multidim::Array<float, 2> randRight(img_height,img_width);
-
-	std::uniform_real_distribution<float> uniformDist(-1, 1);
-
-	for(int i = 0; i < img_height; i++) {
-		for(int j = 0; j < img_width; j++) {
-			randLeft.at(i,j) = uniformDist(re);
-			randRight.at(i,j) = uniformDist(re);
-		}
-	}
-
-	constexpr auto matchFunc = StereoVision::Correlation::matchingFunctions::ZNCC;
-	QBENCHMARK_ONCE {
-		Multidim::Array<float, 3> CV = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc>(randLeft, randRight, h_radius, v_radius, disp_w);
-	}
-
 }
 
 void TestCorrelationFilters::testUnfoldCompressor_data() {
@@ -725,49 +575,6 @@ void TestCorrelationFilters::testUnfoldCompressor() {
 		QVERIFY2(missalignement < 1e-4, qPrintable(QString("feature is wrong (error = %1 at feature index %2)").arg(missalignement).arg(f)));
 	}
 
-}
-
-
-void TestCorrelationFilters::benchmarkCompressedNCCFilter_data() {
-
-	QTest::addColumn<int>("img_height");
-	QTest::addColumn<int>("img_width");
-	QTest::addColumn<CompressorMask>("compressor_mask");
-	QTest::addColumn<int>("disp_w");
-
-	QTest::newRow("640x480-GrPix17R3Filter-w20") << 480 << 640 << StereoVision::Correlation::CompressorGenerators::GrPix17R3Filter() << 20;
-	QTest::newRow("640x480-GrPix17R4Filter-w20") << 480 << 640 << StereoVision::Correlation::CompressorGenerators::GrPix17R4Filter() << 20;
-}
-void TestCorrelationFilters::benchmarkCompressedNCCFilter() {
-
-	#ifndef NDEBUG
-	QSKIP("No benchmarking in debug mode!");
-	return;
-	#endif
-
-	QFETCH(int, img_height);
-	QFETCH(int, img_width);
-	QFETCH(CompressorMask, compressor_mask);
-	QFETCH(int, disp_w);
-
-	Multidim::Array<float, 2> randLeft(img_height,img_width);
-	Multidim::Array<float, 2> randRight(img_height,img_width);
-
-	std::uniform_real_distribution<float> uniformDist(-1, 1);
-
-	for(int i = 0; i < img_height; i++) {
-		for(int j = 0; j < img_width; j++) {
-			randLeft.at(i,j) = uniformDist(re);
-			randRight.at(i,j) = uniformDist(re);
-		}
-	}
-
-	StereoVision::Correlation::UnFoldCompressor compressor(compressor_mask);
-
-	constexpr auto matchFunc = StereoVision::Correlation::matchingFunctions::ZNCC;
-	QBENCHMARK_ONCE {
-		Multidim::Array<float, 3> CV = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc>(randLeft, randRight, compressor, disp_w);
-	}
 }
 
 void TestCorrelationFilters::testBarycentricNccRefinement_data() {
