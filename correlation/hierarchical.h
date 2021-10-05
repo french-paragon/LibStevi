@@ -41,6 +41,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+	constexpr int tcv_additional_margin = 1;
 
 	auto l_shape = feature_vol_l.shape();
 	auto r_shape = feature_vol_r.shape();
@@ -56,7 +57,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 	int h = source_feature_volume.shape()[0];
 	int w = source_feature_volume.shape()[1];
 	int f = source_feature_volume.shape()[2];
-	int tcv_depth = 2*upscale_disp_radius + 3;
+	int tcv_depth = 2*upscale_disp_radius + 2*tcv_additional_margin + 1;
 
 	int h_guide = disp_guide.shape()[0];
 	int w_guide = disp_guide.shape()[1];
@@ -80,6 +81,10 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 			v1 += 1;
 		}
 
+		if (v1 == h_guide) {
+			v0 -= 1;
+			v1 -= 1;
+		}
 
 		for (int j = 0; j < w; j++) {
 
@@ -92,13 +97,18 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 				h1 += 1;
 			}
 
+			if (h1 == h_guide) {
+				h0 -= 1;
+				h1 -= 1;
+			}
+
 			float interpolatedDisp = 0;
 
 			//interpolate disparity
-			interpolatedDisp += (v_pos - v0)*(h_pos - h0)*disp_guide.value<Nc>(v0, h0);
-			interpolatedDisp += (v1 - v_pos)*(h_pos - h0)*disp_guide.value<Nc>(v1, h0);
-			interpolatedDisp += (v_pos - v0)*(h1 - h_pos)*disp_guide.value<Nc>(v0, h1);
-			interpolatedDisp += (v1 - v_pos)*(h1 - h_pos)*disp_guide.value<Nc>(v1, h1);
+			interpolatedDisp += (v_pos - v0)*(h_pos - h0)*disp_guide.value<Nc>(v1, h1);
+			interpolatedDisp += (v1 - v_pos)*(h_pos - h0)*disp_guide.value<Nc>(v0, h1);
+			interpolatedDisp += (v_pos - v0)*(h1 - h_pos)*disp_guide.value<Nc>(v1, h0);
+			interpolatedDisp += (v1 - v_pos)*(h1 - h_pos)*disp_guide.value<Nc>(v0, h0);
 
 			//upscale disparity
 			interpolatedDisp *= 2;
@@ -116,7 +126,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 			float score = (MatchingFunctionTraits<matchFunc>::extractionStrategy == dispExtractionStartegy::Cost) ? std::numeric_limits<float>::infinity() : -std::numeric_limits<float>::infinity();
 			disp_t d_r = d0;
 
-			for (int delta_d = -upscale_disp_radius; delta_d <= upscale_disp_radius; delta_d++) {
+			for (int delta_d = -upscale_disp_radius-tcv_additional_margin; delta_d <= upscale_disp_radius+tcv_additional_margin; delta_d++) {
 
 				Multidim::Array<float, 1> target_feature_vector(f);
 
@@ -127,7 +137,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 
 				float cmp = MatchingFunctionTraits<matchFunc>::featureComparison(source_feature_vector, target_feature_vector);
 
-				ret.truncated_cost_volume.at<Nc>(i,j,delta_d+upscale_disp_radius) = cmp;
+				ret.truncated_cost_volume.at<Nc>(i,j,delta_d+upscale_disp_radius+tcv_additional_margin) = cmp;
 
 				if (MatchingFunctionTraits<matchFunc>::extractionStrategy == dispExtractionStartegy::Cost) {
 					if (cmp < score) {
