@@ -198,8 +198,8 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 template<matchingFunctions matchFunc, int depth, class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
 OffsetedCostVolume hiearchicalTruncatedCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
 												  Multidim::Array<T_R, nImDim> const& img_r,
-												  std::array<uint8_t, depth> h_radiuses,
-												  std::array<uint8_t, depth>  v_radiuses,
+												  std::array<uint8_t, depth+1> h_radiuses,
+												  std::array<uint8_t, depth+1>  v_radiuses,
 												  disp_t disp_width,
 												  disp_t upscale_disp_radius = 2) {
 
@@ -228,9 +228,9 @@ OffsetedCostVolume hiearchicalTruncatedCostVolume(Multidim::Array<T_L, nImDim> c
 
 		constexpr int nextDepth = std::max(1,depth-1);
 
-		auto truncate_radiuses = [] (std::array<uint8_t, depth> const& previous) -> std::array<uint8_t, nextDepth> {
-			std::array<uint8_t, nextDepth> r;
-			for (int i = 0; i < nextDepth; i++) {
+		auto truncate_radiuses = [] (std::array<uint8_t, depth+1> const& previous) -> std::array<uint8_t, nextDepth+1> {
+			std::array<uint8_t, nextDepth+1> r;
+			for (int i = 0; i < nextDepth+1; i++) {
 				r[i] = previous[i];
 			}
 			return r;
@@ -259,10 +259,10 @@ OffsetedCostVolume hiearchicalTruncatedCostVolume(Multidim::Array<T_L, nImDim> c
 												  uint8_t  v_radius,
 												  disp_t disp_width,
 												  disp_t upscale_disp_radius = 2) {
-	std::array<uint8_t, depth> h_radiuses;
-	std::array<uint8_t, depth>  v_radiuses;
+	std::array<uint8_t, depth+1> h_radiuses;
+	std::array<uint8_t, depth+1>  v_radiuses;
 
-	for (int i = 0; i < depth; i++) {
+	for (int i = 0; i < depth+1; i++) {
 		h_radiuses[i] = h_radius;
 		v_radiuses[i] = v_radius;
 	}
