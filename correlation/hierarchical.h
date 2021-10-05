@@ -41,7 +41,6 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
-	constexpr int tcv_additional_margin = 1;
 
 	auto l_shape = feature_vol_l.shape();
 	auto r_shape = feature_vol_r.shape();
@@ -57,7 +56,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 	int h = source_feature_volume.shape()[0];
 	int w = source_feature_volume.shape()[1];
 	int f = source_feature_volume.shape()[2];
-	int tcv_depth = 2*upscale_disp_radius + 2*tcv_additional_margin + 1;
+	int tcv_depth = 2*upscale_disp_radius + 1;
 
 	int h_guide = disp_guide.shape()[0];
 	int w_guide = disp_guide.shape()[1];
@@ -126,7 +125,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 			float score = (MatchingFunctionTraits<matchFunc>::extractionStrategy == dispExtractionStartegy::Cost) ? std::numeric_limits<float>::infinity() : -std::numeric_limits<float>::infinity();
 			disp_t d_r = d0;
 
-			for (int delta_d = -upscale_disp_radius-tcv_additional_margin; delta_d <= upscale_disp_radius+tcv_additional_margin; delta_d++) {
+			for (int delta_d = -upscale_disp_radius; delta_d <= upscale_disp_radius; delta_d++) {
 
 				Multidim::Array<float, 1> target_feature_vector(f);
 
@@ -137,7 +136,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 
 				float cmp = MatchingFunctionTraits<matchFunc>::featureComparison(source_feature_vector, target_feature_vector);
 
-				ret.truncated_cost_volume.at<Nc>(i,j,delta_d+upscale_disp_radius+tcv_additional_margin) = cmp;
+				ret.truncated_cost_volume.at<Nc>(i,j,delta_d+upscale_disp_radius) = cmp;
 
 				if (MatchingFunctionTraits<matchFunc>::extractionStrategy == dispExtractionStartegy::Cost) {
 					if (cmp < score) {
