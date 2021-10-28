@@ -51,3 +51,9 @@ add_executable(testCostRefinement testCostRefinement.cpp)
 target_link_libraries(testCostRefinement ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestCostRefinement testCostRefinement)
 
+
+add_executable(testStereoStatistics testStereoStatistics.cpp)
+target_link_libraries(testStereoStatistics ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestStereoStatistics testStereoStatistics)
+
+
