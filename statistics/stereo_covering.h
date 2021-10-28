@@ -62,7 +62,7 @@ Multidim::Array<float, 2> computeCovering(Multidim::Array<T_L, 2> const& disp_l,
 	for (int i = 0; i < tShape[0]; i++) { //multithreads split across the rows to aviod race condition
 		for (int j = 0; j < tShape[1]; j++) {
 
-			float sourcePix = j + deltaSign*dispScaling*(matchingTarget.template value<Nc>(i,j) - dispOffset);
+			float sourcePix = j - deltaSign*dispScaling*(matchingTarget.template value<Nc>(i,j) - dispOffset);
 
 			int lower = static_cast<int>(std::floor(sourcePix));
 			int higher = static_cast<int>(std::ceil(sourcePix));
@@ -99,10 +99,10 @@ float computeCoveringProportion(Multidim::Array<T_L, 2> const& disp_l,
 		return -1.;
 	}
 
-	float total = covering.flatLenght();
-	float covered = 0;
+	float total = static_cast<float>(covering.flatLenght());
+	float covered = 0.;
 
-	#pragma omp parallel for
+	#pragma omp parallel for reduction(+:covered)
 	for(int i = 0; i < covering.shape()[0]; i++) {
 		for(int j = 0; j < covering.shape()[1]; j++) {
 			if (covering.at<Nc>(i,j) >= coveringThreshold) {
