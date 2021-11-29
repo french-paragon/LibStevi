@@ -6,3 +6,6 @@ target_link_libraries(benchmarkUnfoldOperators ${STEREOVISION_LIB} Qt${QT_VERSIO
 
 add_executable(benchmarkNormSolverAlgorithms benchmarkNormSolverAlgorithms.cpp)
 target_link_libraries(benchmarkNormSolverAlgorithms ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+
+add_executable(benchmarkL0ApproximationFunctions benchmarkL0ApproximationFunctions.cpp)
+target_link_libraries(benchmarkL0ApproximationFunctions ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)

@@ -37,6 +37,11 @@ target_link_libraries(testCorrelationHierarchical ${STEREOVISION_LIB} Qt${QT_VER
 add_test(TestCorrelationHierarchical testCorrelationHierarchical)
 
 
+add_executable(testL0Optimization testL0Optimization.cpp)
+target_link_libraries(testL0Optimization ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestL0Optimization testL0Optimization)
+
+
 add_executable(testL1Optimization testL1Optimization.cpp)
 target_link_libraries(testL1Optimization ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestL1Optimization testL1Optimization)
