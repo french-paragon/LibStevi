@@ -177,7 +177,7 @@ Multidim::Array<ComputeType, nDim> regionFusionL0Approximation(Multidim::Array<T
 
 		for (int i = 0; i < idx.size(); i++) {
 			if (i != excludedDim) {
-				int tmp = i;
+				int tmp = idx[i];
 				for (int j = 0; j < i; j++) {
 					if (j != excludedDim) {
 						tmp *= shape[j];
@@ -243,22 +243,40 @@ Multidim::Array<ComputeType, nDim> regionFusionL0Approximation(Multidim::Array<T
 		for (int i = 0; i < nDim; i++) {
 			if (i != excludedDim) {
 				mdarray_index[i]++;
-				if (mdarray_index[i] < original.shape()[i]) {
+				if (mdarray_index[i] < original.shape()[i]) { //if the current index could be incremented
 					go_on = true;
-					break;
-				} else {
+					break; //continue
+				} else { //else se the current index to 0 and move on to increment the next one.
 					mdarray_index[i] = 0;
 				}
 			}
 		}
+		//if the loop has not been interrupted, go_on will be false and the main loop will be interrupted.
 	}
 
 	//actual optimization loop
 
 	RMDArray approx(original.shape()); //initialize the solution from the original.
 
-	for (int i = 0; i < original.flatLenght(); i++) {
-		approx.atUnchecked(i) = ComputeType(original.valueUnchecked(i));
+	mdarray_index = initial_mdarray_index;
+	go_on = true;
+
+	while(go_on) {
+
+		approx.atUnchecked(mdarray_index) = ComputeType(original.valueUnchecked(mdarray_index));
+
+		//go to next index
+		go_on = false;
+		for (int i = 0; i < nDim; i++) {
+			mdarray_index[i]++;
+			if (mdarray_index[i] < original.shape()[i]) { //if the current index could be incremented
+				go_on = true;
+				break; //continue
+			} else { //else se the current index to 0 and move on to increment the next one.
+				mdarray_index[i] = 0;
+			}
+		}
+		//if the loop has not been interrupted, go_on will be false and the main loop will be interrupted.
 	}
 
 	for (int it = 0; it < maxIterations; it++) {
@@ -281,40 +299,23 @@ Multidim::Array<ComputeType, nDim> regionFusionL0Approximation(Multidim::Array<T
 				typename MDArray::IndexBlock n_mdIndex = groupIdxs[n];
 
 				ComputeType squareDiff = 0;
-
 				if (excludedDim >= 0 and excludedDim < nDim) {
 
 					for (int l = 0; l < original.shape()[excludedDim]; l++) {
 						mdIndex[excludedDim] = l;
 						n_mdIndex[excludedDim] = l;
 
-						ComputeType tmp = squareDiff = original.valueUnchecked(mdIndex) - original.valueUnchecked(n_mdIndex);
+						ComputeType tmp = original.valueUnchecked(mdIndex) - original.valueUnchecked(n_mdIndex);
 						squareDiff += tmp*tmp;
 					}
 
 				} else {
-					ComputeType tmp = squareDiff = original.valueUnchecked(mdIndex) - original.valueUnchecked(n_mdIndex);
+					ComputeType tmp = original.valueUnchecked(mdIndex) - original.valueUnchecked(n_mdIndex);
 					squareDiff = tmp*tmp;
 				}
 
 				int sumGroupSize = groups.getGroupSize(i)+groups.getGroupSize(n);
 				if(squareDiff*groups.getGroupSize(i)*groups.getGroupSize(n) <= beta*nConnections.getElementOrDefault(i,n,0)*sumGroupSize) {
-					int removedGroup = groups.joinNode(n,i);
-
-					//join groups
-					groupIndices.erase(removedGroup);
-
-					//uptate neighbors
-					neighbors[i].erase(n);
-					for (int n : neighbors[removedGroup]) {
-						neighbors[n].erase(removedGroup);
-						neighbors[n].insert(i);
-						neighbors[i].insert(n);
-
-						int nnConnection = nConnections.getElementOrDefault(i,n,0) + nConnections.getElement(n,removedGroup).value();
-
-						nConnections.setElement(i,n, nnConnection);
-					}
 
 					//recompute group mean
 					if (excludedDim >= 0 and excludedDim < nDim) {
@@ -333,6 +334,29 @@ Multidim::Array<ComputeType, nDim> regionFusionL0Approximation(Multidim::Array<T
 						ComputeType wMean = groups.getGroupSize(i)*approx.atUnchecked(mdIndex) + groups.getGroupSize(n)*approx.atUnchecked(n_mdIndex);
 						wMean /= sumGroupSize;
 						approx.atUnchecked(mdIndex) = wMean;
+					}
+
+					int removedGroup = groups.joinNode(n,i);
+
+					//join groups
+					groupIndices.erase(removedGroup);
+
+					//uptate neighbors
+					neighbors[i].erase(removedGroup);
+
+					for (int n : neighbors[removedGroup]) {
+
+						if (n == i) {
+							continue;
+						}
+
+						neighbors[n].erase(removedGroup);
+						neighbors[n].insert(i);
+						neighbors[i].insert(n);
+
+						int nnConnection = nConnections.getElementOrDefault(i,n,0) + nConnections.getElement(n,removedGroup).value();
+
+						nConnections.setElement(i,n, nnConnection);
 					}
 
 

@@ -58,9 +58,9 @@ void BenchmarkL0ApproximationFunctions::testRegionFusionL0Approximation_data() {
 	QTest::addColumn<int>("h");
 	QTest::addColumn<float>("lambda");
 
-	QTest::newRow("standard defintion") << 640 << 480 << 3.0f;
-	QTest::newRow("high definition") << 1920 << 1080 << 3.0f;
-	QTest::newRow("4k") << 3840 << 2160 << 3.0f;
+	QTest::newRow("half defintion") << 320 << 240 << 3.0f;
+	//QTest::newRow("high definition") << 1920 << 1080 << 3.0f;
+	//QTest::newRow("4k") << 3840 << 2160 << 3.0f;
 
 
 }
@@ -74,7 +74,7 @@ void BenchmarkL0ApproximationFunctions::testRegionFusionL0Approximation() {
 
 	Multidim::Array<float, 3> approx;
 
-	QBENCHMARK {
+	QBENCHMARK_ONCE {
 		approx = regionFusionL0Approximation(img, lambda, -1, 100);
 	}
 
@@ -96,8 +96,6 @@ void BenchmarkL0ApproximationFunctions::testRegionFusionL0Approximation() {
 		}
 
 	}
-
-	std::cout << "truc" << std::endl;
 
 }
 
