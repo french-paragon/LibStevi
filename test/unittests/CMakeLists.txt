@@ -61,4 +61,6 @@ add_executable(testStereoStatistics testStereoStatistics.cpp)
 target_link_libraries(testStereoStatistics ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestStereoStatistics testStereoStatistics)
 
-
+add_executable(testIndexers testIndexers.cpp)
+target_link_libraries(testIndexers ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestIndexers testIndexers)

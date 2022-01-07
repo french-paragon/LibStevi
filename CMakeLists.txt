@@ -60,6 +60,7 @@ set(LIB_SRC
         optimization/affine_utils.h
         utils/contiguity.h
         utils/margins.h
+        utils/indexers.h
         statistics/stereo_covering.h
 )
 
