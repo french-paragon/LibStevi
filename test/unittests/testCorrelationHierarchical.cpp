@@ -47,12 +47,15 @@ private:
 		uint8_t h_r = h_radius;
 		uint8_t v_r = v_radius;
 
+		int upscale_disp_radius = 2;
+
 		auto result = StereoVision::Correlation::hiearchicalTruncatedCostVolume<matchFunc, depth>
 				(imgPair.target,
 				 imgPair.source,
 				 h_r,
 				 v_r,
-				 disp_w);
+				 disp_w,
+				 upscale_disp_radius);
 
 		QVERIFY2(result.disp_estimate.shape()[0] == img_height and result.disp_estimate.shape()[1] == img_width,
 				qPrintable(QString("result disparity has wrong shape (%1, %2), expected (%3, %4)")
@@ -62,6 +65,28 @@ private:
 							.arg(img_width)
 							)
 				);
+
+		int maximum_range_offset = 0;
+
+		for (int i = 0; i < depth; i++) {
+			maximum_range_offset *= 2;
+			maximum_range_offset += upscale_disp_radius;
+		}
+		maximum_range_offset *= 2;
+
+		for (int i = 0; i < img_height; i++) {
+			for (int j = 0; j < img_width; j++) {
+
+				int disp_found = result.disp_estimate.value(i,j);
+
+				QVERIFY2(disp_found >= -maximum_range_offset and disp_found <= disp_w + maximum_range_offset,
+						 qPrintable(QString("one disparity value (at position %1, %2, d = %3) is out of range")
+									.arg(i)
+									.arg(j)
+									.arg(disp_found)
+							));
+			}
+		}
 
 		int count = 0;
 		int expected = 0;

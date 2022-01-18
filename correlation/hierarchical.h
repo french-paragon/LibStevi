@@ -71,7 +71,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 	#pragma omp parallel for
 	for (int i = 0; i < h; i++) {
 
-		float v_pos = float(i*h_guide)/h;
+		float v_pos = float(i*(h_guide-1))/(h-1);
 
 		int v0 = static_cast<int>(std::floor(v_pos));
 		int v1 = static_cast<int>(std::ceil(v_pos));
@@ -87,7 +87,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 
 		for (int j = 0; j < w; j++) {
 
-			float h_pos = float(j*w_guide)/w;
+			float h_pos = float(j*(w_guide-1))/(w-1);
 
 			int h0 = static_cast<int>(std::floor(h_pos));
 			int h1 = static_cast<int>(std::ceil(h_pos));
@@ -96,7 +96,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 				h1 += 1;
 			}
 
-			if (h1 == h_guide) {
+			if (h1 == w_guide) {
 				h0 -= 1;
 				h1 -= 1;
 			}
