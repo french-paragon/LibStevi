@@ -793,8 +793,6 @@ Multidim::Array<float, 2> refineBarycentricDisp(Multidim::Array<float, 3> const&
 
 			if (jd < 1 or jd + 1 >= d_shape[1]) { // if the source patch is partially outside the image
 				refinedDisp.at<Nc>(i,j) = d;
-			} else if (d == 0) {
-				refinedDisp.at<Nc>(i,j) = d;
 			} else {
 
 				int f = t_shape[2];
@@ -912,7 +910,7 @@ Multidim::Array<float, 2> refineBarycentricDisp(Multidim::Array<float, 3> const&
 
 				}
 
-				refinedDisp.at<Nc>(i,j) = d + DeltaD;
+				refinedDisp.at<Nc>(i,j) = d + deltaSign*DeltaD;
 
 			}
 

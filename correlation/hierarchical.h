@@ -137,7 +137,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 
 				float cmp = MatchingFunctionTraits<matchFunc>::featureComparison(source_feature_vector, target_feature_vector);
 
-				ret.truncated_cost_volume.at<Nc>(i,j,delta_d+upscale_disp_radius) = cmp;
+				ret.truncated_cost_volume.at<Nc>(i,j,dirSign*delta_d+upscale_disp_radius) = cmp;
 
 				if (MatchingFunctionTraits<matchFunc>::extractionStrategy == dispExtractionStartegy::Cost) {
 					if (cmp < score) {
@@ -156,7 +156,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 			ret.disp_estimate.at<Nc>(i,j) = dirSign*d_r;
 
 			if (d_r != d0) {
-				int delta = d0 - d_r;
+				int delta = dirSign*(d0 - d_r);
 
 				int startempty;
 				int endempty;
@@ -180,7 +180,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 					Multidim::Array<float, 1> target_feature_vector(f);
 
 					for (int c = 0; c < f; c++) {
-						float t = target_feature_volume.valueOrAlt({i,j+d_r+dd-upscale_disp_radius,c}, 0);
+						float t = target_feature_volume.valueOrAlt({i,j+d_r+dirSign*(dd-upscale_disp_radius),c}, 0);
 						target_feature_vector.at<Nc>(c) = t;
 					}
 
