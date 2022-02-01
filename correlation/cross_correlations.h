@@ -765,8 +765,7 @@ Multidim::Array<float, 2> refineBarycentricSymmetricDisp(Multidim::Array<float, 
 template<matchingFunctions matchFunc, dispDirection dDir = dispDirection::RightToLeft>
 Multidim::Array<float, 2> refineBarycentricDisp(Multidim::Array<float, 3> const& feature_vol_l,
 												Multidim::Array<float, 3> const& feature_vol_r,
-												Multidim::Array<disp_t, 2> const& selectedIndex,
-												disp_t disp_width) {
+												Multidim::Array<disp_t, 2> const& selectedIndex) {
 
 	typedef Eigen::Matrix<float, Eigen::Dynamic, 2> TypeMatrixA;
 	typedef Eigen::Matrix<float, 2, 1> TypeVectorAlpha;
@@ -794,7 +793,7 @@ Multidim::Array<float, 2> refineBarycentricDisp(Multidim::Array<float, 3> const&
 
 			if (jd < 1 or jd + 1 >= d_shape[1]) { // if the source patch is partially outside the image
 				refinedDisp.at<Nc>(i,j) = d;
-			} else if (d == 0 or d+1 >= disp_width) {
+			} else if (d == 0) {
 				refinedDisp.at<Nc>(i,j) = d;
 			} else {
 
@@ -1485,10 +1484,10 @@ Multidim::Array<float, 2> refinedBarycentricDispFeatureVol(Multidim::Array<float
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
 		if (preNormalize) {
-			return refineBarycentricDisp<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, disp, searchRange);
+			return refineBarycentricDisp<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, disp);
 		}
 
-		return refineBarycentricDisp<matchFunc, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, disp, searchRange);
+		return refineBarycentricDisp<matchFunc, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, disp);
 
 	} else if (MatchingFunctionTraits<matchFunc>::ZeroMean) {
 
@@ -1502,7 +1501,7 @@ Multidim::Array<float, 2> refinedBarycentricDispFeatureVol(Multidim::Array<float
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
-		return refineBarycentricDisp<matchFunc, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, disp, searchRange);
+		return refineBarycentricDisp<matchFunc, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, disp);
 
 	} else if (MatchingFunctionTraits<matchFunc>::Normalized) {
 
@@ -1517,17 +1516,17 @@ Multidim::Array<float, 2> refinedBarycentricDispFeatureVol(Multidim::Array<float
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
 		if (preNormalize) {
-			return refineBarycentricDisp<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, disp, searchRange);
+			return refineBarycentricDisp<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, disp);
 		}
 
-		return refineBarycentricDisp<matchFunc, dDir>(feature_vol_l, feature_vol_r, disp, searchRange);
+		return refineBarycentricDisp<matchFunc, dDir>(feature_vol_l, feature_vol_r, disp);
 
 	} else {
 		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
-		return refineBarycentricDisp<matchFunc, dDir>(feature_vol_l, feature_vol_r, disp, searchRange);
+		return refineBarycentricDisp<matchFunc, dDir>(feature_vol_l, feature_vol_r, disp);
 	}
 
 	return Multidim::Array<float, 2>();
