@@ -57,6 +57,21 @@ private:
 				 disp_w,
 				 upscale_disp_radius);
 
+		auto resultrev = StereoVision::Correlation::hiearchicalTruncatedCostVolume
+				<matchFunc,
+				depth,
+				float,
+				float,
+				2,
+				StereoVision::Correlation::dispDirection::LeftToRight
+				>
+				(imgPair.target,
+				 imgPair.source,
+				 h_r,
+				 v_r,
+				 disp_w,
+				 upscale_disp_radius);
+
 		QVERIFY2(result.disp_estimate.shape()[0] == img_height and result.disp_estimate.shape()[1] == img_width,
 				qPrintable(QString("result disparity has wrong shape (%1, %2), expected (%3, %4)")
 						   .arg(result.disp_estimate.shape()[0])
@@ -79,11 +94,20 @@ private:
 
 				int disp_found = result.disp_estimate.value(i,j);
 
+				int disp_found_rev = resultrev.disp_estimate.value(i,j);
+
 				QVERIFY2(disp_found >= -maximum_range_offset and disp_found <= disp_w + maximum_range_offset,
 						 qPrintable(QString("one disparity value (at position %1, %2, d = %3) is out of range")
 									.arg(i)
 									.arg(j)
 									.arg(disp_found)
+							));
+
+				QVERIFY2(disp_found_rev >= -maximum_range_offset and disp_found_rev <= disp_w + maximum_range_offset,
+						 qPrintable(QString("one left to right disparity value (at position %1, %2, d = %3) is out of range")
+									.arg(i)
+									.arg(j)
+									.arg(disp_found_rev)
 							));
 			}
 		}

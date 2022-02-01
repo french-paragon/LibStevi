@@ -49,6 +49,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 		return {Multidim::Array<float, 3>(), Multidim::Array<disp_t,2>()};
 	}
 
+	constexpr int dirSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
 	constexpr bool r2l = dDir == dispDirection::RightToLeft;
 	Multidim::Array<float, 3> & source_feature_volume = const_cast<Multidim::Array<float, 3> &>((r2l) ? feature_vol_r : feature_vol_l);
 	Multidim::Array<float, 3> & target_feature_volume = const_cast<Multidim::Array<float, 3> &>((r2l) ? feature_vol_l : feature_vol_r);
@@ -113,7 +114,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 			interpolatedDisp *= 2;
 
 			//baseDisp
-			disp_t d0 = static_cast<disp_t>(std::round(interpolatedDisp));
+			disp_t d0 = dirSign*static_cast<disp_t>(std::round(interpolatedDisp));
 
 			Multidim::Array<float, 1> source_feature_vector(f);
 
@@ -152,7 +153,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 
 			}
 
-			ret.disp_estimate.at<Nc>(i,j) = d_r;
+			ret.disp_estimate.at<Nc>(i,j) = dirSign*d_r;
 
 			if (d_r != d0) {
 				int delta = d0 - d_r;
@@ -216,7 +217,7 @@ OffsetedCostVolume hiearchicalTruncatedCostVolume(Multidim::Array<T_L, nImDim> c
 				 v_radiuses[0],
 				 (disp_width + 1)/2);
 
-		Multidim::Array<disp_t, 2> level_0_disp = selectedIndexToDisp<disp_t, dDir>(extractSelectedIndex<MatchingFunctionTraits<matchFunc>::extractionStrategy>(level_0_cv),0);
+		Multidim::Array<disp_t, 2> level_0_disp = extractSelectedIndex<MatchingFunctionTraits<matchFunc>::extractionStrategy>(level_0_cv);
 
 		Multidim::Array<float,3> feature_vol_l = getFeatureVolumeForMatchFunc<matchFunc>(unfold(h_radiuses[1], v_radiuses[1], img_l));
 		Multidim::Array<float,3> feature_vol_r = getFeatureVolumeForMatchFunc<matchFunc>(unfold(h_radiuses[1], v_radiuses[1], img_r));
