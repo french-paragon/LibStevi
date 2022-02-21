@@ -61,6 +61,8 @@ private Q_SLOTS:
 	void testBarycentricSymmetricSadRefinement_data();
 	void testBarycentricSymmetricSadRefinement();
 
+	void testInputImagesTypes();
+
 private:
 	std::default_random_engine re;
 
@@ -1093,6 +1095,122 @@ void TestCorrelationFilters::testBarycentricSymmetricSadRefinement() {
 
 	float missalignement = disparity.value<Nc>(0) - posWeigthed;
 	QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Matching not done properly (subpixel position of first feature vector = %1, expected = %2)").arg(disparity.value<Nc>(0)).arg(posWeigthed)));
+}
+
+void TestCorrelationFilters::testInputImagesTypes() {
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	int h = 100;
+	int w = 100;
+
+	int rx = 3;
+	int ry = 3;
+
+	int dw = 12;
+
+	std::uniform_int_distribution<uint8_t> uniformDist(0, 255);
+
+	Multidim::Array<uint8_t, 2> rand1(h,w);
+	Multidim::Array<uint8_t, 2> rand2(h,w);
+
+	Multidim::Array<float, 2> float1(h,w);
+	Multidim::Array<float, 2> float2(h,w);
+
+	for(int i = 0; i < h; i++) {
+		for(int j = 0; j < w; j++) {
+			float val1 = uniformDist(re);
+			float val2 = uniformDist(re);
+			rand1.at<Nc>(i,j) = val1;
+			rand2.at<Nc>(i,j) = val2;
+
+			float1.at<Nc>(i,j) = float(val1);
+			float2.at<Nc>(i,j) = float(val2);
+		}
+	}
+
+
+	constexpr auto matchFunc1 = StereoVision::Correlation::matchingFunctions::NCC;
+	constexpr auto matchFunc2 = StereoVision::Correlation::matchingFunctions::ZNCC;
+
+	constexpr auto matchFunc3 = StereoVision::Correlation::matchingFunctions::SSD;
+	constexpr auto matchFunc4 = StereoVision::Correlation::matchingFunctions::ZSSD;
+
+	constexpr auto matchFunc5 = StereoVision::Correlation::matchingFunctions::SAD;
+	constexpr auto matchFunc6 = StereoVision::Correlation::matchingFunctions::ZSAD;
+
+	auto cv1_1 = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc1>(rand1, rand2, rx, ry, dw);
+	auto cv1_2 = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc1>(float1, float2, rx, ry, dw);
+
+	for(int i = 0; i < h; i++) {
+		for(int j = 0; j < w; j++) {
+			for (int d = 0; d < dw; d++) {
+				float missalignement = cv1_1.at<Nc>(i,j,d) - cv1_2.at<Nc>(i,j,d);
+				QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Conversion to float before and during matching gives different values at index (%1, %2, %3)").arg(i).arg(j).arg(d)));
+			}
+		}
+	}
+
+	auto cv2_1 = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc2>(rand1, rand2, rx, ry, dw);
+	auto cv2_2 = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc2>(float1, float2, rx, ry, dw);
+
+	for(int i = 0; i < h; i++) {
+		for(int j = 0; j < w; j++) {
+			for (int d = 0; d < dw; d++) {
+				float missalignement = cv2_1.at<Nc>(i,j,d) - cv2_2.at<Nc>(i,j,d);
+				QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Conversion to float before and during matching gives different values at index (%1, %2, %3)").arg(i).arg(j).arg(d)));
+			}
+		}
+	}
+
+	auto cv3_1 = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc3>(rand1, rand2, rx, ry, dw);
+	auto cv3_2 = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc3>(float1, float2, rx, ry, dw);
+
+	for(int i = 0; i < h; i++) {
+		for(int j = 0; j < w; j++) {
+			for (int d = 0; d < dw; d++) {
+				float missalignement = cv3_1.at<Nc>(i,j,d) - cv3_2.at<Nc>(i,j,d);
+				QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Conversion to float before and during matching gives different values at index (%1, %2, %3)").arg(i).arg(j).arg(d)));
+			}
+		}
+	}
+
+	auto cv4_1 = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc4>(rand1, rand2, rx, ry, dw);
+	auto cv4_2 = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc4>(float1, float2, rx, ry, dw);
+
+	for(int i = 0; i < h; i++) {
+		for(int j = 0; j < w; j++) {
+			for (int d = 0; d < dw; d++) {
+				float missalignement = cv4_1.at<Nc>(i,j,d) - cv4_2.at<Nc>(i,j,d);
+				QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Conversion to float before and during matching gives different values at index (%1, %2, %3)").arg(i).arg(j).arg(d)));
+			}
+		}
+	}
+
+	auto cv5_1 = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc5>(rand1, rand2, rx, ry, dw);
+	auto cv5_2 = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc5>(float1, float2, rx, ry, dw);
+
+	for(int i = 0; i < h; i++) {
+		for(int j = 0; j < w; j++) {
+			for (int d = 0; d < dw; d++) {
+				float missalignement = cv5_1.at<Nc>(i,j,d) - cv5_2.at<Nc>(i,j,d);
+				QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Conversion to float before and during matching gives different values at index (%1, %2, %3)").arg(i).arg(j).arg(d)));
+			}
+		}
+	}
+
+	auto cv6_1 = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc6>(rand1, rand2, rx, ry, dw);
+	auto cv6_2 = StereoVision::Correlation::unfoldBasedCostVolume<matchFunc6>(float1, float2, rx, ry, dw);
+
+	for(int i = 0; i < h; i++) {
+		for(int j = 0; j < w; j++) {
+			for (int d = 0; d < dw; d++) {
+				float missalignement = cv6_1.at<Nc>(i,j,d) - cv6_2.at<Nc>(i,j,d);
+				QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Conversion to float before and during matching gives different values at index (%1, %2, %3)").arg(i).arg(j).arg(d)));
+			}
+		}
+	}
+
 }
 
 QTEST_MAIN(TestCorrelationFilters)

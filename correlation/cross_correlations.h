@@ -54,7 +54,7 @@ inline float dotProduct(Multidim::Array<T_S,1> const& source,
 	float score = 0;
 
 	for (int i = 0; i < source.shape()[0]; i++) {
-		score += source.valueUnchecked(i)*target.valueUnchecked(i);
+		score += float(source.valueUnchecked(i))*float(target.valueUnchecked(i));
 	}
 
 	return score;
@@ -68,7 +68,7 @@ inline float SumSquareDiff(Multidim::Array<T_S,1> const& source,
 	float score = 0;
 
 	for (int i = 0; i < source.shape()[0]; i++) {
-		float tmp = source.valueUnchecked(i) - target.valueUnchecked(i);
+		float tmp = float(source.valueUnchecked(i)) - float(target.valueUnchecked(i));
 		score += tmp*tmp;
 	}
 
@@ -83,7 +83,7 @@ inline float SumAbsDiff(Multidim::Array<T_S,1> const& source,
 	float score = 0;
 
 	for (int i = 0; i < source.shape()[0]; i++) {
-		float tmp = source.valueUnchecked(i) - target.valueUnchecked(i);
+		float tmp = float(source.valueUnchecked(i)) - float(target.valueUnchecked(i));
 		score += std::fabs(tmp);
 	}
 
