@@ -2,6 +2,8 @@
 
 #include "geometry/rotations.h"
 
+#include <random>
+
 using namespace StereoVision::Geometry;
 
 Q_DECLARE_METATYPE(Eigen::Matrix3f)
@@ -10,6 +12,9 @@ class TestGeometryLibRotation: public QObject
 {
 	Q_OBJECT
 private Q_SLOTS:
+
+	void initTestCase();
+
 	void testRodriguez_data();
 	void testRodriguez();
 
@@ -18,7 +23,19 @@ private Q_SLOTS:
 
 	void testDiffRodriguez_data();
 	void testDiffRodriguez();
+
+	void testDiffRigidTransformInverse();
+
+private:
+	std::default_random_engine re;
 };
+
+
+void TestGeometryLibRotation::initTestCase() {
+	//srand((unsigned int) time(nullptr));
+	std::random_device rd;
+	re.seed(rd());
+}
 
 void TestGeometryLibRotation::testRodriguez_data() {
 
@@ -165,6 +182,46 @@ void TestGeometryLibRotation::testDiffRodriguez() {
 
 	float mismatchZ = (dZ_numeric - dZ_analytic).norm();
 	QVERIFY2(mismatchZ < 2e1*epsilon, qPrintable(QString("Reconstructed diff rotation axis not correct (norm (dz_ranalitic - dz_rnumeric) = %1)").arg(mismatchZ)));
+
+}
+
+void TestGeometryLibRotation::testDiffRigidTransformInverse() {
+
+	constexpr int nTest = 100;
+
+	float epsilon = 1e-4;
+
+	std::uniform_real_distribution<float> dataGen(-10, 10);
+	std::uniform_real_distribution<float> translateGen(-10, 10);
+	std::uniform_real_distribution<float> rotGen(-5, 5);
+	std::uniform_real_distribution<float> scaleGen(0.2, 3);
+	std::uniform_int_distribution<int> scaleSign(0,1);
+
+	for (int i = 0; i < nTest; i++) {
+		Eigen::Vector3f r(rotGen(re),rotGen(re),rotGen(re));
+		Eigen::Vector3f t(translateGen(re),translateGen(re),translateGen(re));
+		float s = scaleGen(re);
+		if (scaleSign(re)) {
+			s = -s;
+		}
+
+		ShapePreservingTransform direct(r, t, s);
+		ShapePreservingTransform inverse = direct.inverse();
+
+		for (int j = 0; j < nTest; j++) {
+			Eigen::Vector3f v(dataGen(re),dataGen(re),dataGen(re));
+			Eigen::Vector3f tmp = direct*v;
+
+			if (tmp.array().isInf().any() or tmp.array().isNaN().any()) {
+				continue;
+			}
+
+			Eigen::Vector3f t = inverse*(tmp);
+
+			float mismatch = (v - t).norm();
+			QVERIFY2(mismatch <= epsilon, qPrintable(QString("Reconstructed vector is too different from original (mismatch = %1)").arg(mismatch)));
+		}
+	}
 
 }
 

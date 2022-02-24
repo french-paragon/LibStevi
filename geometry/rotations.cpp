@@ -47,6 +47,10 @@ AffineTransform ShapePreservingTransform::toAffineTransform() const {
 	return AffineTransform(s*rodriguezFormula(r), t);
 }
 
+ShapePreservingTransform ShapePreservingTransform::inverse() const {
+	return ShapePreservingTransform(-r, - rodriguezFormula(r).transpose()*t/s, 1/s);
+}
+
 Eigen::Array3Xf ShapePreservingTransform::applyOnto(Eigen::Array3Xf const& pts) const {
 
 	Eigen::Array3Xf transformedPts;

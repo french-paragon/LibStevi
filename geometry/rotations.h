@@ -37,6 +37,7 @@ public:
 	Eigen::Array3Xf operator*(Eigen::Array3Xf const& pts) const;
 
 	AffineTransform toAffineTransform() const;
+	ShapePreservingTransform inverse() const;
 
 	Eigen::Vector3f t;
 	Eigen::Vector3f r;
