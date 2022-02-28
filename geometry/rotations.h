@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include "geometry/core.h"
+#include <Eigen/Geometry>
 
 namespace StereoVision {
 namespace Geometry {
@@ -75,7 +76,7 @@ template <typename Scalar>
 Eigen::Matrix<Scalar, 3, 3> eulerDegXYZToRotation(Scalar eulerX,
 												  Scalar eulerY,
 												  Scalar eulerZ) {
-	return eulerRadXYZToRotation(eulerX/180*M_PI, eulerY/180*M_PI, eulerZ/180*M_PI);
+	return eulerRadXYZToRotation(Scalar(eulerX/180*M_PI), Scalar(eulerY/180*M_PI), Scalar(eulerZ/180*M_PI));
 }
 
 } // namespace Geometry
