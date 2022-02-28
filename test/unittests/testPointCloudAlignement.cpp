@@ -29,6 +29,39 @@ AffineTransform generateShapePreservingRandomTransform() {
 	return T.toAffineTransform();
 }
 
+
+AffineTransform generateScalingRandomTransform() {
+	ShapePreservingTransform T;
+
+	T.s = uDist(engine);
+	T.r.setZero();
+	T.t.setZero();
+
+	return T.toAffineTransform();
+}
+
+
+AffineTransform generateTranslateRandomTransform() {
+	ShapePreservingTransform T;
+
+	T.s = 1.;
+	T.r.setZero();
+	T.t.setRandom();
+
+	return T.toAffineTransform();
+}
+
+
+AffineTransform generateRotationRandomTransform() {
+	ShapePreservingTransform T;
+
+	T.s = 1.;
+	T.r.setRandom();
+	T.t.setZero();
+
+	return T.toAffineTransform();
+}
+
 void generateObs(int nPts,
 				 int nObsperPt,
 				 Eigen::VectorXf & obs,
@@ -64,11 +97,11 @@ void generateObs(int nPts,
 			coordinate.push_back(cAx);
 		} else if (nObsperPt == 2) {
 
-			int rId1 = (random_id != 0) ? 0 : 1;
-			int rId2 = (random_id != 1) ? 1 : 2;
+			int rId1 = (random_id == 0) ? 1 : 0;
+			int rId2 = (random_id == 2) ? 1 : 2;
 
-			Axis cA1 = (random_id != 0) ? Axis::X : Axis::Y;
-			Axis cA2 = (random_id != 1) ? Axis::Y : Axis::Z;
+			Axis cA1 = (random_id == 0) ? Axis::Y : Axis::X;
+			Axis cA2 = (random_id == 2) ? Axis::Y : Axis::Z;
 
 			obs[2*i] = tPts(rId1, i);
 			idxs.push_back(i);
@@ -106,6 +139,15 @@ private Q_SLOTS:
 
 	void testQuasiShapePreservingMap_data();
 	void testQuasiShapePreservingMap();
+
+	void testExtractScaleMap_data();
+	void testExtractScaleMap();
+
+	void testExtractTranslationMap_data();
+	void testExtractTranslationMap();
+
+	void testExtractRotationMap_data();
+	void testExtractRotationMap();
 
 	void testExtractShapePreservingMap();
 };
@@ -182,7 +224,155 @@ void TestPointCloudAlignement::testQuasiShapePreservingMap() {
 
 	generateObs(nPts, nObsPerPoints, obs, pts, idxs, coordinate, T);
 
-	AffineTransform F = estimateQuasiShapePreservingMap(obs, pts, idxs, coordinate, 2e-1, nullptr, 1e-7, 500, true);
+	AffineTransform F = estimateQuasiShapePreservingMap(obs, pts, idxs, coordinate, 2e-1, nullptr, 1e-7, 500, false);
+
+	Eigen::Matrix3Xf tTrue = T*pts;
+	Eigen::Matrix3Xf tFound = F*pts;
+
+	for (int i = 0; i < nPts*nObsPerPoints; i++) {
+		int row = (coordinate[i] == Axis::X) ? 0 : ((coordinate[i] == Axis::Y) ? 1 : 2);
+		float vTrue = tTrue(row,idxs[i]);
+		float vFound = tFound(row,idxs[i]);
+
+		float error = fabs(vTrue - vFound);
+		QVERIFY2(error < 1e-3, qPrintable(QString("Misaligned recontructed coordinates (%1)").arg(error)));
+	}
+
+	Eigen::Matrix3f delta = F.R.transpose()*F.R;
+
+	float diagMismastch = (delta.diagonal().maxCoeff() - delta.diagonal().minCoeff())/delta.diagonal().minCoeff();
+	QVERIFY2(diagMismastch < 1e-3, qPrintable(QString("Rt*R diagonal is not uniform (relative error %1)").arg(diagMismastch)));
+
+	float mismatch = (delta/delta.diagonal().mean() - Eigen::Matrix3f::Identity()).norm();
+	QVERIFY2(mismatch < 1e-5, qPrintable(QString("Rt*R not a diagonal matrix (norm (R.t*R/mean(diag(R.t*R)) - I) = %1)").arg(mismatch)));
+
+}
+
+void TestPointCloudAlignement::testExtractScaleMap_data() {
+
+	QTest::addColumn<int>("nPts");
+	QTest::addColumn<int>("nObsPerPoints");
+
+	QTest::newRow("Minimal") << 1 << 1;
+	QTest::newRow("Underdetermined small") << 3 << 1;
+	QTest::newRow("Underdetermined big") << 3 << 2;
+	QTest::newRow("Just set dense") << 4 << 3;
+	QTest::newRow("Just set sparse") << 12 << 1;
+	QTest::newRow("Overdetermined") << 12 << 3;
+}
+
+void TestPointCloudAlignement::testExtractScaleMap() {
+
+	QFETCH(int, nPts);
+	QFETCH(int, nObsPerPoints);
+
+	Eigen::VectorXf obs;
+	Eigen::Matrix3Xf pts;
+	std::vector<int> idxs;
+	std::vector<Axis> coordinate;
+	AffineTransform T = generateScalingRandomTransform();
+
+	generateObs(nPts, nObsPerPoints, obs, pts, idxs, coordinate, T);
+
+	AffineTransform F = estimateScaleMap(obs, pts, idxs, coordinate, nullptr, false).toAffineTransform();
+
+	Eigen::Matrix3Xf tTrue = T*pts;
+	Eigen::Matrix3Xf tFound = F*pts;
+
+	for (int i = 0; i < nPts*nObsPerPoints; i++) {
+		int row = (coordinate[i] == Axis::X) ? 0 : ((coordinate[i] == Axis::Y) ? 1 : 2);
+		float vTrue = tTrue(row,idxs[i]);
+		float vFound = tFound(row,idxs[i]);
+
+		float error = fabs(vTrue - vFound);
+		QVERIFY2(error < 1e-3, qPrintable(QString("Misaligned recontructed coordinates (%1)").arg(error)));
+	}
+
+	Eigen::Matrix3f delta = F.R.transpose()*F.R;
+
+	float diagMismastch = (delta.diagonal().maxCoeff() - delta.diagonal().minCoeff())/delta.diagonal().minCoeff();
+	QVERIFY2(diagMismastch < 1e-3, qPrintable(QString("Rt*R diagonal is not uniform (relative error %1)").arg(diagMismastch)));
+
+	float mismatch = (delta/delta.diagonal().mean() - Eigen::Matrix3f::Identity()).norm();
+	QVERIFY2(mismatch < 1e-5, qPrintable(QString("Rt*R not a diagonal matrix (norm (R.t*R/mean(diag(R.t*R)) - I) = %1)").arg(mismatch)));
+}
+
+void TestPointCloudAlignement::testExtractTranslationMap_data() {
+
+	QTest::addColumn<int>("nPts");
+	QTest::addColumn<int>("nObsPerPoints");
+
+	QTest::newRow("Minimal") << 1 << 1;
+	QTest::newRow("Underdetermined small") << 3 << 1;
+	QTest::newRow("Underdetermined big") << 3 << 2;
+	QTest::newRow("Just set dense") << 4 << 3;
+	QTest::newRow("Just set sparse") << 12 << 1;
+	QTest::newRow("Overdetermined") << 12 << 3;
+}
+
+void TestPointCloudAlignement::testExtractTranslationMap() {
+
+	QFETCH(int, nPts);
+	QFETCH(int, nObsPerPoints);
+
+	Eigen::VectorXf obs;
+	Eigen::Matrix3Xf pts;
+	std::vector<int> idxs;
+	std::vector<Axis> coordinate;
+	AffineTransform T = generateTranslateRandomTransform();
+
+	generateObs(nPts, nObsPerPoints, obs, pts, idxs, coordinate, T);
+
+	AffineTransform F = estimateTranslationMap(obs, pts, idxs, coordinate, nullptr, false).toAffineTransform();
+
+	Eigen::Matrix3Xf tTrue = T*pts;
+	Eigen::Matrix3Xf tFound = F*pts;
+
+	for (int i = 0; i < nPts*nObsPerPoints; i++) {
+		int row = (coordinate[i] == Axis::X) ? 0 : ((coordinate[i] == Axis::Y) ? 1 : 2);
+		float vTrue = tTrue(row,idxs[i]);
+		float vFound = tFound(row,idxs[i]);
+
+		float error = fabs(vTrue - vFound);
+		QVERIFY2(error < 1e-3, qPrintable(QString("Misaligned recontructed coordinates (%1)").arg(error)));
+	}
+
+	Eigen::Matrix3f delta = F.R.transpose()*F.R;
+
+	float diagMismastch = (delta.diagonal().maxCoeff() - delta.diagonal().minCoeff())/delta.diagonal().minCoeff();
+	QVERIFY2(diagMismastch < 1e-3, qPrintable(QString("Rt*R diagonal is not uniform (relative error %1)").arg(diagMismastch)));
+
+	float mismatch = (delta/delta.diagonal().mean() - Eigen::Matrix3f::Identity()).norm();
+	QVERIFY2(mismatch < 1e-5, qPrintable(QString("Rt*R not a diagonal matrix (norm (R.t*R/mean(diag(R.t*R)) - I) = %1)").arg(mismatch)));
+}
+
+void TestPointCloudAlignement::testExtractRotationMap_data() {
+
+	QTest::addColumn<int>("nPts");
+	QTest::addColumn<int>("nObsPerPoints");
+
+	/*QTest::newRow("Minimal") << 1 << 1;
+	QTest::newRow("Underdetermined small") << 3 << 1;
+	QTest::newRow("Underdetermined big") << 3 << 2;
+	QTest::newRow("Just set dense") << 4 << 3;
+	QTest::newRow("Just set sparse") << 12 << 1;*/
+	QTest::newRow("Overdetermined") << 12 << 3;
+}
+
+void TestPointCloudAlignement::testExtractRotationMap() {
+
+	QFETCH(int, nPts);
+	QFETCH(int, nObsPerPoints);
+
+	Eigen::VectorXf obs;
+	Eigen::Matrix3Xf pts;
+	std::vector<int> idxs;
+	std::vector<Axis> coordinate;
+	AffineTransform T = generateRotationRandomTransform();
+
+	generateObs(nPts, nObsPerPoints, obs, pts, idxs, coordinate, T);
+
+	AffineTransform F = estimateRotationMap(obs, pts, idxs, coordinate, nullptr, nullptr, false, 500, 1e-7).toAffineTransform();
 
 	Eigen::Matrix3Xf tTrue = T*pts;
 	Eigen::Matrix3Xf tFound = F*pts;

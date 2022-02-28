@@ -44,6 +44,30 @@ AffineTransform estimateQuasiShapePreservingMap(Eigen::VectorXf const& obs,
 
 ShapePreservingTransform affine2ShapePreservingMap(AffineTransform const & initial);
 
+ShapePreservingTransform estimateTranslationMap(Eigen::VectorXf const& obs,
+												Eigen::Matrix3Xf const& pts,
+												std::vector<int> const& idxs,
+												std::vector<Axis> const& coordinate,
+												float *residual,
+												bool verbose);
+
+ShapePreservingTransform estimateScaleMap(Eigen::VectorXf const& obs,
+										  Eigen::Matrix3Xf const& pts,
+										  std::vector<int> const& idxs,
+										  std::vector<Axis> const& coordinate,
+										  float *residual,
+										  bool verbose);
+
+ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
+											 Eigen::Matrix3Xf const& pts,
+											 std::vector<int> const& idxs,
+											 std::vector<Axis> const& coordinate,
+											 float *residual,
+											 IterativeTermination * status,
+											 bool verbose,
+											 int n_steps = 50,
+											 float incrLimit = 1e-8);
+
 AffineTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
 										   Eigen::Matrix3Xf const& pts,
 										   std::vector<int> const& idxs,
