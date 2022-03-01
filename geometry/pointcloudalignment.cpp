@@ -352,7 +352,6 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 											 float incrLimit) {
 
 	typedef Eigen::Matrix<float, 3, 1, Eigen::ColMajor> ParamVector;
-	typedef Eigen::Matrix<float, 3, 3> ParamMatrix;
 	typedef Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor> MatrixA;
 
 
@@ -423,7 +422,7 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 		Eigen::MatrixXf pseudoInverse = svd.matrixV() * (svd.singularValues().array().abs() > 1e-6).select(svd.singularValues().array().inverse(), 0).matrix().asDiagonal() * svd.matrixU().transpose();
 
 		Eigen::VectorXf r = obs - f0;
-		Eigen::VectorXf delta = pseudoInverse*A.transpose()*r;
+		Eigen::Vector3f delta = pseudoInverse*A.transpose()*r;
 
 		ShapePreservingTransform change(delta, Eigen::Vector3f::Zero(), 1);
 		current = change*current;
@@ -480,74 +479,36 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 
 }
 
-AffineTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
-										   Eigen::Matrix3Xf const& pts,
-										   std::vector<int> const& idxs,
-										   std::vector<Axis> const& coordinate,
-										   IterativeTermination *status,
-										   int n_steps,
-										   float incrLimit,
-										   float damping,
-										   float dampingScale) {
+
+ShapePreservingTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
+													Eigen::Matrix3Xf const& pts,
+													std::vector<int> const& idxs,
+													std::vector<Axis> const& coordinate,
+													IterativeTermination *status,
+													int n_steps,
+													float incrLimit,
+													float damping,
+													float dampingScale) {
 
 	typedef Eigen::Matrix<float, 7, 1, Eigen::ColMajor> ParamVector;
 	typedef Eigen::Matrix<float, 7, 7> MatrixQxx ;
+	typedef Eigen::Matrix<float, Eigen::Dynamic, 7, Eigen::RowMajor> MatrixA ;
 
-	AffineTransform initial = estimateQuasiShapePreservingMap(obs,
-															  pts,
-															  idxs,
-															  coordinate,
-															  2e-1,
-															  nullptr,
-															  1e-6,
-															  500);
-
-	ShapePreservingTransform trans = affine2ShapePreservingMap(initial);
-
-	if (trans.s < 0) {
-		throw GeometricException("Unable to estimate rigid transformation starting from mirrored transformation.");
-	}
-
-	float s = std::log(trans.s);
-	Eigen::Vector3f r = trans.r;
-	Eigen::Vector3f t = trans.t;
-
-	AffineTransform transform;
+	ShapePreservingTransform current(Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero(), 1);
 
 	int n_obs = obs.rows();
 
-	if (n_obs < 7) {//underdetermined
-		if (status != nullptr) {
-			*status = IterativeTermination::Error;
-		}
-		return transform;
-	}
+	IterativeTermination stat = IterativeTermination::MaxStepReached;
 
-	ParamVector x;
-	x << r, t, s;
+	MatrixA A;
 
-	*status = IterativeTermination::MaxStepReached;
-
-	Eigen::Matrix<float, Eigen::Dynamic, 7, Eigen::RowMajor> A;
-	A.resize(n_obs, 7);
-
-	Eigen::VectorXf e = obs;
+	Eigen::VectorXf f0 = obs;
 
 	for(int i = 0; i < n_steps; i++) {
 
-		r << x[0],x[1],x[2];
-		t << x[3],x[4],x[5];
-		s = x[6];
+		Eigen::Matrix3Xf tpts = current*pts;
 
-		if (fabs(s) > 5) {//limit the scale growth to avoid scale explosion
-			s = (s > 0) ? 3. : -3;
-			x[6] = s;
-		}
-
-		Eigen::Matrix3f R = rodriguezFormula(r);
-		Eigen::Matrix3f DxR = diffRodriguez(r, Axis::X);
-		Eigen::Matrix3f DyR = diffRodriguez(r, Axis::Y);
-		Eigen::Matrix3f DzR = diffRodriguez(r, Axis::Z);
+		A.setZero(n_obs, 7);
 
 		for (int i = 0; i < static_cast<int>(idxs.size()); i++) {
 
@@ -564,55 +525,48 @@ AffineTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
 			if (coordinate[i] == Axis::Z) {
 				id_row = 2;
 			}
-			Eigen::Block<Eigen::Matrix3f,1,3> Rrow = R.block<1,3>(id_row,0);
 
-			float l0i = exp(s)*(Rrow*pts.block<3,1>(0,idxs[i]))(0,0) + t[id_row];
-			e[i] = obs[i] - l0i;
+			f0[i] = tpts(id_row,idxs[i]);
 
-			A(i, 0) = exp(s)*(DxR.block<1,3>(id_row,0)*pts.block<3,1>(0,idxs[i]))(0,0); //Param rx;
-			A(i, 1) = exp(s)*(DyR.block<1,3>(id_row,0)*pts.block<3,1>(0,idxs[i]))(0,0); //Param ry;
-			A(i, 2) = exp(s)*(DzR.block<1,3>(id_row,0)*pts.block<3,1>(0,idxs[i]))(0,0); //Param rz;
+			Eigen::Vector3f p = tpts.col(idxs[i]);
+			Eigen::Matrix3f skew = StereoVision::Geometry::skew(p);
+
+			A.block<1,3>(i,0) = -skew.row(id_row); //Param rx, ry, rz, using the small angle approximation for rodriguez formula
 
 			A(i, 3) = (coordinate[i] == Axis::X) ? 1 : 0; //Param x;
 			A(i, 4) = (coordinate[i] == Axis::Y) ? 1 : 0; //Param y;
 			A(i, 5) = (coordinate[i] == Axis::Z) ? 1 : 0; //Param z;
 
-			A(i, 6) = exp(s)*(Rrow*pts.block<3,1>(0,idxs[i]))(0,0); //Param s;
+			A(i, 6) = p[id_row]; //Param s;
 		}
 
 		MatrixQxx invQxx = A.transpose()*A;
-		auto QR = Eigen::ColPivHouseholderQR<MatrixQxx>(invQxx);
 
-		if (!QR.isInvertible()) {
-			if (status != nullptr) {
-				*status = IterativeTermination::Error;
-			}
-			return transform;
-		}
+		auto svd = invQxx.jacobiSvd(Eigen::ComputeFullU|Eigen::ComputeFullV);
 
-		ParamVector incr = QR.solve(A.transpose()*e);
-		incr[6] *= dampingScale;
+		Eigen::MatrixXf pseudoInverse = svd.matrixV() * (svd.singularValues().array().abs() > 1e-6).select(svd.singularValues().array().inverse(), 0).matrix().asDiagonal() * svd.matrixU().transpose();
 
-		x = x + damping*incr;
+		Eigen::VectorXf r = obs - f0;
+		ParamVector delta = pseudoInverse*A.transpose()*r;
+		delta.block<6,1>(0,0) *= damping;
+		delta[6] *= dampingScale;
 
-		float n = incr.norm();
-		if (n < incrLimit) {
-			if (status != nullptr) {
-				*status = IterativeTermination::Converged;
-			}
+		ShapePreservingTransform change(delta.block<3,1>(0,0), delta.block<3,1>(3,0), exp(delta[6]));
+		current = change*current;
+
+		float n = delta.norm();
+		if (n/damping < incrLimit) {
+			stat = IterativeTermination::Converged;
 			break;
 		}
 
 	}
 
-	r << x[0],x[1],x[2];
-	t << x[3],x[4],x[5];
-	s = x[6];
+	if (status != nullptr) {
+		*status = stat;
+	}
 
-	transform.R = exp(s)*rodriguezFormula(r);
-	transform.t = t;
-
-	return transform;
+	return current;
 
 }
 

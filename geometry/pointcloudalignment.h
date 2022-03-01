@@ -68,15 +68,15 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 											 int n_steps = 50,
 											 float incrLimit = 1e-8);
 
-AffineTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
-										   Eigen::Matrix3Xf const& pts,
-										   std::vector<int> const& idxs,
-										   std::vector<Axis> const& coordinate,
-										   IterativeTermination * status,
-										   int n_steps = 50,
-										   float incrLimit = 1e-8,
-										   float damping = 5e-1,
-										   float dampingScale = 1e-1);
+ShapePreservingTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
+													Eigen::Matrix3Xf const& pts,
+													std::vector<int> const& idxs,
+													std::vector<Axis> const& coordinate,
+													IterativeTermination * status,
+													int n_steps = 50,
+													float incrLimit = 1e-8,
+													float damping = 5e-1,
+													float dampingScale = 1e-1);
 
 } // namespace Geometry
 }; //namespace StereoVision
