@@ -57,6 +57,10 @@ public:
 	Eigen::Matrix3Xf operator*(Eigen::Matrix3Xf const& pts) const;
 	Eigen::Array3Xf operator*(Eigen::Array3Xf const& pts) const;
 
+	inline bool isFinite() const {
+		return t.array().isFinite().all() and R.array().isFinite().all();
+	}
+
 	Eigen::Vector3f t;
 	Eigen::Matrix3f R;
 

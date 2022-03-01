@@ -331,7 +331,21 @@ ShapePreservingTransform estimateScaleMap(Eigen::VectorXf const& obs,
 		}
 	}
 
-	float s = (obs.array()/A.array()).mean();
+	int n = 0;
+	float s = 0;
+
+	for (int i = 0; i < n_obs; i++) {
+		if (std::fabs(A[i]) > 1e-6) {
+			s += obs[i] / A[i];
+			n++;
+		}
+	}
+
+	if (n == 0) {
+		s = 1;
+	} else {
+		s /= n;
+	}
 
 	if (residual != nullptr) {
 		*residual = (A*s - obs).norm()/n_obs;
@@ -496,6 +510,17 @@ ShapePreservingTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
 
 	ShapePreservingTransform current(Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero(), 1);
 
+	//check if the initializer can do most of the job already.
+	auto test = initShapePreservingMapEstimate(obs, pts, idxs, coordinate);
+
+	if (test.has_value()) {
+		ShapePreservingTransform possible = test.value();
+
+		if (possible.isFinite()) {
+			current = possible;
+		}
+	}
+
 	int n_obs = obs.rows();
 
 	IterativeTermination stat = IterativeTermination::MaxStepReached;
@@ -567,6 +592,110 @@ ShapePreservingTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
 	}
 
 	return current;
+
+}
+
+std::optional<ShapePreservingTransform> initShapePreservingMapEstimate(Eigen::VectorXf const& obs,
+																	   Eigen::Matrix3Xf const& pts,
+																	   std::vector<int> const& idxs,
+																	   std::vector<Axis> const& coordinate) {
+	enum axisFlags {
+		X = 1,
+		Y = 2,
+		Z = 4
+	};
+
+	std::vector<int> observed(pts.size());
+	std::fill(observed.begin(), observed.end(), 0);
+
+	int nobs = obs.rows();
+	int nFullAxisPoints = 0;
+	std::vector<int> fullAxisPointsIdxs;
+	fullAxisPointsIdxs.reserve(pts.cols());
+
+	for (int i = 0; i < nobs; i++) {
+		axisFlags f = (coordinate[i] == Axis::X) ? X : (coordinate[i] == Axis::Y) ? Y : Z;
+		observed[idxs[i]] = observed[idxs[i]] | f;
+
+		if (observed[idxs[i]] == (X | Y | Z)) {
+			auto p = std::find(fullAxisPointsIdxs.begin(), fullAxisPointsIdxs.end(), idxs[i]);
+			if (p == fullAxisPointsIdxs.end()) {
+				nFullAxisPoints++;
+				fullAxisPointsIdxs.push_back(idxs[i]);
+			}
+		}
+	}
+
+	if (nFullAxisPoints < 3) {
+		return std::nullopt;
+	}
+
+	int ptRefId = fullAxisPointsIdxs[0];
+	int ptPivot1 = fullAxisPointsIdxs[1];
+	int ptPivot2 = fullAxisPointsIdxs[2];
+
+	Eigen::Vector3f ptRef_orig = pts.col(ptRefId);
+	Eigen::Vector3f ptPiv1_orig = pts.col(ptPivot1);
+	Eigen::Vector3f ptPiv2_orig = pts.col(ptPivot2);
+
+	Eigen::Vector3f ptRef_obs;
+	Eigen::Vector3f ptPiv1_obs;
+	Eigen::Vector3f ptPiv2_obs;
+
+	for (int i = 0; i < nobs; i++) {
+
+		int rowId = (coordinate[i] == Axis::X) ? 0 : (coordinate[i] == Axis::Y) ? 1 : 2;
+
+		if (idxs[i] == ptRefId) {
+			ptRef_obs[rowId] = obs[i];
+		} else if (idxs[i] == ptPivot1) {
+			ptPiv1_obs[rowId] = obs[i];
+		} else if (idxs[i] == ptPivot2) {
+			ptPiv2_obs[rowId] = obs[i];
+		}
+	}
+
+	ShapePreservingTransform translate(Eigen::Vector3f::Zero(), -ptRef_obs, 1);
+	ShapePreservingTransform current(Eigen::Vector3f::Zero(), ptRef_obs - ptRef_orig, 1);
+
+	Eigen::Vector3f trsfm = current*ptPiv1_orig - ptRef_obs;
+	Eigen::Vector3f axis_alignement = ptPiv1_obs - ptRef_obs;
+	axis_alignement.normalize();
+
+	Eigen::Vector3f rot1 = (trsfm/trsfm.norm()).cross(axis_alignement);
+	float scale = std::asin(rot1.norm())/rot1.norm();
+
+	ShapePreservingTransform R1(scale*rot1, Eigen::Vector3f::Zero(), 1);
+
+	trsfm = current*ptPiv2_orig - ptRef_obs;
+	trsfm = R1*trsfm;
+
+	Eigen::Vector3f axis_orientation = ptPiv2_obs - ptRef_obs;
+
+	Eigen::Vector3f proj1 = trsfm - trsfm.dot(axis_alignement) * axis_alignement;
+	Eigen::Vector3f proj2 = axis_orientation - axis_orientation.dot(axis_alignement) * axis_alignement;
+
+	Eigen::Vector3f rot2 = (proj1/proj1.norm()).cross(proj2/proj2.norm());
+	scale = std::asin(rot2.norm())/rot2.norm();
+
+	ShapePreservingTransform R2(scale*rot2, Eigen::Vector3f::Zero(), 1);
+
+	ShapePreservingTransform total = R2*R1*translate*current;
+
+	Eigen::Matrix3Xf tpts = total*pts;
+
+	Eigen::VectorXf obs_offst = obs;
+
+	for (int i = 0; i < nobs; i++) {
+
+		int rowId = (coordinate[i] == Axis::X) ? 0 : (coordinate[i] == Axis::Y) ? 1 : 2;
+
+		obs_offst[i] -= ptRef_obs[rowId];
+	}
+
+	ShapePreservingTransform scaling = estimateScaleMap(obs_offst, tpts, idxs, coordinate, nullptr, false);
+
+	return translate.inverse()*scaling*total;
 
 }
 

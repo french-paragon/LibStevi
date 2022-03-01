@@ -141,6 +141,9 @@ private Q_SLOTS:
 	void testQuasiShapePreservingMap_data();
 	void testQuasiShapePreservingMap();
 
+	void testInitShapePreservingMap_data();
+	void testInitShapePreservingMap();
+
 	void testShapePreservingMap_data();
 	void testShapePreservingMap();
 
@@ -250,6 +253,54 @@ void TestPointCloudAlignement::testQuasiShapePreservingMap() {
 	float mismatch = (delta/delta.diagonal().mean() - Eigen::Matrix3f::Identity()).norm();
 	QVERIFY2(mismatch < 1e-5, qPrintable(QString("Rt*R not a diagonal matrix (norm (R.t*R/mean(diag(R.t*R)) - I) = %1)").arg(mismatch)));
 
+}
+
+void TestPointCloudAlignement::testInitShapePreservingMap_data() {
+
+	QTest::addColumn<int>("nPts");
+
+	QTest::newRow("Just set") << 3;
+	QTest::newRow("Overdetermined") << 12;
+}
+void TestPointCloudAlignement::testInitShapePreservingMap() {
+
+	QFETCH(int, nPts);
+
+	Eigen::VectorXf obs;
+	Eigen::Matrix3Xf pts;
+	std::vector<int> idxs;
+	std::vector<Axis> coordinate;
+	AffineTransform T = generateShapePreservingRandomTransform();
+
+	generateObs(nPts, 3, obs, pts, idxs, coordinate, T);
+
+	std::optional<ShapePreservingTransform> out = initShapePreservingMapEstimate(obs,
+																				 pts,
+																				 idxs,
+																				 coordinate);
+
+	QVERIFY2(out.has_value(), "Missing output value in initializer solution.");
+	AffineTransform F = out.value().toAffineTransform();
+
+	Eigen::Matrix3Xf tTrue = T*pts;
+	Eigen::Matrix3Xf tFound = F*pts;
+
+	for (int i = 0; i < nPts*2; i++) {
+		int row = (coordinate[i] == Axis::X) ? 0 : ((coordinate[i] == Axis::Y) ? 1 : 2);
+		float vTrue = tTrue(row,idxs[i]);
+		float vFound = tFound(row,idxs[i]);
+
+		float error = fabs(vTrue - vFound);
+		QVERIFY2(error < 1e-3, qPrintable(QString("Misaligned recontructed coordinates (%1)").arg(error)));
+	}
+
+	Eigen::Matrix3f delta = F.R.transpose()*F.R;
+
+	float diagMismastch = (delta.diagonal().maxCoeff() - delta.diagonal().minCoeff())/delta.diagonal().minCoeff();
+	QVERIFY2(diagMismastch < 1e-3, qPrintable(QString("Rt*R diagonal is not uniform (relative error %1)").arg(diagMismastch)));
+
+	float mismatch = (delta/delta.diagonal().mean() - Eigen::Matrix3f::Identity()).norm();
+	QVERIFY2(mismatch < 1e-5, qPrintable(QString("Rt*R not a diagonal matrix (norm (R.t*R/mean(diag(R.t*R)) - I) = %1)").arg(mismatch)));
 }
 
 void TestPointCloudAlignement::testShapePreservingMap_data() {
