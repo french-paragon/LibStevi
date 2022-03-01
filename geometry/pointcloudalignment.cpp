@@ -351,168 +351,67 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 											 int n_steps,
 											 float incrLimit) {
 
-	(void)(verbose);
+	typedef Eigen::Matrix<float, 3, 1, Eigen::ColMajor> ParamVector;
+	typedef Eigen::Matrix<float, 3, 3> ParamMatrix;
+	typedef Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor> MatrixA;
 
-	struct EqLine{
-		EqLine() :
-			ptIdx(-1),
-			value(0) {
 
-		}
-		int ptIdx;
-		float value;
-	};
-
-	struct Eq {
-		EqLine axisX;
-		EqLine axisY;
-		EqLine axisZ;
-	};
-
-	int nobs = obs.rows();
-	int npts = pts.cols();
-
-	std::vector<Eq> eqs(npts);
-
-	int nFreeParameters = 3*npts - nobs;
-
-	int ParamPos = 3;
-
-	for (int i = 0; i < npts; i++) {
-
-		int xobs = -1;
-		int yobs = -1;
-		int zobs = -1;
-
-		for (int j = 0; j < nobs; j++) {
-			if (idxs[j] == i and coordinate[j] == Axis::X) {
-				xobs = j;
-			}
-			if (idxs[j] == i and coordinate[j] == Axis::Y) {
-				yobs = j;
-			}
-			if (idxs[j] == i and coordinate[j] == Axis::Z) {
-				zobs = j;
-			}
-		}
-
-		if (xobs >= 0) {
-			eqs[i].axisX.value = obs[xobs];
-			eqs[i].axisX.ptIdx = -1;
-		} else {
-			eqs[i].axisX.value = 0;
-			eqs[i].axisX.ptIdx = ParamPos;
-			ParamPos++;
-		}
-
-		if (yobs >= 0) {
-			eqs[i].axisY.value = obs[yobs];
-			eqs[i].axisY.ptIdx = -1;
-		} else {
-			eqs[i].axisY.value = 0;
-			eqs[i].axisY.ptIdx = ParamPos;
-			ParamPos++;
-		}
-
-		if (zobs >= 0) {
-			eqs[i].axisZ.value = obs[zobs];
-			eqs[i].axisZ.ptIdx = -1;
-		} else {
-			eqs[i].axisZ.value = 0;
-			eqs[i].axisZ.ptIdx = ParamPos;
-			ParamPos++;
-		}
+	if (verbose) {
+		std::cout << "Start estimating Rotation Map:" << std::endl;
 	}
+	int nobs = obs.rows();
 
-	Eigen::MatrixXf A;
+	MatrixA A;
 
-	Eigen::VectorXf l;
-	l.setZero(3*npts);
+	Eigen::VectorXf f0;
 
-
-	Eigen::VectorXf x;
-	x.setZero(3 + nFreeParameters);
+	ShapePreservingTransform current(ParamVector::Zero(), Eigen::Vector3f::Zero(), 1);
 
 
 	IterativeTermination stat = IterativeTermination::MaxStepReached;
 
 	for(int s = 0; s < n_steps; s++) {
 
-		A.setZero(3*npts, 3 + nFreeParameters);
+		A.setZero(nobs, 3);
+		f0.setZero(nobs);
 
-		for (int i = 0; i < npts; i++) {
+		//compute f0 (functional model is rodriguez formula
+		Eigen::Matrix3Xf const& tpts = current*pts;
 
-			float valX;
-			if (eqs[i].axisX.ptIdx < 0) {
-				valX = eqs[i].axisX.value;
-			} else {
-				valX = x[eqs[i].axisX.ptIdx];
+		for (int i = 0; i < nobs; i++) {
+
+			switch (coordinate[i]) {
+			case Axis::X:
+				f0[i] = tpts(0,idxs[i]);
+				break;
+			case Axis::Y:
+				f0[i] = tpts(1,idxs[i]);
+				break;
+			case Axis::Z:
+				f0[i] = tpts(2,idxs[i]);
+				break;
 			}
+		}
 
-			float valY;
-			if (eqs[i].axisY.ptIdx < 0) {
-				valY = eqs[i].axisY.value;
-			} else {
-				valY = x[eqs[i].axisY.ptIdx];
-			}
+		//rodriguez formula is:
+		//v cos(norm(theta)) + (theta cross v) * sin(norm(theta))/norm(theta) + theta (theta dot v)(1 - cos(norm(theta)))
 
-			float valZ;
-			if (eqs[i].axisZ.ptIdx < 0) {
-				valZ = eqs[i].axisZ.value;
-			} else {
-				valZ = x[eqs[i].axisZ.ptIdx];
-			}
+		//compute A
+		for (int i = 0; i < nobs; i++) {
 
-			Eigen::Vector3f P = pts.col(i);
-			Eigen::Vector3f O(valX, valY, valZ);
+			Eigen::Vector3f p = pts.col(idxs[i]);
+			Eigen::Matrix3f skew = StereoVision::Geometry::skew(p);
 
-			float Pnorm = P.norm();
-			float Onorm = O.norm();
-
-			if (eqs[i].axisX.ptIdx < 0 and
-					eqs[i].axisY.ptIdx < 0 and
-					eqs[i].axisZ.ptIdx < 0) {
-
-				//if all measurements are there, then an approximation of Theta can be computer as P/Pnorm cross O/Onorm
-
-				if (s == 0) {
-					Eigen::Vector3f Rot = (P/Pnorm).cross(O/Onorm);
-					l[3*i] = Rot[0];
-					l[3*i+1] = Rot[1];
-					l[3*i+2] = Rot[2];
-				}
-
-				A(3*i,0) = 1;
-				A(3*i+1,1) = 1;
-				A(3*i+2,2) = 1;
-
-			} else {
-				//Else the equation is Onorm*Theta_x - (1/Pnorm)(P_y O_z - P_z O_y) = 0
-				//and Onorm*Theta_y - (1/Pnorm)(P_z O_x - P_x O_z) = 0
-				//and Onorm*Theta_z - (1/Pnorm)(P_x O_y - P_y O_x) = 0
-
-				A(3*i,0) = Onorm;
-				A(3*i+1,1) = Onorm;
-				A(3*i+2,2) = Onorm;
-
-				if (eqs[i].axisX.ptIdx >= 0) {
-					A(3*i,eqs[i].axisX.ptIdx) = O[0]/Onorm * x[0];
-					A(3*i+1,eqs[i].axisX.ptIdx) = -P[2]/Pnorm;
-					A(3*i+2,eqs[i].axisX.ptIdx) = P[1]/Pnorm;
-				}
-
-				if (eqs[i].axisY.ptIdx >= 0) {
-					A(3*i,eqs[i].axisY.ptIdx) = P[2]/Pnorm;
-					A(3*i+1,eqs[i].axisY.ptIdx) = O[1]/Onorm * x[1];
-					A(3*i+2,eqs[i].axisY.ptIdx) = -P[0]/Pnorm;
-				}
-
-				if (eqs[i].axisZ.ptIdx >= 0) {
-					A(3*i,eqs[i].axisZ.ptIdx) = -P[1]/Pnorm;
-					A(3*i+1,eqs[i].axisZ.ptIdx) = P[0]/Pnorm;
-					A(3*i+2,eqs[i].axisZ.ptIdx) = O[2]/Onorm * x[2];
-				}
-
+			switch (coordinate[i]) { //small angle approximation to make life easier
+				case Axis::X:
+					A.row(i) = -skew.row(0);
+					break;
+				case Axis::Y:
+					A.row(i) = -skew.row(1);
+					break;
+				case Axis::Z:
+					A.row(i) = -skew.row(2);
+					break;
 			}
 
 		}
@@ -523,12 +422,17 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 
 		Eigen::MatrixXf pseudoInverse = svd.matrixV() * (svd.singularValues().array().abs() > 1e-6).select(svd.singularValues().array().inverse(), 0).matrix().asDiagonal() * svd.matrixU().transpose();
 
-		Eigen::VectorXf r = l - A*x;
+		Eigen::VectorXf r = obs - f0;
 		Eigen::VectorXf delta = pseudoInverse*A.transpose()*r;
 
-		x = x + delta;
+		ShapePreservingTransform change(delta, Eigen::Vector3f::Zero(), 1);
+		current = change*current;
 
-		if (delta.norm()/(3 + nFreeParameters) < incrLimit) {
+		if (verbose) {
+			std::cout << "\t" << "Iteration " << s << ": incr_rms = " << delta.norm()/(3) << std::endl;
+		}
+
+		if (delta.norm()/(3) < incrLimit) {
 			stat = IterativeTermination::Converged;
 			break;
 		}
@@ -539,10 +443,7 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 		*status = stat;
 	}
 
-	Eigen::Vector3f theta = x.block<3,1>(0,0);
-	theta *= std::asin(theta.norm())/theta.norm();
-
-	ShapePreservingTransform r(theta, Eigen::Vector3f::Zero(), 1.);
+	ShapePreservingTransform& r = current;
 
 	Eigen::Matrix3Xf tpts = r*pts;
 

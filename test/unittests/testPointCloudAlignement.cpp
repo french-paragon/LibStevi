@@ -351,11 +351,11 @@ void TestPointCloudAlignement::testExtractRotationMap_data() {
 	QTest::addColumn<int>("nPts");
 	QTest::addColumn<int>("nObsPerPoints");
 
-	/*QTest::newRow("Minimal") << 1 << 1;
+	QTest::newRow("Minimal") << 1 << 1;
 	QTest::newRow("Underdetermined small") << 3 << 1;
-	QTest::newRow("Underdetermined big") << 3 << 2;
+	QTest::newRow("Underdetermined big") << 3 << 1;
 	QTest::newRow("Just set dense") << 4 << 3;
-	QTest::newRow("Just set sparse") << 12 << 1;*/
+	QTest::newRow("Just set sparse") << 12 << 1;
 	QTest::newRow("Overdetermined") << 12 << 3;
 }
 
