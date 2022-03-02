@@ -141,6 +141,10 @@ Eigen::Array3Xf reprojectPoints(Eigen::Matrix3f const& R,
 
 	Eigen::ArrayXf x3 = (x3_v1 + x3_v2)/2.0;
 
+	//make sure to get only the values of x3_v1 if x3_v2 is not finite and vice versa.
+	x3 = (x3.isFinite()).select(x3,x3_v1);
+	x3 = (x3.isFinite()).select(x3,x3_v2);
+
 	reproj.row(0) *= x3;
 	reproj.row(1) *= x3;
 	reproj.row(2) *= x3;
