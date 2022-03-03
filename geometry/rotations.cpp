@@ -42,6 +42,14 @@ Eigen::Matrix3Xf ShapePreservingTransform::operator*(Eigen::Matrix3Xf const& pts
 Eigen::Array3Xf ShapePreservingTransform::operator*(Eigen::Array3Xf const& pts) const {
 	return applyOnto(pts);
 }
+ShapePreservingTransform ShapePreservingTransform::operator*(ShapePreservingTransform const& other) const {
+	//s*rodriguezFormula(r)*(other.s*rodriguezFormula(other.r)*pt + other.t) + t;
+	//s*other.s*rodriguezFormula(r)*rodriguezFormula(other.r)*pt + s*rodriguezFormula(r)*other.t + t
+
+	Eigen::Matrix3f R = rodriguezFormula(r);
+	Eigen::Matrix3f Rc = R*rodriguezFormula(other.r);
+	return ShapePreservingTransform(inverseRodriguezFormula(Rc), s*R*other.t + t, s*other.s);
+}
 
 AffineTransform ShapePreservingTransform::toAffineTransform() const {
 	return AffineTransform(s*rodriguezFormula(r), t);

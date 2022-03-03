@@ -36,9 +36,14 @@ public:
 	Eigen::Vector3f operator*(Eigen::Vector3f const& pt) const;
 	Eigen::Matrix3Xf operator*(Eigen::Matrix3Xf const& pts) const;
 	Eigen::Array3Xf operator*(Eigen::Array3Xf const& pts) const;
+		ShapePreservingTransform operator*(ShapePreservingTransform const& other) const;
 
 	AffineTransform toAffineTransform() const;
 	ShapePreservingTransform inverse() const;
+
+	inline bool isFinite() const {
+		return t.array().isFinite().all() and r.array().isFinite().all() and std::isfinite(s);
+	}
 
 	Eigen::Vector3f t;
 	Eigen::Vector3f r;

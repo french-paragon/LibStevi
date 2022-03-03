@@ -331,7 +331,21 @@ ShapePreservingTransform estimateScaleMap(Eigen::VectorXf const& obs,
 		}
 	}
 
-	float s = (obs.array()/A.array()).mean();
+	int n = 0;
+	float s = 0;
+
+	for (int i = 0; i < n_obs; i++) {
+		if (std::fabs(A[i]) > 1e-6) {
+			s += obs[i] / A[i];
+			n++;
+		}
+	}
+
+	if (n == 0) {
+		s = 1;
+	} else {
+		s /= n;
+	}
 
 	if (residual != nullptr) {
 		*residual = (A*s - obs).norm()/n_obs;
@@ -351,168 +365,66 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 											 int n_steps,
 											 float incrLimit) {
 
-	(void)(verbose);
+	typedef Eigen::Matrix<float, 3, 1, Eigen::ColMajor> ParamVector;
+	typedef Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor> MatrixA;
 
-	struct EqLine{
-		EqLine() :
-			ptIdx(-1),
-			value(0) {
 
-		}
-		int ptIdx;
-		float value;
-	};
-
-	struct Eq {
-		EqLine axisX;
-		EqLine axisY;
-		EqLine axisZ;
-	};
-
-	int nobs = obs.rows();
-	int npts = pts.cols();
-
-	std::vector<Eq> eqs(npts);
-
-	int nFreeParameters = 3*npts - nobs;
-
-	int ParamPos = 3;
-
-	for (int i = 0; i < npts; i++) {
-
-		int xobs = -1;
-		int yobs = -1;
-		int zobs = -1;
-
-		for (int j = 0; j < nobs; j++) {
-			if (idxs[j] == i and coordinate[j] == Axis::X) {
-				xobs = j;
-			}
-			if (idxs[j] == i and coordinate[j] == Axis::Y) {
-				yobs = j;
-			}
-			if (idxs[j] == i and coordinate[j] == Axis::Z) {
-				zobs = j;
-			}
-		}
-
-		if (xobs >= 0) {
-			eqs[i].axisX.value = obs[xobs];
-			eqs[i].axisX.ptIdx = -1;
-		} else {
-			eqs[i].axisX.value = 0;
-			eqs[i].axisX.ptIdx = ParamPos;
-			ParamPos++;
-		}
-
-		if (yobs >= 0) {
-			eqs[i].axisY.value = obs[yobs];
-			eqs[i].axisY.ptIdx = -1;
-		} else {
-			eqs[i].axisY.value = 0;
-			eqs[i].axisY.ptIdx = ParamPos;
-			ParamPos++;
-		}
-
-		if (zobs >= 0) {
-			eqs[i].axisZ.value = obs[zobs];
-			eqs[i].axisZ.ptIdx = -1;
-		} else {
-			eqs[i].axisZ.value = 0;
-			eqs[i].axisZ.ptIdx = ParamPos;
-			ParamPos++;
-		}
+	if (verbose) {
+		std::cout << "Start estimating Rotation Map:" << std::endl;
 	}
+	int nobs = obs.rows();
 
-	Eigen::MatrixXf A;
+	MatrixA A;
 
-	Eigen::VectorXf l;
-	l.setZero(3*npts);
+	Eigen::VectorXf f0;
 
-
-	Eigen::VectorXf x;
-	x.setZero(3 + nFreeParameters);
+	ShapePreservingTransform current(ParamVector::Zero(), Eigen::Vector3f::Zero(), 1);
 
 
 	IterativeTermination stat = IterativeTermination::MaxStepReached;
 
 	for(int s = 0; s < n_steps; s++) {
 
-		A.setZero(3*npts, 3 + nFreeParameters);
+		A.setZero(nobs, 3);
+		f0.setZero(nobs);
 
-		for (int i = 0; i < npts; i++) {
+		//compute f0 (functional model is rodriguez formula
+		Eigen::Matrix3Xf const& tpts = current*pts;
 
-			float valX;
-			if (eqs[i].axisX.ptIdx < 0) {
-				valX = eqs[i].axisX.value;
-			} else {
-				valX = x[eqs[i].axisX.ptIdx];
+		for (int i = 0; i < nobs; i++) {
+
+			switch (coordinate[i]) {
+			case Axis::X:
+				f0[i] = tpts(0,idxs[i]);
+				break;
+			case Axis::Y:
+				f0[i] = tpts(1,idxs[i]);
+				break;
+			case Axis::Z:
+				f0[i] = tpts(2,idxs[i]);
+				break;
 			}
+		}
 
-			float valY;
-			if (eqs[i].axisY.ptIdx < 0) {
-				valY = eqs[i].axisY.value;
-			} else {
-				valY = x[eqs[i].axisY.ptIdx];
-			}
+		//rodriguez formula is:
+		//v cos(norm(theta)) + (theta cross v) * sin(norm(theta))/norm(theta) + theta (theta dot v)(1 - cos(norm(theta)))
 
-			float valZ;
-			if (eqs[i].axisZ.ptIdx < 0) {
-				valZ = eqs[i].axisZ.value;
-			} else {
-				valZ = x[eqs[i].axisZ.ptIdx];
-			}
+		//compute A
+		for (int i = 0; i < nobs; i++) {
 
-			Eigen::Vector3f P = pts.col(i);
-			Eigen::Vector3f O(valX, valY, valZ);
+			Eigen::Vector3f p = pts.col(idxs[i]);
+			Eigen::Matrix3f skew = StereoVision::Geometry::skew(p);
 
-			float Pnorm = P.norm();
-			float Onorm = O.norm();
-
-			if (eqs[i].axisX.ptIdx < 0 and
-					eqs[i].axisY.ptIdx < 0 and
-					eqs[i].axisZ.ptIdx < 0) {
-
-				//if all measurements are there, then an approximation of Theta can be computer as P/Pnorm cross O/Onorm
-
-				if (s == 0) {
-					Eigen::Vector3f Rot = (P/Pnorm).cross(O/Onorm);
-					l[3*i] = Rot[0];
-					l[3*i+1] = Rot[1];
-					l[3*i+2] = Rot[2];
-				}
-
-				A(3*i,0) = 1;
-				A(3*i+1,1) = 1;
-				A(3*i+2,2) = 1;
-
-			} else {
-				//Else the equation is Onorm*Theta_x - (1/Pnorm)(P_y O_z - P_z O_y) = 0
-				//and Onorm*Theta_y - (1/Pnorm)(P_z O_x - P_x O_z) = 0
-				//and Onorm*Theta_z - (1/Pnorm)(P_x O_y - P_y O_x) = 0
-
-				A(3*i,0) = Onorm;
-				A(3*i+1,1) = Onorm;
-				A(3*i+2,2) = Onorm;
-
-				if (eqs[i].axisX.ptIdx >= 0) {
-					A(3*i,eqs[i].axisX.ptIdx) = O[0]/Onorm * x[0];
-					A(3*i+1,eqs[i].axisX.ptIdx) = -P[2]/Pnorm;
-					A(3*i+2,eqs[i].axisX.ptIdx) = P[1]/Pnorm;
-				}
-
-				if (eqs[i].axisY.ptIdx >= 0) {
-					A(3*i,eqs[i].axisY.ptIdx) = P[2]/Pnorm;
-					A(3*i+1,eqs[i].axisY.ptIdx) = O[1]/Onorm * x[1];
-					A(3*i+2,eqs[i].axisY.ptIdx) = -P[0]/Pnorm;
-				}
-
-				if (eqs[i].axisZ.ptIdx >= 0) {
-					A(3*i,eqs[i].axisZ.ptIdx) = -P[1]/Pnorm;
-					A(3*i+1,eqs[i].axisZ.ptIdx) = P[0]/Pnorm;
-					A(3*i+2,eqs[i].axisZ.ptIdx) = O[2]/Onorm * x[2];
-				}
-
+			switch (coordinate[i]) { //small angle approximation to make life easier
+				case Axis::X:
+					A.row(i) = -skew.row(0);
+					break;
+				case Axis::Y:
+					A.row(i) = -skew.row(1);
+					break;
+				case Axis::Z:
+					A.row(i) = -skew.row(2);
+					break;
 			}
 
 		}
@@ -523,12 +435,17 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 
 		Eigen::MatrixXf pseudoInverse = svd.matrixV() * (svd.singularValues().array().abs() > 1e-6).select(svd.singularValues().array().inverse(), 0).matrix().asDiagonal() * svd.matrixU().transpose();
 
-		Eigen::VectorXf r = l - A*x;
-		Eigen::VectorXf delta = pseudoInverse*A.transpose()*r;
+		Eigen::VectorXf r = obs - f0;
+		Eigen::Vector3f delta = pseudoInverse*A.transpose()*r;
 
-		x = x + delta;
+		ShapePreservingTransform change(delta, Eigen::Vector3f::Zero(), 1);
+		current = change*current;
 
-		if (delta.norm()/(3 + nFreeParameters) < incrLimit) {
+		if (verbose) {
+			std::cout << "\t" << "Iteration " << s << ": incr_rms = " << delta.norm()/(3) << std::endl;
+		}
+
+		if (delta.norm()/(3) < incrLimit) {
 			stat = IterativeTermination::Converged;
 			break;
 		}
@@ -539,10 +456,7 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 		*status = stat;
 	}
 
-	Eigen::Vector3f theta = x.block<3,1>(0,0);
-	theta *= std::asin(theta.norm())/theta.norm();
-
-	ShapePreservingTransform r(theta, Eigen::Vector3f::Zero(), 1.);
+	ShapePreservingTransform& r = current;
 
 	Eigen::Matrix3Xf tpts = r*pts;
 
@@ -579,74 +493,47 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 
 }
 
-AffineTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
-										   Eigen::Matrix3Xf const& pts,
-										   std::vector<int> const& idxs,
-										   std::vector<Axis> const& coordinate,
-										   IterativeTermination *status,
-										   int n_steps,
-										   float incrLimit,
-										   float damping,
-										   float dampingScale) {
+
+ShapePreservingTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
+													Eigen::Matrix3Xf const& pts,
+													std::vector<int> const& idxs,
+													std::vector<Axis> const& coordinate,
+													IterativeTermination *status,
+													int n_steps,
+													float incrLimit,
+													float damping,
+													float dampingScale) {
 
 	typedef Eigen::Matrix<float, 7, 1, Eigen::ColMajor> ParamVector;
 	typedef Eigen::Matrix<float, 7, 7> MatrixQxx ;
+	typedef Eigen::Matrix<float, Eigen::Dynamic, 7, Eigen::RowMajor> MatrixA ;
 
-	AffineTransform initial = estimateQuasiShapePreservingMap(obs,
-															  pts,
-															  idxs,
-															  coordinate,
-															  2e-1,
-															  nullptr,
-															  1e-6,
-															  500);
+	ShapePreservingTransform current(Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero(), 1);
 
-	ShapePreservingTransform trans = affine2ShapePreservingMap(initial);
+	//check if the initializer can do most of the job already.
+	auto test = initShapePreservingMapEstimate(obs, pts, idxs, coordinate);
 
-	if (trans.s < 0) {
-		throw GeometricException("Unable to estimate rigid transformation starting from mirrored transformation.");
+	if (test.has_value()) {
+		ShapePreservingTransform possible = test.value();
+
+		if (possible.isFinite()) {
+			current = possible;
+		}
 	}
-
-	float s = std::log(trans.s);
-	Eigen::Vector3f r = trans.r;
-	Eigen::Vector3f t = trans.t;
-
-	AffineTransform transform;
 
 	int n_obs = obs.rows();
 
-	if (n_obs < 7) {//underdetermined
-		if (status != nullptr) {
-			*status = IterativeTermination::Error;
-		}
-		return transform;
-	}
+	IterativeTermination stat = IterativeTermination::MaxStepReached;
 
-	ParamVector x;
-	x << r, t, s;
+	MatrixA A;
 
-	*status = IterativeTermination::MaxStepReached;
-
-	Eigen::Matrix<float, Eigen::Dynamic, 7, Eigen::RowMajor> A;
-	A.resize(n_obs, 7);
-
-	Eigen::VectorXf e = obs;
+	Eigen::VectorXf f0 = obs;
 
 	for(int i = 0; i < n_steps; i++) {
 
-		r << x[0],x[1],x[2];
-		t << x[3],x[4],x[5];
-		s = x[6];
+		Eigen::Matrix3Xf tpts = current*pts;
 
-		if (fabs(s) > 5) {//limit the scale growth to avoid scale explosion
-			s = (s > 0) ? 3. : -3;
-			x[6] = s;
-		}
-
-		Eigen::Matrix3f R = rodriguezFormula(r);
-		Eigen::Matrix3f DxR = diffRodriguez(r, Axis::X);
-		Eigen::Matrix3f DyR = diffRodriguez(r, Axis::Y);
-		Eigen::Matrix3f DzR = diffRodriguez(r, Axis::Z);
+		A.setZero(n_obs, 7);
 
 		for (int i = 0; i < static_cast<int>(idxs.size()); i++) {
 
@@ -663,55 +550,152 @@ AffineTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
 			if (coordinate[i] == Axis::Z) {
 				id_row = 2;
 			}
-			Eigen::Block<Eigen::Matrix3f,1,3> Rrow = R.block<1,3>(id_row,0);
 
-			float l0i = exp(s)*(Rrow*pts.block<3,1>(0,idxs[i]))(0,0) + t[id_row];
-			e[i] = obs[i] - l0i;
+			f0[i] = tpts(id_row,idxs[i]);
 
-			A(i, 0) = exp(s)*(DxR.block<1,3>(id_row,0)*pts.block<3,1>(0,idxs[i]))(0,0); //Param rx;
-			A(i, 1) = exp(s)*(DyR.block<1,3>(id_row,0)*pts.block<3,1>(0,idxs[i]))(0,0); //Param ry;
-			A(i, 2) = exp(s)*(DzR.block<1,3>(id_row,0)*pts.block<3,1>(0,idxs[i]))(0,0); //Param rz;
+			Eigen::Vector3f p = tpts.col(idxs[i]);
+			Eigen::Matrix3f skew = StereoVision::Geometry::skew(p);
+
+			A.block<1,3>(i,0) = -skew.row(id_row); //Param rx, ry, rz, using the small angle approximation for rodriguez formula
 
 			A(i, 3) = (coordinate[i] == Axis::X) ? 1 : 0; //Param x;
 			A(i, 4) = (coordinate[i] == Axis::Y) ? 1 : 0; //Param y;
 			A(i, 5) = (coordinate[i] == Axis::Z) ? 1 : 0; //Param z;
 
-			A(i, 6) = exp(s)*(Rrow*pts.block<3,1>(0,idxs[i]))(0,0); //Param s;
+			A(i, 6) = p[id_row]; //Param s;
 		}
 
 		MatrixQxx invQxx = A.transpose()*A;
-		auto QR = Eigen::ColPivHouseholderQR<MatrixQxx>(invQxx);
 
-		if (!QR.isInvertible()) {
-			if (status != nullptr) {
-				*status = IterativeTermination::Error;
-			}
-			return transform;
-		}
+		auto svd = invQxx.jacobiSvd(Eigen::ComputeFullU|Eigen::ComputeFullV);
 
-		ParamVector incr = QR.solve(A.transpose()*e);
-		incr[6] *= dampingScale;
+		Eigen::MatrixXf pseudoInverse = svd.matrixV() * (svd.singularValues().array().abs() > 1e-6).select(svd.singularValues().array().inverse(), 0).matrix().asDiagonal() * svd.matrixU().transpose();
 
-		x = x + damping*incr;
+		Eigen::VectorXf r = obs - f0;
+		ParamVector delta = pseudoInverse*A.transpose()*r;
+		delta.block<6,1>(0,0) *= damping;
+		delta[6] *= dampingScale;
 
-		float n = incr.norm();
-		if (n < incrLimit) {
-			if (status != nullptr) {
-				*status = IterativeTermination::Converged;
-			}
+		ShapePreservingTransform change(delta.block<3,1>(0,0), delta.block<3,1>(3,0), exp(delta[6]));
+		current = change*current;
+
+		float n = delta.norm();
+		if (n/damping < incrLimit) {
+			stat = IterativeTermination::Converged;
 			break;
 		}
 
 	}
 
-	r << x[0],x[1],x[2];
-	t << x[3],x[4],x[5];
-	s = x[6];
+	if (status != nullptr) {
+		*status = stat;
+	}
 
-	transform.R = exp(s)*rodriguezFormula(r);
-	transform.t = t;
+	return current;
 
-	return transform;
+}
+
+std::optional<ShapePreservingTransform> initShapePreservingMapEstimate(Eigen::VectorXf const& obs,
+																	   Eigen::Matrix3Xf const& pts,
+																	   std::vector<int> const& idxs,
+																	   std::vector<Axis> const& coordinate) {
+	enum axisFlags {
+		X = 1,
+		Y = 2,
+		Z = 4
+	};
+
+	std::vector<int> observed(pts.size());
+	std::fill(observed.begin(), observed.end(), 0);
+
+	int nobs = obs.rows();
+	int nFullAxisPoints = 0;
+	std::vector<int> fullAxisPointsIdxs;
+	fullAxisPointsIdxs.reserve(pts.cols());
+
+	for (int i = 0; i < nobs; i++) {
+		axisFlags f = (coordinate[i] == Axis::X) ? X : (coordinate[i] == Axis::Y) ? Y : Z;
+		observed[idxs[i]] = observed[idxs[i]] | f;
+
+		if (observed[idxs[i]] == (X | Y | Z)) {
+			auto p = std::find(fullAxisPointsIdxs.begin(), fullAxisPointsIdxs.end(), idxs[i]);
+			if (p == fullAxisPointsIdxs.end()) {
+				nFullAxisPoints++;
+				fullAxisPointsIdxs.push_back(idxs[i]);
+			}
+		}
+	}
+
+	if (nFullAxisPoints < 3) {
+		return std::nullopt;
+	}
+
+	int ptRefId = fullAxisPointsIdxs[0];
+	int ptPivot1 = fullAxisPointsIdxs[1];
+	int ptPivot2 = fullAxisPointsIdxs[2];
+
+	Eigen::Vector3f ptRef_orig = pts.col(ptRefId);
+	Eigen::Vector3f ptPiv1_orig = pts.col(ptPivot1);
+	Eigen::Vector3f ptPiv2_orig = pts.col(ptPivot2);
+
+	Eigen::Vector3f ptRef_obs;
+	Eigen::Vector3f ptPiv1_obs;
+	Eigen::Vector3f ptPiv2_obs;
+
+	for (int i = 0; i < nobs; i++) {
+
+		int rowId = (coordinate[i] == Axis::X) ? 0 : (coordinate[i] == Axis::Y) ? 1 : 2;
+
+		if (idxs[i] == ptRefId) {
+			ptRef_obs[rowId] = obs[i];
+		} else if (idxs[i] == ptPivot1) {
+			ptPiv1_obs[rowId] = obs[i];
+		} else if (idxs[i] == ptPivot2) {
+			ptPiv2_obs[rowId] = obs[i];
+		}
+	}
+
+	ShapePreservingTransform translate(Eigen::Vector3f::Zero(), -ptRef_obs, 1);
+	ShapePreservingTransform current(Eigen::Vector3f::Zero(), ptRef_obs - ptRef_orig, 1);
+
+	Eigen::Vector3f trsfm = current*ptPiv1_orig - ptRef_obs;
+	Eigen::Vector3f axis_alignement = ptPiv1_obs - ptRef_obs;
+	axis_alignement.normalize();
+
+	Eigen::Vector3f rot1 = (trsfm/trsfm.norm()).cross(axis_alignement);
+	float scale = std::asin(rot1.norm())/rot1.norm();
+
+	ShapePreservingTransform R1(scale*rot1, Eigen::Vector3f::Zero(), 1);
+
+	trsfm = current*ptPiv2_orig - ptRef_obs;
+	trsfm = R1*trsfm;
+
+	Eigen::Vector3f axis_orientation = ptPiv2_obs - ptRef_obs;
+
+	Eigen::Vector3f proj1 = trsfm - trsfm.dot(axis_alignement) * axis_alignement;
+	Eigen::Vector3f proj2 = axis_orientation - axis_orientation.dot(axis_alignement) * axis_alignement;
+
+	Eigen::Vector3f rot2 = (proj1/proj1.norm()).cross(proj2/proj2.norm());
+	scale = std::asin(rot2.norm())/rot2.norm();
+
+	ShapePreservingTransform R2(scale*rot2, Eigen::Vector3f::Zero(), 1);
+
+	ShapePreservingTransform total = R2*R1*translate*current;
+
+	Eigen::Matrix3Xf tpts = total*pts;
+
+	Eigen::VectorXf obs_offst = obs;
+
+	for (int i = 0; i < nobs; i++) {
+
+		int rowId = (coordinate[i] == Axis::X) ? 0 : (coordinate[i] == Axis::Y) ? 1 : 2;
+
+		obs_offst[i] -= ptRef_obs[rowId];
+	}
+
+	ShapePreservingTransform scaling = estimateScaleMap(obs_offst, tpts, idxs, coordinate, nullptr, false);
+
+	return translate.inverse()*scaling*total;
 
 }
 
