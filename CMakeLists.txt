@@ -39,6 +39,8 @@ set(LIB_SRC
 	geometry/pointcloudalignment.h
 	geometry/rotations.cpp
         geometry/rotations.h
+		geometry/stereorigrectifier.cpp
+		geometry/stereorigrectifier.h
         interpolation/interpolation.cpp
         interpolation/interpolation.h
         interpolation/lensdistortionsmap.cpp

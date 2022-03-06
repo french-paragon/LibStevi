@@ -49,6 +49,7 @@ Eigen::Vector2f inverseSkewDistortion(Eigen::Vector2f pos,
 									  float f,
 									  Eigen::Vector2f pp);
 
+
 } // namespace Geometry
 } // namespace StereoVision
 
