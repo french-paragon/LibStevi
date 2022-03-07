@@ -45,6 +45,30 @@ public:
 		return _backwardCam2;
 	}
 
+
+	inline Eigen::Matrix3f CorrRCam1() const {
+		return _CorrRCam1;
+	}
+	inline Eigen::Matrix3f CorrRCam2() const {
+		return _CorrRCam2;
+	}
+
+	inline float reprojectionFLen() const {
+		return _reprojectionFLen;
+	}
+	inline Eigen::Vector2i nsizeCam1() const {
+		return _nsizeCam1;
+	}
+	inline Eigen::Vector2i nsizeCam2() const {
+		return _nsizeCam2;
+	}
+	inline Eigen::Vector2f newPrincipalPointCam1() const {
+		return _nppCam1;
+	}
+	inline Eigen::Vector2f newPrincipalPointCam2() const {
+		return _nppCam2;
+	}
+
 	inline float normalizedBasline() const {
 		return _normalizedBasline;
 	}
