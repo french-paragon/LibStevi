@@ -80,8 +80,6 @@ public:
 		return _backwardMapsComputed;
 	}
 
-protected:
-
 	bool computeOptimalCamsRots();
 	Eigen::Vector2f computeForwardVec(Eigen::Vector2f const& vec,
 									  Eigen::Vector2f const& pp,
@@ -101,6 +99,9 @@ protected:
 	bool computeROIs(TargetRangeSetMethod roiSetMethod);
 	bool computeResolution(TargetRangeSetMethod resolutionSetMethod);
 	bool computeBackwardMaps();
+
+
+protected:
 
 	ShapePreservingTransform _cam2Tocam1;
 

@@ -118,7 +118,7 @@ bool StereoRigRectifier::computeOptimalCamsRots() {
 		return false;
 	}
 
-	dirC2 /= normC1;
+	dirC2 /= normC2;
 
 	if (dirC1.dot(dirC2) < 0.2) { //misaligned cameras
 		return false;
@@ -128,23 +128,48 @@ bool StereoRigRectifier::computeOptimalCamsRots() {
 	Eigen::Vector3f dirMean = (dirC1 + dirC2)/2.;
 	dirMean.normalize();
 
-	Eigen::Vector3f rCam1 = dirC1.cross(dirMean);
+	Eigen::Vector3f rCam1 = forwardCam1.cross(dirMean);
 
 	float normRC1 = rCam1.norm();
 	if (normRC1 > 1e-3) { //large angle
 		rCam1 *= std::asin(normRC1)/normRC1;
 	}
 
-	Eigen::Vector3f rCam2 = dirC2.cross(dirMean);
+	Eigen::Vector3f rCam2 = forwardCam2.cross(dirMean);
 
 	float normRC2 = rCam2.norm();
 	if (normRC2 > 1e-3) { //large angle
 		rCam2 *= std::asin(normRC2)/normRC2;
 	}
 
+	Eigen::Matrix3f RotC1 = rodriguezFormula(rCam1);
+	Eigen::Matrix3f RotC2 = rodriguezFormula(rCam2);
+
+	Eigen::Vector3f xAxisC1(1,0,0);
+	Eigen::Vector3f xAxisC2(1,0,0);
+
+	xAxisC2 = _cam2Tocam1*xAxisC2;
+
+	xAxisC1 = RotC1*xAxisC1;
+	xAxisC2 = RotC2*xAxisC2;
+
+	Eigen::Vector3f aCam1 = xAxisC1.cross(tDir);
+
+	float normAC1 = aCam1.norm();
+	if (normAC1 > 1e-3) { //large angle
+		aCam1 *= std::asin(normAC1)/normAC1;
+	}
+
+	Eigen::Vector3f aCam2 = xAxisC2.cross(tDir);
+
+	float normAC2 = aCam2.norm();
+	if (normAC2 > 1e-3) { //large angle
+		aCam2 *= std::asin(normAC2)/normAC2;
+	}
+
 	_CorrRComputed = true;
-	_CorrRCam1 = rodriguezFormula(rCam1);
-	_CorrRCam2 = rodriguezFormula(rCam2);
+	_CorrRCam1 = rodriguezFormula(aCam1)*RotC1;
+	_CorrRCam2 = rodriguezFormula(aCam2)*RotC2;
 
 	return true;
 }
@@ -157,7 +182,7 @@ Eigen::Vector2f StereoRigRectifier::computeForwardVec(Eigen::Vector2f const& vec
 	v.block<2,1>(0,0) = (vec - pp)/f;
 	v[2] = 1;
 
-	v = R*v;
+	v = R.transpose()*v;
 	v /= v[2];
 
 	return v.block<2,1>(0,0);

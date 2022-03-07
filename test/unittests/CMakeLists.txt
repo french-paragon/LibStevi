@@ -64,3 +64,7 @@ add_test(TestStereoStatistics testStereoStatistics)
 add_executable(testIndexers testIndexers.cpp)
 target_link_libraries(testIndexers ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestIndexers testIndexers)
+
+add_executable(testStereoRigRectifier testStereoRigRectifier.cpp)
+target_link_libraries(testStereoRigRectifier ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestStereoRigRectifier testStereoRigRectifier)
