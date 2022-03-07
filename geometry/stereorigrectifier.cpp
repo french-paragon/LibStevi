@@ -155,10 +155,10 @@ Eigen::Vector2f StereoRigRectifier::computeForwardVec(Eigen::Vector2f const& vec
 								  Eigen::Matrix3f const& R) {
 	Eigen::Vector3f v;
 	v.block<2,1>(0,0) = (vec - pp)/f;
-	v[3] = 1;
+	v[2] = 1;
 
 	v = R*v;
-	v /= v[3];
+	v /= v[2];
 
 	return v.block<2,1>(0,0);
 }
@@ -175,10 +175,10 @@ Eigen::Vector2f StereoRigRectifier::computeBackwardVec(Eigen::Vector2f const& ve
 
 	Eigen::Vector3f v;
 	v.block<2,1>(0,0) = (vec - pp_back)/f_back;
-	v[3] = 1;
+	v[2] = 1;
 
 	v = R*v;
-	v /= v[3];
+	v /= v[2];
 
 	Eigen::Vector2f r = v.block<2,1>(0,0);
 
