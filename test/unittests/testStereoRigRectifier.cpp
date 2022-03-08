@@ -65,35 +65,50 @@ void TestStereoRigRectifier::testAlignementEstimate() {
 
 	QVERIFY2(ok, "Computation of optimal rotations failed for unknown reasons !");
 
-	Eigen::Vector3f xCam1(1,0,0);
-	Eigen::Vector3f xCam2 = RCam2toCam1.transpose()*xCam1;
-
-	Eigen::Vector3f corrXCam1 = rectifier.CorrRCam1()*xCam1;
-	Eigen::Vector3f corrXCam2 = rectifier.CorrRCam2()*xCam2;
-
-	QCOMPARE(corrXCam1.x(), corrXCam2.x());
-	QCOMPARE(corrXCam1.y(), corrXCam2.y());
-	QCOMPARE(corrXCam1.z(), corrXCam2.z());
-
 	Eigen::Vector3f fowardCam1(0,0,1);
-	Eigen::Vector3f fowardCam2 = RCam2toCam1.transpose()*fowardCam1;
 
 	Eigen::Vector3f corrFowardCam1 = rectifier.CorrRCam1()*fowardCam1;
-	Eigen::Vector3f corrFowardCam2 = rectifier.CorrRCam2()*fowardCam2;
+	Eigen::Vector3f corrFowardCam2 = RCam2toCam1*rectifier.CorrRCam2()*fowardCam1;
 
-	QCOMPARE(corrFowardCam1.x(), corrFowardCam2.x());
-	QCOMPARE(corrFowardCam1.y(), corrFowardCam2.y());
-	QCOMPARE(corrFowardCam1.z(), corrFowardCam2.z());
+	QVERIFY2(std::fabs(corrFowardCam1.x() - corrFowardCam2.x()) < 1e-5,
+			 qPrintable(QString("Misaligned corrFoward x coord (%1 and %2)").arg(corrFowardCam1.x()).arg(corrFowardCam2.x())));
+	QVERIFY2(std::fabs(corrFowardCam1.y() - corrFowardCam2.y()) < 1e-5,
+			 qPrintable(QString("Misaligned corrFoward y coord (%1 and %2)").arg(corrFowardCam1.y()).arg(corrFowardCam2.y())));
+	QVERIFY2(std::fabs(corrFowardCam1.z() - corrFowardCam2.z()) < 1e-5,
+			 qPrintable(QString("Misaligned corrFoward z coord (%1 and %2)").arg(corrFowardCam1.z()).arg(corrFowardCam2.z())));
 
 	Eigen::Vector3f yCam1(0,1,0);
-	Eigen::Vector3f yCam2 = RCam2toCam1.transpose()*yCam1;
 
 	Eigen::Vector3f corrYCam1 = rectifier.CorrRCam1()*yCam1;
-	Eigen::Vector3f corrYCam2 = rectifier.CorrRCam2()*yCam2;
+	Eigen::Vector3f corrYCam2 = RCam2toCam1*rectifier.CorrRCam2()*yCam1;
 
-	QCOMPARE(corrYCam1.x(), corrYCam2.x());
-	QCOMPARE(corrYCam1.y(), corrYCam2.y());
-	QCOMPARE(corrYCam1.z(), corrYCam2.z());
+	QVERIFY2(std::fabs(corrYCam1.x() - corrYCam2.x()) < 1e-5,
+			 qPrintable(QString("Misaligned corrY x coord (%1 and %2)").arg(corrYCam1.x()).arg(corrYCam2.x())));
+	QVERIFY2(std::fabs(corrYCam1.y() - corrYCam2.y()) < 1e-5,
+			 qPrintable(QString("Misaligned corrY y coord (%1 and %2)").arg(corrYCam1.y()).arg(corrYCam2.y())));
+	QVERIFY2(std::fabs(corrYCam1.z() - corrYCam2.z()) < 1e-5,
+			 qPrintable(QString("Misaligned corrY z coord (%1 and %2)").arg(corrYCam1.z()).arg(corrYCam2.z())));
+
+	Eigen::Vector3f xCam1(1,0,0);
+
+	Eigen::Vector3f corrXCam1 = rectifier.CorrRCam1()*xCam1;
+	Eigen::Vector3f corrXCam2 = RCam2toCam1*rectifier.CorrRCam2()*xCam1;
+	Eigen::Vector3f normalizedDir = tCam2toCam1;
+	normalizedDir.normalize();
+
+	QVERIFY2(std::fabs(corrXCam1.x() - corrXCam2.x()) < 1e-5,
+			 qPrintable(QString("Misaligned corrX x coord (%1 and %2)").arg(corrXCam1.x()).arg(corrXCam2.x())));
+	QVERIFY2(std::fabs(corrXCam1.y() - corrXCam2.y()) < 1e-5,
+			 qPrintable(QString("Misaligned corrX y coord (%1 and %2)").arg(corrXCam1.y()).arg(corrXCam2.y())));
+	QVERIFY2(std::fabs(corrXCam1.z() - corrXCam2.z()) < 1e-5,
+			 qPrintable(QString("Misaligned corrX z coord (%1 and %2)").arg(corrXCam1.z()).arg(corrXCam2.z())));
+
+	QVERIFY2(std::fabs(corrXCam1.x() - normalizedDir.x()) < 1e-5,
+			 qPrintable(QString("Misaligned corrX x coord (%1 and %2)").arg(corrXCam1.x()).arg(normalizedDir.x())));
+	QVERIFY2(std::fabs(corrXCam1.y() - normalizedDir.y()) < 1e-5,
+			 qPrintable(QString("Misaligned corrX y coord (%1 and %2)").arg(corrXCam1.y()).arg(normalizedDir.y())));
+	QVERIFY2(std::fabs(corrXCam1.z() - normalizedDir.z()) < 1e-5,
+			 qPrintable(QString("Misaligned corrX z coord (%1 and %2)").arg(corrXCam1.z()).arg(normalizedDir.z())));
 
 	for (int i = 0; i < nPointsReplicates; i++) {
 
@@ -106,7 +121,7 @@ void TestStereoRigRectifier::testAlignementEstimate() {
 
 		Eigen::Vector2f ptNormCam2 = ptCam2.block<2,1>(0,0)/ptCam2.z();
 
-		Eigen::Vector3f ptCam1 = Cam2ToCam1*ptCam2;
+		Eigen::Vector3f ptCam1 = RCam2toCam1*ptCam2 + tCam2toCam1;
 
 		Eigen::Vector2f ptNormCam1 = ptCam1.block<2,1>(0,0)/ptCam1.z();
 
@@ -120,7 +135,8 @@ void TestStereoRigRectifier::testAlignementEstimate() {
 																	  1,
 																	  rectifier.CorrRCam2());
 
-		QCOMPARE(ptCorrectedCam1.y(), ptCorrectedCam2.y());
+		QVERIFY2(std::fabs(ptCorrectedCam1.y() - ptCorrectedCam2.y()) < 1e-5,
+				 qPrintable(QString("Misaligned corrected points y coord (%1 and %2)").arg(ptCorrectedCam1.y()).arg(ptCorrectedCam2.y())));
 
 	}
 }
