@@ -474,7 +474,7 @@ bool StereoRigRectifier::computeResolution(TargetRangeSetMethod resolutionSetMet
 	_nppCam1 = -_reprojectionFLen*_ROIC1TopLeft;
 	_nppCam2 = -_reprojectionFLen*_ROIC2TopLeft;
 
-	_normalizedBasline = _reprojectionFLen/_cam2Tocam1.t.norm();
+	_normalizedBasline = _reprojectionFLen*_cam2Tocam1.t.norm();
 	_dispDelta = _nppCam2.x() - _nppCam1.x();
 
 	_refocalLengthComputed = true;
