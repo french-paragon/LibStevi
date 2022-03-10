@@ -42,6 +42,14 @@ Eigen::Array3Xf reprojectPoints(AffineTransform const& T,
 								 Eigen::Array2Xf const& pt_cam_1,
 								 Eigen::Array2Xf const& pt_cam_2);
 
+Eigen::Array3Xf reprojectPointsLstSqr(Eigen::Matrix3f const& R,
+									  Eigen::Vector3f const& t,
+									  Eigen::Array2Xf const& pt_cam_1,
+									  Eigen::Array2Xf const& pt_cam_2);
+Eigen::Array3Xf reprojectPointsLstSqr(AffineTransform const& T,
+									  Eigen::Array2Xf const& pt_cam_1,
+									  Eigen::Array2Xf const& pt_cam_2);
+
 Eigen::Matrix3f estimateEssentialMatrix(Eigen::Array2Xf const& pt_cam_1, Eigen::Array2Xf const& pt_cam_2);
 
 std::pair<AffineTransform, AffineTransform> essentialMatrix2Transforms(Eigen::Matrix3f const& E);

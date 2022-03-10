@@ -154,6 +154,72 @@ Eigen::Array3Xf reprojectPoints(Eigen::Matrix3f const& R,
 }
 
 /*!
+ * \brief reprojectPointsLstSqr is a more robust but more expensive reprojection routine to compute points reprojections (compared to reprojectPoints)
+ * \param T the transform cam1 to cam2
+ * \param pt_cam_1 points in cam1 homogeneous coordinates
+ * \param pt_cam_2 same points in cam2 homogeneous coordinates
+ * \return the points coordinates in cam1 frame
+ */
+Eigen::Array3Xf reprojectPointsLstSqr(AffineTransform const& T,
+									  Eigen::Array2Xf const& pt_cam_1,
+									  Eigen::Array2Xf const& pt_cam_2) {
+	return reprojectPointsLstSqr(T.R, T.t, pt_cam_1, pt_cam_2);
+}
+/*!
+ * \brief reprojectPointsLstSqr is a more robust but more expensive reprojection routine to compute points reprojections (compared to reprojectPoints)
+ * \param R the rotation part of the transform cam1 2 cam2
+ * \param t the translation part of the transform cam1 2 cam2
+ * \param pt_cam_1 points in cam1 homogeneous coordinates
+ * \param pt_cam_2 same points in cam2 homogeneous coordinates
+ * \return the points coordinates in cam1 frame
+ */
+Eigen::Array3Xf reprojectPointsLstSqr(Eigen::Matrix3f const& R,
+									  Eigen::Vector3f const& t,
+									  Eigen::Array2Xf const& pt_cam_1,
+									  Eigen::Array2Xf const& pt_cam_2) {
+
+	typedef Eigen::Matrix<float, 3, 2> MatrixAtype;
+
+	int nPts = pt_cam_1.cols();
+
+	if (pt_cam_1.cols() != pt_cam_2.cols()) {
+		throw GeometricException("Points arrays of different dimensions provided");
+	}
+
+	Eigen::Array3Xf reproj;
+
+	reproj.resize(3,nPts);
+	reproj.topRows(2) = pt_cam_1;
+	reproj.bottomRows(1).setOnes();
+
+	for (int i = 0; i < nPts; i++) {
+		Eigen::Vector3f v2;
+		v2.block<2,1>(0,0) = pt_cam_2.col(i);
+		v2[2] = 1;
+		Eigen::Vector3f v2C1 = R.transpose()*v2;
+		MatrixAtype A;
+		A.col(0) = reproj.col(i);
+		A.col(1) = -v2C1;
+
+		Eigen::Matrix2f invQxx = A.transpose()*A;
+
+		auto svd = invQxx.jacobiSvd(Eigen::ComputeFullU|Eigen::ComputeFullV);
+
+		Eigen::Matrix2f pseudoInverse = svd.matrixV() * (svd.singularValues().array().abs() > 1e-4).select(svd.singularValues().array().inverse(), 0).matrix().asDiagonal() * svd.matrixU().transpose();
+
+		Eigen::Vector2f lambdas = pseudoInverse*A.transpose()*(-R.transpose()*t);
+
+		Eigen::Vector3f est1 = A.col(0)*lambdas[0];
+		Eigen::Vector3f est2 = -A.col(1)*lambdas[1] -R.transpose()*t;
+
+		reproj.col(i) = (est1 + est2)/2.;
+	}
+
+	return reproj;
+
+}
+
+/*!
  * \brief estimateEssentialMatrix estimate the essential matrix between a pair of cameras
  * \param pt_cam_1 points in cam1 homogeneous coordinates (must be at least 8 points)
  * \param pt_cam_2 same points in cam2 homogeneous coordinates
