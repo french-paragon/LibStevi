@@ -64,6 +64,7 @@ set(LIB_SRC
         utils/margins.h
         utils/indexers.h
         statistics/stereo_covering.h
+        imageProcessing/meanShiftClustering.h
 )
 
 add_library(

@@ -105,9 +105,12 @@ void TestL0OptimizationMethods::testRegionFusionL0Approximation() {
 
 			for (int c = 0; c < 3; c++) {
 				float imgVal = img.valueUnchecked(i,j,c);
-				float approxVal = img.valueUnchecked(i,j,c);
+				float approxVal = approx.valueUnchecked(i,j,c);
 
-				QVERIFY2(qFuzzyCompare(imgVal, approxVal) or qFuzzyCompare(avg_color[c], approxVal),
+				float errorVal = imgVal - approxVal;
+				float errorAvg = avg_color[c] - approxVal;
+
+				QVERIFY2(std::fabs(errorVal) < 1e-4 or std::fabs(errorAvg) < 1e-4,
 						 "The approximated color is not either the original image value or the average value.");
 			}
 
