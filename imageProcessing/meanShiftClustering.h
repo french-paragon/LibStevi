@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <MultidimArrays/MultidimArrays.h>
+#include <MultidimArrays/MultidimIndexManipulators.h>
 
 #include <optional>
 #include <functional>
@@ -98,19 +99,21 @@ Multidim::Array<ComputeType, nDim> meanShiftClustering(Multidim::Array<T, nDim> 
 		}
 	}
 
-	typename MDArray::IndexBlock initial_mdarray_index;
+	Multidim::DimsExclusionSet<nDim> excludedDimFilter;
 
-	for (int i = 0; i < nDim; i++) {
-		initial_mdarray_index[i] = 0;
+	if (excludedDim >= 0) {
+		excludedDimFilter = Multidim::DimsExclusionSet<nDim>(excludedDim);
 	}
 
-	typename MDArray::IndexBlock mdarray_index = initial_mdarray_index;
+	const Multidim::IndexConverter<nDim> indexIterator(original.shape(), excludedDimFilter);
 
-	bool go_on = true;
+	int nIdxs = indexIterator.numberOfPossibleIndices();
 
-	while(go_on) {
+	#pragma omp parallel for
+	for (int i = 0; i < nIdxs; i++) {
 
 		std::vector<ComputeType> current(nVecPixs);
+		typename MDArray::IndexBlock mdarray_index = indexIterator.getIndexFromPseudoFlatId(i);
 
 		if (excludedDim >= 0) {
 			for (int i = 0; i < nVecPixs; i++) {
@@ -129,19 +132,15 @@ Multidim::Array<ComputeType, nDim> meanShiftClustering(Multidim::Array<T, nDim> 
 
 		for (int i = 0; i < maxIterations; i++) {
 
-			typename MDArray::IndexBlock cdarray_index = initial_mdarray_index;
-
-			bool sub_go_on = true;
-
 			weight = 0;
-
 			for (int i = 0; i < nVecPixs; i++) {
 				next[i] = 0;
 			}
 
-			while(sub_go_on) {
+			for (int j = 0; j < nIdxs; j++) {
 
 				std::vector<ComputeType> target(nVecPixs);
+				typename MDArray::IndexBlock cdarray_index = indexIterator.getIndexFromPseudoFlatId(j);
 
 				if (excludedDim >= 0) {
 					for (int i = 0; i < nVecPixs; i++) {
@@ -159,21 +158,6 @@ Multidim::Array<ComputeType, nDim> meanShiftClustering(Multidim::Array<T, nDim> 
 				for (int i = 0; i < nVecPixs; i++) {
 					next[i] += v*target[i];
 				}
-
-				//go to next index
-				sub_go_on = false;
-				for (int i = 0; i < nDim; i++) {
-					if (i != excludedDim) {
-						cdarray_index[i]++;
-						if (cdarray_index[i] < original.shape()[i]) { //if the current index could be incremented
-							sub_go_on = true;
-							break; //continue
-						} else { //else se the current index to 0 and move on to increment the next one.
-							cdarray_index[i] = 0;
-						}
-					}
-				}
-				//if the sub loop has not been interrupted, sub_go_on will be false and the main loop will be interrupted.
 			}
 
 			ComputeType rms = 0;
@@ -185,9 +169,7 @@ Multidim::Array<ComputeType, nDim> meanShiftClustering(Multidim::Array<T, nDim> 
 				mean[i] = next[i];
 			}
 
-			rms = std::sqrt(rms);
-
-			if (rms < incrLim) {
+			if (rms < incrLim*incrLim) {
 				break;
 			}
 		}
@@ -201,21 +183,6 @@ Multidim::Array<ComputeType, nDim> meanShiftClustering(Multidim::Array<T, nDim> 
 		} else {
 			clustered.atUnchecked(mdarray_index) = mean[0];
 		}
-
-		//go to next index
-		go_on = false;
-		for (int i = 0; i < nDim; i++) {
-			if (i != excludedDim) {
-				mdarray_index[i]++;
-				if (mdarray_index[i] < original.shape()[i]) { //if the current index could be incremented
-					go_on = true;
-					break; //continue
-				} else { //else se the current index to 0 and move on to increment the next one.
-					mdarray_index[i] = 0;
-				}
-			}
-		}
-		//if the loop has not been interrupted, go_on will be false and the main loop will be interrupted.
 	}
 
 	return clustered;

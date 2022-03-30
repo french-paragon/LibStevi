@@ -132,7 +132,8 @@ void TestImageClusteringAlgorithms::testMeanShiftClustering() {
 				float errorAvg = avg_color[c] - approxVal;
 
 				QVERIFY2(std::fabs(errorVal) < 1e-4 or std::fabs(errorAvg) < 1e-4,
-						 "The approximated color is not either the original image value or the average value.");
+						 qPrintable(QString("The approximated color is not either the original image value or the average value (error val = %1, error avg = %2).")
+									.arg(errorVal).arg(errorAvg)));
 			}
 
 		}
