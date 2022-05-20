@@ -111,6 +111,15 @@ public:
 		return _lowerOffsets[dim];
 	}
 
+	template<int dim>
+	inline bool valueInRange(int val) const {
+		return val >= _lowerOffsets[dim] and val <= _upperOffsets[dim];
+	}
+
+	inline bool valueInRange(int val, int dim) const {
+		return val >= _lowerOffsets[dim] and val <= _upperOffsets[dim];
+	}
+
 private:
 	std::array<disp_t,nDim> _upperOffsets;
 	std::array<disp_t,nDim> _lowerOffsets;

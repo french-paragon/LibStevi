@@ -46,6 +46,7 @@ set(LIB_SRC
         interpolation/lensdistortionsmap.cpp
         interpolation/lensdistortionsmap.h
         interpolation/downsampling.h
+        correlation/matching_costs.h
         correlation/correlation_base.h
         correlation/unfold.h
         correlation/unfold.cpp
@@ -55,6 +56,7 @@ set(LIB_SRC
         correlation/cost_based_refinement.h
         correlation/sgm.h
         correlation/hierarchical.h
+        correlation/patchmatch.h
         optimization/l0optimization.h
         optimization/l1optimization.h
         optimization/l2optimization.h
@@ -63,6 +65,7 @@ set(LIB_SRC
         utils/contiguity.h
         utils/margins.h
         utils/indexers.h
+        utils/propagation_direction.h
         statistics/stereo_covering.h
         imageProcessing/meanShiftClustering.h
 )
