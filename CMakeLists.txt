@@ -5,6 +5,7 @@ set(STEREOVISION_LIB ${STEREOVISION_LIB} PARENT_SCOPE)
 project(lib${STEREOVISION_LIB} LANGUAGES CXX)
 
 option(buildTests "Build the test suits for the library" ON)
+option(buildExamples "Build the examples for the library" ON)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
@@ -68,6 +69,7 @@ set(LIB_SRC
         utils/propagation_direction.h
         statistics/stereo_covering.h
         imageProcessing/meanShiftClustering.h
+        io/image_io.h
 )
 
 add_library(
@@ -89,3 +91,14 @@ set(CMAKE_AUTOMOC ON)
 add_subdirectory(test)
 
 endif(buildTests)
+
+if (buildExamples)
+
+    find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Gui REQUIRED)
+    find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Gui REQUIRED)
+
+    set(CMAKE_AUTOMOC ON)
+
+add_subdirectory(examples)
+
+endif (buildExamples)
