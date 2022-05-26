@@ -376,9 +376,25 @@ void BenchmarkCrossCorrelationAlgorithms::benchmarkHierarchicalAlgorithm_data() 
 	return;
 	#endif
 
+	QTest::newRow("Standard definition img - 5x5 windows - level1 - disp 20 - zncc") << 1 << StereoVision::Correlation::matchingFunctions::ZNCC << StandardDefinition << 2 << 2 << 20;
+	QTest::newRow("Standard definition img - 5x5 windows - level2 - disp 20 - zncc") << 2 << StereoVision::Correlation::matchingFunctions::ZNCC << StandardDefinition << 2 << 2 << 20;
+	QTest::newRow("Standard definition img - 5x5 windows - level3 - disp 20 - zncc") << 3 << StereoVision::Correlation::matchingFunctions::ZNCC << StandardDefinition << 2 << 2 << 20;
+
 	QTest::newRow("Standard definition img - 5x5 windows - level1 - disp 160 - zncc") << 1 << StereoVision::Correlation::matchingFunctions::ZNCC << StandardDefinition << 2 << 2 << 160;
 	QTest::newRow("Standard definition img - 5x5 windows - level2 - disp 160 - zncc") << 2 << StereoVision::Correlation::matchingFunctions::ZNCC << StandardDefinition << 2 << 2 << 160;
 	QTest::newRow("Standard definition img - 5x5 windows - level3 - disp 160 - zncc") << 3 << StereoVision::Correlation::matchingFunctions::ZNCC << StandardDefinition << 2 << 2 << 160;
+
+	QTest::newRow("Standard definition img - 5x5 windows - level1 - disp 300 - zncc") << 1 << StereoVision::Correlation::matchingFunctions::ZNCC << StandardDefinition << 2 << 2 << 300;
+	QTest::newRow("Standard definition img - 5x5 windows - level2 - disp 300 - zncc") << 2 << StereoVision::Correlation::matchingFunctions::ZNCC << StandardDefinition << 2 << 2 << 300;
+	QTest::newRow("Standard definition img - 5x5 windows - level3 - disp 300 - zncc") << 3 << StereoVision::Correlation::matchingFunctions::ZNCC << StandardDefinition << 2 << 2 << 300;
+
+	QTest::newRow("Standard definition img - 7x7 windows - level1 - disp 20 - zncc") << 1 << StereoVision::Correlation::matchingFunctions::ZNCC << StandardDefinition << 3 << 3 << 20;
+	QTest::newRow("Standard definition img - 7x7 windows - level2 - disp 20 - zncc") << 2 << StereoVision::Correlation::matchingFunctions::ZNCC << StandardDefinition << 3 << 3 << 20;
+	QTest::newRow("Standard definition img - 7x7 windows - level3 - disp 20 - zncc") << 3 << StereoVision::Correlation::matchingFunctions::ZNCC << StandardDefinition << 3 << 3 << 20;
+
+	QTest::newRow("Standard definition img - 7x7 windows - level1 - disp 160 - zncc") << 1 << StereoVision::Correlation::matchingFunctions::ZNCC << StandardDefinition << 3 << 3 << 160;
+	QTest::newRow("Standard definition img - 7x7 windows - level2 - disp 160 - zncc") << 2 << StereoVision::Correlation::matchingFunctions::ZNCC << StandardDefinition << 3 << 3 << 160;
+	QTest::newRow("Standard definition img - 7x7 windows - level3 - disp 160 - zncc") << 3 << StereoVision::Correlation::matchingFunctions::ZNCC << StandardDefinition << 3 << 3 << 160;
 
 	QTest::newRow("High definition img - 7x7 windows - level1 - disp 320 - zncc") << 1 << StereoVision::Correlation::matchingFunctions::ZNCC << HighDefinition << 3 << 3 << 320;
 	QTest::newRow("High definition img - 7x7 windows - level2 - disp 320 - zncc") << 2 << StereoVision::Correlation::matchingFunctions::ZNCC << HighDefinition << 3 << 3 << 320;

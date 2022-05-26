@@ -124,13 +124,13 @@ inline int patchMatchTestCost(Multidim::Array<disp_t, 3> & solution,
 
 	int n_changed = 0;
 
-	typename Multidim::Array<T_FV, 3>::IndexBlock targetPos = {i+disp_i, j+disp_j, 0};
+	typename Multidim::Array<T_FV, 3>::IndexBlock targetPos({i+disp_i, j+disp_j, 0});
 
 	Multidim::Array<T_FV, 1> targetVec;
 	if (searchOffset.has_value()) {
 
 		if (targetPos.isInLimit(t_shape)) {
-			targetVec = feature_vol_t.subView(Multidim::DimIndex(targetPos[0]), Multidim::DimIndex(targetPos[1]), Multidim::DimSlice());
+			targetVec = const_cast<Multidim::Array<T_FV, 3>*>(&feature_vol_t)->subView(Multidim::DimIndex(targetPos[0]), Multidim::DimIndex(targetPos[1]), Multidim::DimSlice());
 		} else {
 			targetVec = defaultFeature;
 		}
@@ -138,11 +138,11 @@ inline int patchMatchTestCost(Multidim::Array<disp_t, 3> & solution,
 	} else {
 		targetPos.clip(t_shape);
 
-		targetVec = feature_vol_t.subView(Multidim::DimIndex(targetPos[0]), Multidim::DimIndex(targetPos[1]), Multidim::DimSlice());
+		targetVec = const_cast<Multidim::Array<T_FV, 3>*>(&feature_vol_t)->subView(Multidim::DimIndex(targetPos[0]), Multidim::DimIndex(targetPos[1]), Multidim::DimSlice());
 	}
 
 	if (targetPos.isInLimit(t_shape)) {
-		Multidim::Array<T_FV, 1> targetVec = feature_vol_t.subView(Multidim::DimIndex(i+disp_i), Multidim::DimIndex(j+disp_j), Multidim::DimSlice());
+		Multidim::Array<T_FV, 1> targetVec = const_cast<Multidim::Array<T_FV, 3>*>(&feature_vol_t)->subView(Multidim::DimIndex(i+disp_i), Multidim::DimIndex(j+disp_j), Multidim::DimSlice());
 	}
 
 	float candidateCost = MatchingFunctionTraits<matchFunc>::featureComparison(sourceVec, targetVec);
@@ -191,7 +191,7 @@ int patchMatchSearch(Multidim::Array<disp_t, 3> & solution,
 	Multidim::Array<T_FV, 1> zerofeature(feature_vol_s.shape()[2]);
 
 	for (int i = 0; i < shape[2]; i++) {
-		zerofeature.at<Nc>(i) = 0;
+		zerofeature.template at<Nc>(i) = 0;
 	}
 
 	int n_changed = 0;
@@ -238,7 +238,7 @@ int patchMatchSearch(Multidim::Array<disp_t, 3> & solution,
 		for (int i = 0; i < shape[0]; i++) {
 			for (int j = 0; j < shape[1]; j++) {
 
-				Multidim::Array<T_FV, 1> sourceVec = feature_vol_s.subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
+				Multidim::Array<T_FV, 1> sourceVec = const_cast<Multidim::Array<T_FV, 3>*>(&feature_vol_s)->subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
 				Multidim::Array<disp_t, 1> dispVec = solution.subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
 
 				disp_t disp_i_b;
@@ -351,25 +351,26 @@ int patchMatchPropagate(Multidim::Array<disp_t, 3> & solution,
 	Multidim::Array<T_FV, 1> zerofeature(feature_vol_s.shape()[2]);
 
 	for (int i = 0; i < shape[2]; i++) {
-		zerofeature.at<Nc>(i) = 0;
+		zerofeature.template at<Nc>(i) = 0;
 	}
 
 	int n_changed = 0;
 
-	PropagationDirection::IndexRange irange = PropagationDirection::initialAndFinalPos(shape[0]);
-	PropagationDirection::IndexRange jrange = PropagationDirection::initialAndFinalPos(shape[1]);
+	PropagationDirection::IndexRange irange = PropagationDirection::initialAndFinalPos<increments[0]>(shape[0]);
+	PropagationDirection::IndexRange jrange = PropagationDirection::initialAndFinalPos<increments[1]>(shape[1]);
 
-	for (int i = irange.initial; i != irange.final; i += increments[0]) {
 
-		int p_i = i - increments[0];
+	//lines scans
+	#pragma omp parallel for
+	for (int i = 0; i < shape[0]; i++) {
 
 		for (int j = jrange.initial; j != jrange.final; j += increments[1]) {
 
-			Multidim::Array<T_FV, 1> sourceVec = feature_vol_s.subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
+			Multidim::Array<T_FV, 1> sourceVec = const_cast<Multidim::Array<T_FV, 3>*>(&feature_vol_s)->subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
 
 			int p_j = j - increments[1];
 
-			if (p_j <= 0 and p_j < shape[1]) {
+			if (p_j >= 0 and p_j < shape[1]) {
 				Multidim::Array<disp_t, 1> dispVec = solution.subView(Multidim::DimIndex(i), Multidim::DimIndex(p_j), Multidim::DimSlice());
 
 				disp_t disp_i = (searchSpaceDim == 2) ? dispVec.at<Nc>(0) : 0;
@@ -390,54 +391,42 @@ int patchMatchPropagate(Multidim::Array<disp_t, 3> & solution,
 						 zerofeature);
 
 			}
+		}
+	}
 
-			if (searchSpaceDim == 2) {
-				if (p_i <= 0 and p_i < shape[0]) {
+	//columns scans
+	#pragma omp parallel for
+	for (int j = 0; j < shape[1]; j++) {
 
-					Multidim::Array<disp_t, 1> dispVec = solution.subView(Multidim::DimIndex(p_i), Multidim::DimIndex(j), Multidim::DimSlice());
+		for (int i = irange.initial; i != irange.final; i += increments[0]) {
 
-					disp_t disp_i = dispVec.at<Nc>(0);
-					disp_t disp_j = dispVec.at<Nc>(1);
+			Multidim::Array<T_FV, 1> sourceVec = const_cast<Multidim::Array<T_FV, 3>*>(&feature_vol_s)->subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
 
-					n_changed += patchMatchTestCost
-							<matchFunc, searchSpaceDim, T_FV>
-							(solution,
-							 currentCost,
-							 feature_vol_s,
-							 feature_vol_t,
-							 searchOffset,
-							 sourceVec,
-							 i,
-							 j,
-							 disp_i,
-							 disp_j,
-							 zerofeature);
+			int p_i = i - increments[0];
 
-					if (p_j <= 0 and p_j < shape[0]) {
+			if (p_i >= 0 and p_i < shape[0]) {
+				Multidim::Array<disp_t, 1> dispVec = solution.subView(Multidim::DimIndex(p_i), Multidim::DimIndex(j), Multidim::DimSlice());
 
-						dispVec = solution.subView(Multidim::DimIndex(p_i), Multidim::DimIndex(p_j), Multidim::DimSlice());
+				disp_t disp_i = (searchSpaceDim == 2) ? dispVec.at<Nc>(0) : 0;
+				disp_t disp_j = (searchSpaceDim == 2) ? dispVec.at<Nc>(1) : dispVec.at<Nc>(0);
 
-						disp_t disp_i = dispVec.at<Nc>(0);
-						disp_t disp_j = dispVec.at<Nc>(1);
+				n_changed += patchMatchTestCost
+						<matchFunc, searchSpaceDim, T_FV>
+						(solution,
+						 currentCost,
+						 feature_vol_s,
+						 feature_vol_t,
+						 searchOffset,
+						 sourceVec,
+						 i,
+						 j,
+						 disp_i,
+						 disp_j,
+						 zerofeature);
 
-						n_changed += patchMatchTestCost
-								<matchFunc, searchSpaceDim, T_FV>
-								(solution,
-								 currentCost,
-								 feature_vol_s,
-								 feature_vol_t,
-								 searchOffset,
-								 sourceVec,
-								 i,
-								 j,
-								 disp_i,
-								 disp_j,
-								 zerofeature);
-					}
-
-				}
 			}
 		}
+
 	}
 
 	return n_changed;
@@ -468,37 +457,37 @@ Multidim::Array<disp_t, 3> patchMatch(Multidim::Array<T_FV, 3> const& feature_vo
 	}
 
 	if (initializer.has_value()) {
-		disp = initializer(feature_vol_s, feature_vol_t);
+		disp = initializer.value()(feature_vol_s, feature_vol_t);
 	} else {
 		disp = randomDispInit<searchSpaceDim>({feature_vol_s.shape()[0], feature_vol_s.shape()[1]},
 											  {feature_vol_t.shape()[0], feature_vol_t.shape()[1]},
 											  searchOffset);
 	}
 
-	Multidim::Array<float, 2> & currentCost(feature_vol_s.shape());
+	Multidim::Array<float, 2> currentCost(feature_vol_s.shape()[0], feature_vol_s.shape()[1]);
 	Multidim::Array<T_FV, 1> zerofeature(feature_vol_s.shape()[2]);
 
 	for (int i = 0; i < feature_vol_s.shape()[2]; i++) {
-		zerofeature.at<Nc>(i) = 0;
+		zerofeature.template at<Nc>(i) = 0;
 	}
 
 	for (int i = 0; i < feature_vol_s.shape()[0]; i++) {
 		for (int j = 0; j < feature_vol_s.shape()[1]; j++) {
 
-			Multidim::Array<T_FV, 1> sourceVec = feature_vol_s.subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
+			Multidim::Array<T_FV, 1> sourceVec = const_cast<Multidim::Array<T_FV, 3>*>(&feature_vol_s)->subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
 
 			Multidim::Array<disp_t, 1> dispVec = disp.subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
 
 			disp_t disp_i = (searchSpaceDim == 2) ? dispVec.at<Nc>(0) : 0;
 			disp_t disp_j = (searchSpaceDim == 2) ? dispVec.at<Nc>(1) : dispVec.at<Nc>(0);
 
-			typename Multidim::Array<T_FV, 3>::IndexBlock targetPos = {i+disp_i, j+disp_j, 0};
+			typename Multidim::Array<T_FV, 3>::IndexBlock targetPos({i+disp_i, j+disp_j, 0});
 
 			Multidim::Array<T_FV, 1> targetVec;
 			if (searchOffset.has_value()) {
 
 				if (targetPos.isInLimit(feature_vol_t.shape())) {
-					targetVec = feature_vol_t.subView(Multidim::DimIndex(targetPos[0]), Multidim::DimIndex(targetPos[1]), Multidim::DimSlice());
+					targetVec = const_cast<Multidim::Array<T_FV, 3>*>(&feature_vol_t)->subView(Multidim::DimIndex(targetPos[0]), Multidim::DimIndex(targetPos[1]), Multidim::DimSlice());
 				} else {
 					targetVec = zerofeature;
 				}
@@ -513,7 +502,7 @@ Multidim::Array<disp_t, 3> patchMatch(Multidim::Array<T_FV, 3> const& feature_vo
 					dispVec.at<Nc>(1) = targetPos[1];
 				}
 
-				targetVec = feature_vol_t.subView(Multidim::DimIndex(targetPos[0]), Multidim::DimIndex(targetPos[1]), Multidim::DimSlice());
+				targetVec = const_cast<Multidim::Array<T_FV, 3>*>(&feature_vol_t)->subView(Multidim::DimIndex(targetPos[0]), Multidim::DimIndex(targetPos[1]), Multidim::DimSlice());
 			}
 
 			currentCost.at<Nc>(i,j) = MatchingFunctionTraits<matchFunc>::featureComparison(sourceVec, targetVec);
@@ -527,23 +516,23 @@ Multidim::Array<disp_t, 3> patchMatch(Multidim::Array<T_FV, 3> const& feature_vo
 		switch (i % 4) {
 		case 0:
 			nChanges += patchMatchPropagate<PropagationDirection::TopLeftToBottomRight, matchFunc, searchSpaceDim, T_FV>
-					(disp, feature_vol_s, feature_vol_t, searchOffset);
+					(disp, currentCost, feature_vol_s, feature_vol_t, searchOffset);
 			break;
 		case 1:
 			nChanges += patchMatchPropagate<PropagationDirection::TopRightToBottomLeft, matchFunc, searchSpaceDim, T_FV>
-					(disp, feature_vol_s, feature_vol_t, searchOffset);
+					(disp, currentCost, feature_vol_s, feature_vol_t, searchOffset);
 			break;
 		case 2:
 			nChanges += patchMatchPropagate<PropagationDirection::BottomLeftToTopRight, matchFunc, searchSpaceDim, T_FV>
-					(disp, feature_vol_s, feature_vol_t, searchOffset);
+					(disp, currentCost, feature_vol_s, feature_vol_t, searchOffset);
 			break;
 		default:
 			nChanges += patchMatchPropagate<PropagationDirection::BottomRightToTopLeft, matchFunc, searchSpaceDim, T_FV>
-					(disp, feature_vol_s, feature_vol_t, searchOffset);
+					(disp, currentCost, feature_vol_s, feature_vol_t, searchOffset);
 			break;
 		}
 
-		nChanges += patchMatchSearch<matchFunc, searchSpaceDim, T_FV>(disp, feature_vol_s, feature_vol_t, searchOffset, nRandomSearch);
+		nChanges += patchMatchSearch<matchFunc, searchSpaceDim, T_FV>(disp, currentCost, feature_vol_s, feature_vol_t, searchOffset, nRandomSearch);
 
 		if (nChanges == 0) { //no changes mean we can break early
 			break;

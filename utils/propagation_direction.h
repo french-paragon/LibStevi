@@ -37,26 +37,6 @@ template<Direction dir>
 class Traits{
 };
 
-template<>
-class Traits<TopLeftToBottomRight>{
-	constexpr static std::array<int, 2> increments = {1, 1};
-};
-
-template<>
-class Traits<TopRightToBottomLeft>{
-	constexpr static std::array<int, 2> increments = {1, -1};
-};
-
-template<>
-class Traits<BottomLeftToTopRight>{
-	constexpr static std::array<int, 2> increments = {-1, 1};
-};
-
-template<>
-class Traits<BottomRightToTopLeft>{
-	constexpr static std::array<int, 2> increments = {-1, -1};
-};
-
 struct IndexRange{
 	int initial;
 	int final;
@@ -71,7 +51,7 @@ static constexpr IndexRange initialAndFinalPos(int rangeSize) {
 	int final = rangeSize;
 
 	if (increment == -1) {
-		initial = rangeSize;
+		initial = rangeSize-1;
 		final = 0;
 	}
 
@@ -80,6 +60,30 @@ static constexpr IndexRange initialAndFinalPos(int rangeSize) {
 
 
 }; //class PropagationDirection
+
+template<>
+class PropagationDirection::Traits<PropagationDirection::TopLeftToBottomRight>{
+    public:
+        constexpr static std::array<int, 2> increments = {1, 1};
+};
+
+template<>
+class PropagationDirection::Traits<PropagationDirection::TopRightToBottomLeft>{
+    public:
+        constexpr static std::array<int, 2> increments = {1, -1};
+};
+
+template<>
+class PropagationDirection::Traits<PropagationDirection::BottomLeftToTopRight>{
+    public:
+        constexpr static std::array<int, 2> increments = {-1, 1};
+};
+
+template<>
+class PropagationDirection::Traits<PropagationDirection::BottomRightToTopLeft>{
+    public:
+        constexpr static std::array<int, 2> increments = {-1, -1};
+};
 
 } //namespace StereoVision
 
