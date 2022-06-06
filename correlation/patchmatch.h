@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "./cross_correlations.h"
 
 #include "../utils/propagation_direction.h"
+#include "../utils/randomcache.h"
 
 #include <random>
 
@@ -36,7 +37,8 @@ struct PatchMatchTraits {
 template<int searchSpaceDim>
 Multidim::Array<disp_t, 3> randomDispInit(std::array<int, 3> s_shape,
 										  std::array<int, 3> t_shape,
-										  std::optional<searchOffset<searchSpaceDim>> searchOffset)
+										  std::optional<searchOffset<searchSpaceDim>> searchOffset,
+										  std::optional<StereoVision::Random::NumbersCache<int>> randcache = std::nullopt)
 {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
@@ -58,6 +60,12 @@ Multidim::Array<disp_t, 3> randomDispInit(std::array<int, 3> s_shape,
 		}
 
 		std::default_random_engine re(seed);
+		StereoVision::Random::NumbersCache<int> rnc;
+
+		if (randcache.has_value()) {
+			rnc = randcache.value();
+			rnc.seed(seed);
+		}
 
 		std::uniform_int_distribution<disp_t> range1;
 		std::uniform_int_distribution<disp_t> range2;
@@ -77,27 +85,58 @@ Multidim::Array<disp_t, 3> randomDispInit(std::array<int, 3> s_shape,
 			}
 		}
 
-		#pragma omp for
-		for (int i = 0; i < disp.shape()[0]; i++) {
-			for (int j = 0; j < disp.shape()[1]; j++) {
-				if (searchOffset.has_value()) {
 
-					disp.at<Nc>(i,j,0) = range1(re);
-					if (searchSpaceDim == 2) {
-						disp.at<Nc>(i,j,1) = range2(re);
-					}
 
-				} else {
+		if (randcache.has_value()) {
 
-					if (searchSpaceDim == 1) {
-						disp.at<Nc>(i,j,0) = ((range1(re) + j) % t_shape[1])-j;
+			#pragma omp for
+			for (int i = 0; i < disp.shape()[0]; i++) {
+				for (int j = 0; j < disp.shape()[1]; j++) {
+					if (searchOffset.has_value()) {
+
+						disp.at<Nc>(i,j,0) = searchOffset.value().template setValueInRange<0>(rnc());
+						if (searchSpaceDim == 2) {
+							disp.at<Nc>(i,j,1) = searchOffset.value().template setValueInRange<1>(rnc());
+						}
+
 					} else {
-						disp.at<Nc>(i,j,0) = ((range1(re) + i) % t_shape[0])-i;
-						disp.at<Nc>(i,j,1) = ((range2(re) + j) % t_shape[1])-j;
-					}
 
+						if (searchSpaceDim == 1) {
+							disp.at<Nc>(i,j,0) = ((searchOffset.value().template setValueInRange<0>(rnc()) + j) % t_shape[1])-j;
+						} else {
+							disp.at<Nc>(i,j,0) = ((searchOffset.value().template setValueInRange<0>(rnc()) + i) % t_shape[0])-i;
+							disp.at<Nc>(i,j,1) = ((searchOffset.value().template setValueInRange<1>(rnc()) + j) % t_shape[1])-j;
+						}
+
+					}
 				}
 			}
+
+		} else {
+
+			#pragma omp for
+			for (int i = 0; i < disp.shape()[0]; i++) {
+				for (int j = 0; j < disp.shape()[1]; j++) {
+					if (searchOffset.has_value()) {
+
+						disp.at<Nc>(i,j,0) = range1(re);
+						if (searchSpaceDim == 2) {
+							disp.at<Nc>(i,j,1) = range2(re);
+						}
+
+					} else {
+
+						if (searchSpaceDim == 1) {
+							disp.at<Nc>(i,j,0) = ((range1(re) + j) % t_shape[1])-j;
+						} else {
+							disp.at<Nc>(i,j,0) = ((range1(re) + i) % t_shape[0])-i;
+							disp.at<Nc>(i,j,1) = ((range2(re) + j) % t_shape[1])-j;
+						}
+
+					}
+				}
+			}
+
 		}
 	}
 
@@ -181,7 +220,8 @@ int patchMatchSearch(Multidim::Array<disp_t, 3> & solution,
 					 Multidim::Array<T_FV, 3> const& feature_vol_s,
 					 Multidim::Array<T_FV, 3> const& feature_vol_t,
 					 std::optional<searchOffset<searchSpaceDim>> searchOffset,
-					 int nRandomSearch) {
+					 int nRandomSearch,
+					 std::optional<StereoVision::Random::NumbersCache<int>> randcache = std::nullopt) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -214,6 +254,12 @@ int patchMatchSearch(Multidim::Array<disp_t, 3> & solution,
 		}
 
 		std::default_random_engine re(seed);
+		StereoVision::Random::NumbersCache<int> rnc;
+
+		if (randcache.has_value()) {
+			rnc = randcache.value();
+			rnc.seed(seed);
+		}
 
 		std::uniform_int_distribution<disp_t> range1;
 		std::uniform_int_distribution<disp_t> range2;
@@ -261,11 +307,22 @@ int patchMatchSearch(Multidim::Array<disp_t, 3> & solution,
 
 					if (searchSpaceDim == 1) {
 						disp_i = 0;
-						disp_j = range1(re);
+
+						if (randcache.has_value()) {
+							disp_j = searchOffset.value().template setValueInRange<0>(rnc());
+						} else {
+							disp_j = range1(re);
+						}
 
 					} else if (searchSpaceDim == 2) {
-						disp_i = range1(re);
-						disp_j = range2(re);
+
+						if (randcache.has_value()) {
+							disp_i = searchOffset.value().template setValueInRange<0>(rnc());
+							disp_j = searchOffset.value().template setValueInRange<1>(rnc());
+						} else {
+							disp_i = range1(re);
+							disp_j = range2(re);
+						}
 					}
 
 					if (!searchOffset.has_value()) {
@@ -438,7 +495,8 @@ Multidim::Array<disp_t, 3> patchMatch(Multidim::Array<T_FV, 3> const& feature_vo
 									  std::optional<searchOffset<searchSpaceDim>> searchOffset = std::nullopt,
 									  int nIter = 5,
 									  int nRandomSearch = 4,
-									  std::optional<typename PatchMatchTraits<T_FV>::PatchMatchInitializer> initializer = std::nullopt) {
+									  std::optional<typename PatchMatchTraits<T_FV>::PatchMatchInitializer> initializer = std::nullopt,
+									  std::optional<StereoVision::Random::NumbersCache<int>> randcache = std::nullopt) {
 
 	static_assert (searchSpaceDim == 1 or searchSpaceDim == 2, "patchMatch function can only be used to search in 1 or two dimension !");
 
@@ -461,7 +519,8 @@ Multidim::Array<disp_t, 3> patchMatch(Multidim::Array<T_FV, 3> const& feature_vo
 	} else {
 		disp = randomDispInit<searchSpaceDim>({feature_vol_s.shape()[0], feature_vol_s.shape()[1]},
 											  {feature_vol_t.shape()[0], feature_vol_t.shape()[1]},
-											  searchOffset);
+											  searchOffset,
+											  randcache);
 	}
 
 	Multidim::Array<float, 2> currentCost(feature_vol_s.shape()[0], feature_vol_s.shape()[1]);
@@ -532,7 +591,13 @@ Multidim::Array<disp_t, 3> patchMatch(Multidim::Array<T_FV, 3> const& feature_vo
 			break;
 		}
 
-		nChanges += patchMatchSearch<matchFunc, searchSpaceDim, T_FV>(disp, currentCost, feature_vol_s, feature_vol_t, searchOffset, nRandomSearch);
+		nChanges += patchMatchSearch<matchFunc, searchSpaceDim, T_FV>(disp,
+																	  currentCost,
+																	  feature_vol_s,
+																	  feature_vol_t,
+																	  searchOffset,
+																	  nRandomSearch,
+																	  randcache);
 
 		if (nChanges == 0) { //no changes mean we can break early
 			break;

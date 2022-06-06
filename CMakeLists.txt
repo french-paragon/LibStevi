@@ -67,6 +67,7 @@ set(LIB_SRC
         utils/margins.h
         utils/indexers.h
         utils/propagation_direction.h
+        utils/randomcache.h
         statistics/stereo_covering.h
         imageProcessing/meanShiftClustering.h
         io/image_io.h

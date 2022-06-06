@@ -111,6 +111,17 @@ public:
 		return _lowerOffsets[dim];
 	}
 
+
+
+	template<int dim>
+	int dimRange() const {
+		return _upperOffsets[dim] - _lowerOffsets[dim];
+	}
+
+	int dimRange(int dim) const {
+		return _upperOffsets[dim] - _lowerOffsets[dim];
+	}
+
 	template<int dim>
 	inline bool valueInRange(int val) const {
 		return val >= _lowerOffsets[dim] and val <= _upperOffsets[dim];
@@ -118,6 +129,15 @@ public:
 
 	inline bool valueInRange(int val, int dim) const {
 		return val >= _lowerOffsets[dim] and val <= _upperOffsets[dim];
+	}
+
+	template<int dim>
+	inline int setValueInRange(int val) const {
+		return std::abs(val%dimRange<dim>())+lowerOffset<dim>();
+	}
+
+	inline int setValueInRange(int val, int dim) const {
+		return std::abs(val%dimRange(dim))+lowerOffset(dim);
 	}
 
 private:

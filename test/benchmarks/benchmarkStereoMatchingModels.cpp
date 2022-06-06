@@ -11,11 +11,12 @@
 #include "correlation/hierarchical.h"
 #include "correlation/patchmatch.h"
 #include "io/image_io.h"
+#include "utils/randomcache.h"
 
 using namespace StereoVision::Correlation;
 
-typedef Multidim::Array<disp_t, 2> (*dispFuncFloat)(Multidim::Array<float, 3> const&, Multidim::Array<float, 3> const&);
-typedef Multidim::Array<disp_t, 2> (*dispFuncByte)(Multidim::Array<uint8_t, 3> const&, Multidim::Array<uint8_t, 3> const&);
+typedef Multidim::Array<disp_t, 2> (*dispFuncFloat)(Multidim::Array<float, 3> const&, Multidim::Array<float, 3> const&, StereoVision::Random::NumbersCache<int>*);
+typedef Multidim::Array<disp_t, 2> (*dispFuncByte)(Multidim::Array<uint8_t, 3> const&, Multidim::Array<uint8_t, 3> const&, StereoVision::Random::NumbersCache<int>*);
 
 struct dispFuncF {
 	dispFuncFloat dispFunc;
@@ -71,6 +72,9 @@ private:
 	};
 
 	QVector<testImageInfo> _test_imgs;
+
+	std::default_random_engine re;
+	StereoVision::Random::NumbersCache<int> _random_cache;
 };
 
 void BenchmarkStereoMatchingModels::initTestCase() {
@@ -160,19 +164,33 @@ void BenchmarkStereoMatchingModels::initTestCase() {
 	if (_test_imgs.isEmpty()) {
 		QSKIP("found no images to process");
 	}
+
+	std::random_device rd;
+	re.seed(rd());
+
+	_random_cache = StereoVision::Random::NumbersCache<int>(1<<16, re);
 }
 
 template<matchingFunctions matchFunc, typename T_IMG, int searchRadius, int searchDist, int nIter, int nRandomSearch>
-Multidim::Array<disp_t, 2> testPatchMatch(Multidim::Array<T_IMG, 3> const& img_left, Multidim::Array<T_IMG, 3> const& img_right) {
+Multidim::Array<disp_t, 2> testPatchMatch(Multidim::Array<T_IMG, 3> const& img_left,
+										  Multidim::Array<T_IMG, 3> const& img_right,
+										  StereoVision::Random::NumbersCache<int>* rngCache) {
 
 	Multidim::Array<T_IMG, 3> fVolLeft = unfold<T_IMG, T_IMG>(searchRadius, searchRadius, img_left);
 	Multidim::Array<T_IMG, 3> fVolRight = unfold<T_IMG, T_IMG>(searchRadius, searchRadius, img_right);
+
+	std::optional<StereoVision::Random::NumbersCache<int>> optCache = std::nullopt;
+	if (rngCache != nullptr) {
+		optCache = *rngCache;
+	}
 
 	Multidim::Array<disp_t, 3> out = patchMatch<matchFunc, 1, T_IMG>(fVolRight,
 																	 fVolLeft,
 																	 searchOffset<1>(0,searchDist),
 																	 nIter,
-																	 nRandomSearch);
+																	 nRandomSearch,
+																	 std::nullopt,
+																	 optCache);
 
 
 	disp_t* data = out.takePointer(); //take the pointer instead of getting a view, to ensure move semantic can be used to move the resulting array once converted.
@@ -185,14 +203,20 @@ Multidim::Array<disp_t, 2> testPatchMatch(Multidim::Array<T_IMG, 3> const& img_l
 void BenchmarkStereoMatchingModels::benchmarkFloatDispFunc_data() {
 
 	QTest::addColumn<dispFuncF>("disp_function");
+	QTest::addColumn<bool>("useRngCache");
 
 
-	QTest::newRow("testPatchMatch<cost = matchingFunctions::NCC, type = float, searchRadius = 3, searchRange = 120, niter = 5, nRandomSearch = 4>")
-			<< dispFuncF({testPatchMatch<matchingFunctions::NCC,float,3,120,5,4>});
+	QTest::newRow("testPatchMatch<cost = matchingFunctions::NCC, type = float, searchRadius = 3, searchRange = 120, niter = 5, nRandomSearch = 4> (no rng cache)")
+			<< dispFuncF({testPatchMatch<matchingFunctions::NCC,float,3,120,5,4>}) << false;
+
+
+	QTest::newRow("testPatchMatch<cost = matchingFunctions::NCC, type = float, searchRadius = 3, searchRange = 120, niter = 5, nRandomSearch = 4> (rng cache)")
+			<< dispFuncF({testPatchMatch<matchingFunctions::NCC,float,3,120,5,4>}) << true;
 }
 void BenchmarkStereoMatchingModels::benchmarkFloatDispFunc() {
 
 	QFETCH(dispFuncF, disp_function);
+	QFETCH(bool, useRngCache);
 
 	if (_test_imgs.isEmpty()) {
 		QSKIP("found no images to process");
@@ -207,8 +231,10 @@ void BenchmarkStereoMatchingModels::benchmarkFloatDispFunc() {
 		QSKIP("Could not read images");
 	}
 
+	StereoVision::Random::NumbersCache<int>* rngCacheptr = (useRngCache) ? &_random_cache : nullptr;
+
 	QBENCHMARK {
-		disp = disp_function.dispFunc(img_left, img_right);
+		disp = disp_function.dispFunc(img_left, img_right, rngCacheptr);
 	}
 }
 
