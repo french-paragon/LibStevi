@@ -7,6 +7,8 @@
 
 #include <MultidimArrays/MultidimArrays.h>
 
+#include <cstdint>
+
 #include "correlation/cross_correlations.h"
 #include "correlation/hierarchical.h"
 #include "correlation/patchmatch.h"
@@ -37,6 +39,9 @@ private Q_SLOTS:
 
 	void benchmarkFloatDispFunc_data();
 	void benchmarkFloatDispFunc();
+
+	void benchmarkUint8DispFunc_data();
+	void benchmarkUint8DispFunc();
 
 private:
 
@@ -200,6 +205,41 @@ Multidim::Array<disp_t, 2> testPatchMatch(Multidim::Array<T_IMG, 3> const& img_l
 	return ret;
 }
 
+template<matchingFunctions matchFunc, typename T_IMG, int searchRadius, int searchDist>
+Multidim::Array<disp_t, 2> testDenseMatch(Multidim::Array<T_IMG, 3> const& img_left,
+										  Multidim::Array<T_IMG, 3> const& img_right,
+										  StereoVision::Random::NumbersCache<int>* rngCache) {
+
+	(void) rngCache;
+
+	Multidim::Array<T_IMG, 3> fVolLeft = unfold<T_IMG, T_IMG>(searchRadius, searchRadius, img_left);
+	Multidim::Array<T_IMG, 3> fVolRight = unfold<T_IMG, T_IMG>(searchRadius, searchRadius, img_right);
+
+	Multidim::Array<float, 3> CV = unfoldBasedCostVolume<matchFunc>(fVolLeft, fVolRight, searchRadius, searchRadius, searchDist);
+	Multidim::Array<disp_t, 2> disp = selectedIndexToDisp<StereoVision::Correlation::disp_t, StereoVision::Correlation::dispDirection::RightToLeft>
+			(StereoVision::Correlation::extractSelectedIndex<StereoVision::Correlation::MatchingFunctionTraits<matchFunc>::extractionStrategy>(CV), 0);
+
+	return disp;
+}
+
+template<matchingFunctions matchFunc, typename T_IMG, int searchRadius, int searchDist, int depth>
+Multidim::Array<disp_t, 2> testHierarchicalMatch(Multidim::Array<T_IMG, 3> const& img_left,
+												 Multidim::Array<T_IMG, 3> const& img_right,
+												 StereoVision::Random::NumbersCache<int>* rngCache) {
+
+	(void) rngCache;
+
+	StereoVision::Correlation::OffsetedCostVolume result =
+			StereoVision::Correlation::hiearchicalTruncatedCostVolume<matchFunc, depth>
+			(img_left,
+			 img_right,
+			 searchRadius,
+			 searchRadius,
+			 searchDist);
+
+	return result.disp_estimate;
+}
+
 void BenchmarkStereoMatchingModels::benchmarkFloatDispFunc_data() {
 
 	QTest::addColumn<dispFuncF>("disp_function");
@@ -212,6 +252,19 @@ void BenchmarkStereoMatchingModels::benchmarkFloatDispFunc_data() {
 
 	QTest::newRow("testPatchMatch<cost = matchingFunctions::NCC, type = float, searchRadius = 3, searchRange = 120, niter = 5, nRandomSearch = 4> (rng cache)")
 			<< dispFuncF({testPatchMatch<matchingFunctions::NCC,float,3,120,5,4>}) << true;
+
+
+	QTest::newRow("testDenseMatch<cost = matchingFunctions::NCC, type = float, searchRadius = 3, searchRange = 120>")
+			<< dispFuncF({testDenseMatch<matchingFunctions::NCC,float,3,120>}) << false;
+
+
+	QTest::newRow("testHierarchicalMatch<cost = matchingFunctions::NCC, type = float, searchRadius = 3, searchRange = 120, depth = 2>")
+			<< dispFuncF({testHierarchicalMatch<matchingFunctions::NCC,float,3,120, 2>}) << false;
+
+
+	QTest::newRow("testHierarchicalMatch<cost = matchingFunctions::NCC, type = float, searchRadius = 3, searchRange = 120, depth = 3>")
+			<< dispFuncF({testHierarchicalMatch<matchingFunctions::NCC,float,3,120, 3>}) << false;
+
 }
 void BenchmarkStereoMatchingModels::benchmarkFloatDispFunc() {
 
@@ -226,6 +279,57 @@ void BenchmarkStereoMatchingModels::benchmarkFloatDispFunc() {
 
 	Multidim::Array<float, 3> img_left = StereoVision::IO::readImage<float>(_test_imgs[0].left_nir_path.toStdString());
 	Multidim::Array<float, 3> img_right = StereoVision::IO::readImage<float>(_test_imgs[0].right_nir_path.toStdString());
+
+	if (img_left.empty() or img_right.empty()) {
+		QSKIP("Could not read images");
+	}
+
+	StereoVision::Random::NumbersCache<int>* rngCacheptr = (useRngCache) ? &_random_cache : nullptr;
+
+	QBENCHMARK {
+		disp = disp_function.dispFunc(img_left, img_right, rngCacheptr);
+	}
+}
+
+void BenchmarkStereoMatchingModels::benchmarkUint8DispFunc_data() {
+
+	QTest::addColumn<dispFuncB>("disp_function");
+	QTest::addColumn<bool>("useRngCache");
+
+
+	QTest::newRow("testPatchMatch<cost = matchingFunctions::NCC, type = uint8_t, searchRadius = 3, searchRange = 120, niter = 5, nRandomSearch = 4> (no rng cache)")
+			<< dispFuncB({testPatchMatch<matchingFunctions::NCC,uint8_t,3,120,5,4>}) << false;
+
+
+	QTest::newRow("testPatchMatch<cost = matchingFunctions::NCC, type = uint8_t, searchRadius = 3, searchRange = 120, niter = 5, nRandomSearch = 4> (rng cache)")
+			<< dispFuncB({testPatchMatch<matchingFunctions::NCC,uint8_t,3,120,5,4>}) << true;
+
+
+	QTest::newRow("testDenseMatch<cost = matchingFunctions::NCC, type = uint8_t, searchRadius = 3, searchRange = 120>")
+			<< dispFuncB({testDenseMatch<matchingFunctions::NCC,uint8_t,3,120>}) << false;
+
+
+	QTest::newRow("testHierarchicalMatch<cost = matchingFunctions::NCC, type = uint8_t, searchRadius = 3, searchRange = 120, depth = 2>")
+			<< dispFuncB({testHierarchicalMatch<matchingFunctions::NCC,uint8_t,3,120, 2>}) << false;
+
+
+	QTest::newRow("testHierarchicalMatch<cost = matchingFunctions::NCC, type = uint8_t, searchRadius = 3, searchRange = 120, depth = 3>")
+			<< dispFuncB({testHierarchicalMatch<matchingFunctions::NCC,uint8_t,3,120, 3>}) << false;
+
+}
+void BenchmarkStereoMatchingModels::benchmarkUint8DispFunc() {
+
+	QFETCH(dispFuncB, disp_function);
+	QFETCH(bool, useRngCache);
+
+	if (_test_imgs.isEmpty()) {
+		QSKIP("found no images to process");
+	}
+
+	Multidim::Array<disp_t, 2> disp;
+
+	Multidim::Array<uint8_t, 3> img_left = StereoVision::IO::readImage<uint8_t>(_test_imgs[0].left_nir_path.toStdString());
+	Multidim::Array<uint8_t, 3> img_right = StereoVision::IO::readImage<uint8_t>(_test_imgs[0].right_nir_path.toStdString());
 
 	if (img_left.empty() or img_right.empty()) {
 		QSKIP("Could not read images");
