@@ -238,7 +238,8 @@ inline Multidim::Array<float, 4> aggregateCost(Multidim::Array<float, 3> const& 
 
 }
 
-inline Multidim::Array<float, 3> zeromeanNormalizedFeatureVolume(Multidim::Array<float, 3> const& feature_vol,
+template<class T_I>
+inline Multidim::Array<float, 3> zeromeanNormalizedFeatureVolume(Multidim::Array<T_I, 3> const& feature_vol,
 																 Multidim::Array<float, 2> const& mean,
 																 Multidim::Array<float, 2> const& sigma) {
 
@@ -255,7 +256,7 @@ inline Multidim::Array<float, 3> zeromeanNormalizedFeatureVolume(Multidim::Array
 		#pragma omp simd
 		for (int j = 0; j < w; j++) {
 			for (int c = 0; c < f; c++) {
-				normalized_feature_volume.at<Nc>(i,j,c) = (feature_vol.value<Nc>(i,j,c) - mean.value<Nc>(i,j))/sigma.value<Nc>(i,j);
+				normalized_feature_volume.at<Nc>(i,j,c) = (feature_vol.template value<Nc>(i,j,c) - mean.value<Nc>(i,j))/sigma.value<Nc>(i,j);
 			}
 		}
 	}
@@ -264,7 +265,8 @@ inline Multidim::Array<float, 3> zeromeanNormalizedFeatureVolume(Multidim::Array
 
 }
 
-inline Multidim::Array<float, 3> normalizedFeatureVolume(Multidim::Array<float, 3> const& feature_vol,
+template<class T_I>
+inline Multidim::Array<float, 3> normalizedFeatureVolume(Multidim::Array<T_I, 3> const& feature_vol,
 														 Multidim::Array<float, 2> const& norm) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
@@ -280,7 +282,7 @@ inline Multidim::Array<float, 3> normalizedFeatureVolume(Multidim::Array<float, 
 		#pragma omp simd
 		for (int j = 0; j < w; j++) {
 			for (int c = 0; c < f; c++) {
-				normalized_feature_volume.at<Nc>(i,j,c) = feature_vol.value<Nc>(i,j,c)/norm.value<Nc>(i,j);
+				normalized_feature_volume.at<Nc>(i,j,c) = static_cast<float>(feature_vol.template value<Nc>(i,j,c))/norm.value<Nc>(i,j);
 			}
 		}
 	}
@@ -291,7 +293,8 @@ inline Multidim::Array<float, 3> normalizedFeatureVolume(Multidim::Array<float, 
 
 }
 
-inline Multidim::Array<float, 3> zeromeanFeatureVolume(Multidim::Array<float, 3> const& feature_vol,
+template<class T_I>
+inline Multidim::Array<float, 3> zeromeanFeatureVolume(Multidim::Array<T_I, 3> const& feature_vol,
 														  Multidim::Array<float, 2> const& mean) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
@@ -307,7 +310,7 @@ inline Multidim::Array<float, 3> zeromeanFeatureVolume(Multidim::Array<float, 3>
 		#pragma omp simd
 		for (int j = 0; j < w; j++) {
 			for (int c = 0; c < f; c++) {
-				zeromean_feature_volume.at<Nc>(i,j,c) = feature_vol.value<Nc>(i,j,c) - mean.value<Nc>(i,j);
+				zeromean_feature_volume.at<Nc>(i,j,c) = feature_vol.template value<Nc>(i,j,c) - mean.value<Nc>(i,j);
 			}
 		}
 	}
@@ -339,7 +342,18 @@ Multidim::Array<float,3> getFeatureVolumeForMatchFunc(Multidim::Array<T_I, 3> co
 		return normalizedFeatureVolume(feature_vol, sigma);
 	}
 
-	return feature_vol;
+	Multidim::Array<float,3> fv(feature_vol.shape());
+
+	#pragma omp parallel for
+	for (int i = 0; i < fv.shape()[0]; i++) {
+		for (int j = 0; j < fv.shape()[1]; j++) {
+			for (int k = 0; k < fv.shape()[2]; k++) {
+				fv.atUnchecked(i,j,k) = static_cast<float>(feature_vol.valueUnchecked(i,j,k));
+			}
+		}
+	}
+
+	return fv;
 
 }
 
