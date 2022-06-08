@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
 #include "../stevi_global.h"
+#include "../utils/types_manipulations.h"
 
 
 namespace StereoVision {
@@ -63,11 +64,15 @@ private:
 	int _vertical;
 };
 
-template<class T_I>
-Multidim::Array<float, 2> averagePoolingDownsample(Multidim::Array<T_I, 2> const& input,
-												   DownSampleWindows const& windows) {
+template<class T_I, class T_O = float>
+Multidim::Array<T_O, 2> averagePoolingDownsample(Multidim::Array<T_I, 2> const& input,
+                                                 DownSampleWindows const& windows) {
+
+	static_assert ((sizeof (T_O) >= sizeof (T_I)) or !std::is_integral_v<T_O>, "cannot output downsampled array with a smaller integral type than the input array.");
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	using T_E = typename TypesManipulations::acc_extended<T_O>::type;
 
 	auto shape = input.shape();
 
@@ -80,14 +85,14 @@ Multidim::Array<float, 2> averagePoolingDownsample(Multidim::Array<T_I, 2> const
 	int initialHOffset = hRem/2;
 	int initialVOffset = vRem/2;
 
-	Multidim::Array<float, 2> output(newHeight, newWidth);
+	Multidim::Array<T_O, 2> output(newHeight, newWidth);
 
 	#pragma omp parallel for
 	for (int i = 0; i < output.shape()[0]; i++) {
 		for (int j = 0; j < output.shape()[1]; j++) {
 
-			float val = 0;
-			float count = 0;
+			T_E val = 0;
+			int count = 0;
 
 			for (int dv = 0; dv < windows.horizontal(); dv++) {
 
@@ -105,18 +110,22 @@ Multidim::Array<float, 2> averagePoolingDownsample(Multidim::Array<T_I, 2> const
 			}
 
 			val /= count;
-			output.at<Nc>(i,j) = val;
+			output.template at<Nc>(i,j) = static_cast<T_O>(val);
 		}
 	}
 
 	return output;
 }
 
-template<class T_I>
-ImageArray averagePoolingDownsample(Multidim::Array<T_I, 3> const& input,
-									DownSampleWindows const& windows) {
+template<class T_I, class T_O = float>
+Multidim::Array<T_O, 3> averagePoolingDownsample(Multidim::Array<T_I, 3> const& input,
+												 DownSampleWindows const& windows) {
+
+	static_assert ((sizeof (T_O) >= sizeof (T_I)) or !std::is_integral_v<T_O>, "cannot output downsampled array with a smaller integral type than the input array.");
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	using T_E = typename TypesManipulations::acc_extended<T_O>::type;
 
 	auto shape = input.shape();
 
@@ -129,7 +138,7 @@ ImageArray averagePoolingDownsample(Multidim::Array<T_I, 3> const& input,
 	int initialHOffset = hRem/2;
 	int initialVOffset = vRem/2;
 
-	ImageArray output(newHeight, newWidth, shape[2]);
+	Multidim::Array<T_O, 3> output(newHeight, newWidth, shape[2]);
 
 	#pragma omp parallel for
 	for (int i = 0; i < output.shape()[0]; i++) {
@@ -137,8 +146,8 @@ ImageArray averagePoolingDownsample(Multidim::Array<T_I, 3> const& input,
 
 			for (int f = 0; f < shape[2]; f++) {
 
-				float val = 0;
-				float count = 0;
+				T_E val = 0;
+				int count = 0;
 
 				for (int dv = 0; dv < windows.horizontal(); dv++) {
 
@@ -157,7 +166,7 @@ ImageArray averagePoolingDownsample(Multidim::Array<T_I, 3> const& input,
 				}
 
 				val /= count;
-				output.at<Nc>(i,j,f) = val;
+				output.template at<Nc>(i,j,f) = static_cast<T_O>(val);
 
 			}
 

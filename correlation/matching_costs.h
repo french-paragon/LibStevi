@@ -27,6 +27,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../optimization/l2optimization.h"
 #include "../optimization/sphericaloptimization.h"
 
+#include "../utils/types_manipulations.h"
+
 #include <string>
 
 namespace StereoVision {
@@ -47,28 +49,38 @@ template<matchingFunctions func>
 class MatchingFunctionTraits{
 };
 
-template<class T_S, class T_T>
-inline float dotProduct(Multidim::Array<T_S,1> const& source,
-						Multidim::Array<T_T,1> const& target) {
+template<class T_S, class T_T, class T_O = float>
+inline T_O dotProduct(Multidim::Array<T_S,1> const& source,
+					  Multidim::Array<T_T,1> const& target) {
 
-	float score = 0;
+	static_assert ((std::is_integral_v<T_S> and std::is_integral_v<T_T>) or !std::is_integral_v<T_O>,
+			"Cannot process floating point inputs for non floating point output");
+
+	T_O score = 0;
 
 	for (int i = 0; i < source.shape()[0]; i++) {
-		score += float(source.valueUnchecked(i))*float(target.valueUnchecked(i));
+		if (std::is_integral_v<T_O> and (sizeof (T_O) < 2*std::max(sizeof (T_S), sizeof (T_T)))) { //need to renormalize
+			score += (static_cast<T_O>(source.valueUnchecked(i))*static_cast<T_O>(target.valueUnchecked(i)))/TypesManipulations::equivalentOneForNormalizing<T_O>();
+		} else {
+			score += static_cast<T_O>(source.valueUnchecked(i))*static_cast<T_O>(target.valueUnchecked(i));
+		}
 	}
 
 	return score;
 
 }
 
-template<class T_S, class T_T>
-inline float SumSquareDiff(Multidim::Array<T_S,1> const& source,
-						   Multidim::Array<T_T,1> const& target) {
+template<class T_S, class T_T, class T_O = float>
+inline T_O SumSquareDiff(Multidim::Array<T_S,1> const& source,
+						 Multidim::Array<T_T,1> const& target) {
 
-	float score = 0;
+	static_assert ((std::is_integral_v<T_S> and std::is_integral_v<T_T>) or !std::is_integral_v<T_O>,
+			"Cannot process floating point inputs for non floating point output");
+
+	T_O score = 0;
 
 	for (int i = 0; i < source.shape()[0]; i++) {
-		float tmp = float(source.valueUnchecked(i)) - float(target.valueUnchecked(i));
+		T_O tmp = static_cast<T_O>(source.valueUnchecked(i)) - static_cast<T_O>(target.valueUnchecked(i));
 		score += tmp*tmp;
 	}
 
@@ -76,15 +88,22 @@ inline float SumSquareDiff(Multidim::Array<T_S,1> const& source,
 
 }
 
-template<class T_S, class T_T>
-inline float SumAbsDiff(Multidim::Array<T_S,1> const& source,
-						   Multidim::Array<T_T,1> const& target) {
+template<class T_S, class T_T, class T_O = float>
+inline T_O SumAbsDiff(Multidim::Array<T_S,1> const& source,
+					  Multidim::Array<T_T,1> const& target) {
 
-	float score = 0;
+	static_assert ((std::is_integral_v<T_S> and std::is_integral_v<T_T>) or !std::is_integral_v<T_O>,
+			"Cannot process floating point inputs for non floating point output");
+
+	T_O score = 0;
 
 	for (int i = 0; i < source.shape()[0]; i++) {
 		float tmp = float(source.valueUnchecked(i)) - float(target.valueUnchecked(i));
-		score += std::fabs(tmp);
+		if (std::is_integral_v<T_O>) {
+			score += static_cast<T_O>(std::abs(tmp));
+		} else {
+			score += std::fabs(tmp);
+		}
 	}
 
 	return score;
@@ -99,10 +118,10 @@ public:
 	static constexpr bool Normalized = true;
 	static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Score;
 
-	template<class T_S, class T_T>
-	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
+	template<class T_S, class T_T, class T_O = float>
+	inline static T_O featureComparison(Multidim::Array<T_S,1> const& source,
 								   Multidim::Array<T_T,1> const& target) {
-		return dotProduct(source, target);
+		return dotProduct<T_S, T_T, T_O>(source, target);
 	}
 
 	template<int dimsIn, int dimsOuts = Eigen::Dynamic>
@@ -120,10 +139,10 @@ public:
 	static constexpr bool Normalized = false;
 	static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Score;
 
-	template<class T_S, class T_T>
+	template<class T_S, class T_T, class T_O = float>
 	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
 								   Multidim::Array<T_T,1> const& target) {
-		return dotProduct(source, target);
+		return dotProduct<T_S, T_T, T_O>(source, target);
 	}
 };
 
@@ -135,10 +154,10 @@ public:
 	static constexpr bool Normalized = false;
 	static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;
 
-	template<class T_S, class T_T>
+	template<class T_S, class T_T, class T_O = float>
 	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
 								   Multidim::Array<T_T,1> const& target) {
-		return SumSquareDiff(source, target);
+		return SumSquareDiff<T_S, T_T, T_O>(source, target);
 	}
 
 	template<int dimsIn, int dimsOuts = Eigen::Dynamic>
@@ -156,10 +175,10 @@ public:
 	static constexpr bool Normalized = false;
 	static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;
 
-	template<class T_S, class T_T>
+	template<class T_S, class T_T, class T_O = float>
 	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
 								   Multidim::Array<T_T,1> const& target) {
-		return SumAbsDiff(source, target);
+		return SumAbsDiff<T_S, T_T, T_O>(source, target);
 	}
 
 	template<int dimsIn, int dimsOuts = Eigen::Dynamic>
@@ -177,10 +196,10 @@ public:
 	static constexpr bool Normalized = false;
 	static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Score;
 
-	template<class T_S, class T_T>
+	template<class T_S, class T_T, class T_O = float>
 	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
 								   Multidim::Array<T_T,1> const& target) {
-		return dotProduct(source, target);
+		return dotProduct<T_S, T_T, T_O>(source, target);
 	}
 };
 
@@ -192,10 +211,10 @@ public:
 	static constexpr bool Normalized = true;
 	static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Score;
 
-	template<class T_S, class T_T>
+	template<class T_S, class T_T, class T_O = float>
 	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
 								   Multidim::Array<T_T,1> const& target) {
-		return dotProduct(source, target);
+		return dotProduct<T_S, T_T, T_O>(source, target);
 	}
 
 	template<int dimsIn, int dimsOuts = Eigen::Dynamic>
@@ -213,10 +232,10 @@ public:
 	static constexpr bool Normalized = false;
 	static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;
 
-	template<class T_S, class T_T>
+	template<class T_S, class T_T, class T_O = float>
 	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
 								   Multidim::Array<T_T,1> const& target) {
-		return SumSquareDiff(source, target);
+		return SumSquareDiff<T_S, T_T, T_O>(source, target);
 	}
 
 	template<int dimsIn, int dimsOuts = Eigen::Dynamic>
@@ -234,10 +253,10 @@ public:
 	static constexpr bool Normalized = false;
 	static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;
 
-	template<class T_S, class T_T>
+	template<class T_S, class T_T, class T_O = float>
 	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
 								   Multidim::Array<T_T,1> const& target) {
-		return SumAbsDiff(source, target);
+		return SumAbsDiff<T_S, T_T, T_O>(source, target);
 	}
 
 	template<int dimsIn, int dimsOuts = Eigen::Dynamic>
@@ -245,6 +264,27 @@ public:
 																			 Eigen::Matrix<float,dimsOuts,1> const& b) {
 		return Optimization::affineBestL1Approximation(A,b);
 	}
+};
+
+template<matchingFunctions func, typename ImType>
+struct MatchingFuncComputeTypeInfos {
+
+	typedef float FeatureType;
+
+	static constexpr bool SupportFloatCV = true;
+	static constexpr bool SupportIntCV = false;
+};
+
+template<matchingFunctions func>
+struct MatchingFuncComputeTypeInfos<func, uint8_t> {
+
+	typedef typename std::conditional
+						<MatchingFunctionTraits<func>::Normalized,
+						int16_t,
+						typename std::conditional<MatchingFunctionTraits<func>::ZeroMean, int16_t, uint8_t>::type>::type FeatureType;
+
+	static constexpr bool SupportFloatCV = true;
+	static constexpr bool SupportIntCV = true;
 };
 
 } //namespace Correlation

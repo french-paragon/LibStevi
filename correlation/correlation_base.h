@@ -813,8 +813,8 @@ Multidim::Array<float, 2> sigmaFilter(uint8_t h_radius,
 	return sigma;
 }
 
-template<class T_I>
-Multidim::Array<float, 2> channelsMean (Multidim::Array<T_I, 3> const& in_data) {
+template<class T_I, class T_O = float>
+inline Multidim::Array<T_O, 2> channelsMean (Multidim::Array<T_I, 3> const& in_data) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -822,17 +822,17 @@ Multidim::Array<float, 2> channelsMean (Multidim::Array<T_I, 3> const& in_data) 
 	int w = in_data.shape()[1];
 	int f = in_data.shape()[2];
 
-	Multidim::Array<float, 2> mean(h, w);
+	Multidim::Array<T_O, 2> mean(h, w);
 
 	#pragma omp parallel for
 	for(int i = 0; i < h; i++) {
 		#pragma omp simd
 		for(int j = 0; j < w; j++) {
 
-			mean.at<Nc>(i,j) = 0;
+                        mean.template at<Nc>(i,j) = 0;
 
 			for (int c = 0; c < f; c++) {
-				mean.at<Nc>(i,j) += static_cast<float>(in_data.template value<Nc>(i,j,c));
+                                mean.template at<Nc>(i,j) += static_cast<T_O>(in_data.template value<Nc>(i,j,c));
 			}
 		}
 	}
@@ -843,12 +843,40 @@ Multidim::Array<float, 2> channelsMean (Multidim::Array<T_I, 3> const& in_data) 
 	for(int i = 0; i < h; i++) {
 		#pragma omp simd
 		for(int j = 0; j < w; j++) {
-			mean.at<Nc>(i,j) *= scale;
+                        mean.template at<Nc>(i,j) *= scale;
 		}
 	}
 
 	return mean;
 
+}
+
+template<>
+inline Multidim::Array<uint8_t, 2> channelsMean<uint8_t, uint8_t> (Multidim::Array<uint8_t, 3> const& in_data) {
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	int h = in_data.shape()[0];
+	int w = in_data.shape()[1];
+	int f = in_data.shape()[2];
+
+	Multidim::Array<uint8_t, 2> mean(h, w);
+
+	#pragma omp parallel for
+	for(int i = 0; i < h; i++) {
+		#pragma omp simd
+		for(int j = 0; j < w; j++) {
+
+			uint16_t acc = 0;
+
+			for (int c = 0; c < f; c++) {
+				acc += in_data.value<Nc>(i,j,c);
+			}
+
+			mean.at<Nc>(i,j) = acc/f;
+		}
+	}
+
+	return mean;
 }
 
 template<disp_t deltaSign = 1, bool rmIncompleteRanges = false>

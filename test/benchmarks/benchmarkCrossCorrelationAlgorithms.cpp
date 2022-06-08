@@ -210,7 +210,7 @@ private:
 		uint8_t h_r = h_radius;
 		uint8_t v_r = v_radius;
 
-		StereoVision::Correlation::OffsetedCostVolume result;
+		StereoVision::Correlation::OffsetedCostVolume<float> result;
 
 		QBENCHMARK_ONCE {
 		result = StereoVision::Correlation::hiearchicalTruncatedCostVolume<matchFunc, depth>

@@ -25,13 +25,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "./unfold.h"
 
 #include "../utils/contiguity.h"
+#include "../utils/types_manipulations.h"
 
 namespace StereoVision {
 namespace Correlation {
 
-template<class T_I>
-Multidim::Array<float, 2> channelsSigma (Multidim::Array<T_I, 3> const& in_data,
-									   Multidim::Array<float, 2> const& mean) {
+template<class T_I, class T_M, class T_O = float>
+Multidim::Array<T_O, 2> channelsZeroMeanNorm (Multidim::Array<T_I, 3> const& in_data,
+									   Multidim::Array<T_M, 2> const& mean) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -39,45 +40,53 @@ Multidim::Array<float, 2> channelsSigma (Multidim::Array<T_I, 3> const& in_data,
 	int w = in_data.shape()[1];
 	int f = in_data.shape()[2];
 
-	Multidim::Array<float, 2> std(h, w);
+	Multidim::Array<T_O, 2> norm(h, w);
 
 	#pragma omp parallel for
 	for(int i = 0; i < h; i++) {
 		#pragma omp simd
 		for(int j = 0; j < w; j++) {
 
-			std.at<Nc>(i,j) = 0;
+			norm.template at<Nc>(i,j) = 0;
 
 			for (int c = 0; c < f; c++) {
-				float tmp = static_cast<float>(in_data.template value<Nc>(i,j,c)) - mean.value<Nc>(i,j);
-				std.at<Nc>(i,j) += tmp*tmp;
+				T_O tmp = static_cast<T_M>(in_data.template value<Nc>(i,j,c)) - mean.template value<Nc>(i,j);
+				if ((std::is_integral<T_O>::value)) {
+					norm.template at<Nc>(i,j) = std::max(norm.template value<Nc>(i,j), static_cast<T_O>(std::abs(tmp)));
+				} else {
+					norm.template at<Nc>(i,j) += tmp*tmp;
+				}
 			}
 		}
 	}
 
+	if ((std::is_integral<T_O>::value)) {
+		return norm;
+	}
+
 	#pragma omp parallel for
 	for(int i = 0; i < h; i++) {
 		#pragma omp simd
 		for(int j = 0; j < w; j++) {
-			std.at<Nc>(i,j) = sqrtf(std.value<Nc>(i,j));
+			norm.template at<Nc>(i,j) = sqrtf(norm.template value<Nc>(i,j));
 		}
 	}
 
-	return std;
+	return norm;
 }
 
-template<class T_I>
-Multidim::Array<float, 2> channelsSigma (Multidim::Array<T_I, 3> const& in_data) {
+template<class T_I, class T_M = float, class T_O = float>
+Multidim::Array<T_O, 2> channelsZeroMeanNorm (Multidim::Array<T_I, 3> const& in_data) {
 
-	Multidim::Array<float, 2> mean = channelsMean(in_data);
+	Multidim::Array<T_M, 2> mean = channelsMean<T_I, T_M>(in_data);
 
-	return channelsSigma(in_data, mean);
+	return channelsZeroMeanNorm<T_I, T_M, T_O>(in_data, mean);
 
 }
 
 
-template<class T_I>
-Multidim::Array<float, 2> channelsNorm (Multidim::Array<T_I, 3> const& in_data) {
+template<class T_I, class T_O = float>
+Multidim::Array<T_O, 2> channelsNorm (Multidim::Array<T_I, 3> const& in_data) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -85,39 +94,50 @@ Multidim::Array<float, 2> channelsNorm (Multidim::Array<T_I, 3> const& in_data) 
 	int w = in_data.shape()[1];
 	int f = in_data.shape()[2];
 
-	Multidim::Array<float, 2> std(h, w);
+	Multidim::Array<T_O, 2> norm(h, w);
 
 	#pragma omp parallel for
 	for(int i = 0; i < h; i++) {
 		#pragma omp simd
 		for(int j = 0; j < w; j++) {
 
-			std.at<Nc>(i,j) = 0;
+			norm.template at<Nc>(i,j) = 0;
 
 			for (int c = 0; c < f; c++) {
-				float tmp = static_cast<float>(in_data.template value<Nc>(i,j,c));
-				std.at<Nc>(i,j) += tmp*tmp;
+				T_O tmp = static_cast<T_O>(in_data.template value<Nc>(i,j,c));
+				if ((std::is_integral<T_O>::value)) {
+					norm.template at<Nc>(i,j) = std::max(norm.template value<Nc>(i,j), static_cast<T_O>(std::abs(tmp)));
+				} else {
+					norm.template at<Nc>(i,j) += tmp*tmp;
+				}
 			}
 		}
 	}
 
+	if ((std::is_integral<T_O>::value)) {
+		return norm;
+	}
+
 	#pragma omp parallel for
 	for(int i = 0; i < h; i++) {
 		#pragma omp simd
 		for(int j = 0; j < w; j++) {
-			std.at<Nc>(i,j) = sqrtf(std.value<Nc>(i,j));
+			norm.template at<Nc>(i,j) = sqrtf(norm.template value<Nc>(i,j));
 		}
 	}
 
-	return std;
+	return norm;
 }
 
 
-template<matchingFunctions matchFunc, dispDirection dDir = dispDirection::RightToLeft>
-inline Multidim::Array<float, 3> aggregateCost(Multidim::Array<float, 3> const& feature_vol_l,
-											   Multidim::Array<float, 3> const& feature_vol_r,
-											   disp_t disp_width) {
+template<matchingFunctions matchFunc, class T_L, class T_R, dispDirection dDir = dispDirection::RightToLeft, typename TCV = float>
+inline Multidim::Array<TCV, 3> aggregateCost(Multidim::Array<T_L, 3> const& feature_vol_l,
+											 Multidim::Array<T_R, 3> const& feature_vol_r,
+											 disp_t disp_width) {
 
+	condImgRef<T_L, T_R, dDir, 3> dirInfos(feature_vol_l, feature_vol_r);
+	using T_S = typename condImgRef<T_L, T_R, dDir>::T_S;
+	using T_T = typename condImgRef<T_L, T_R, dDir>::T_T;
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 	constexpr disp_t deltaSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
@@ -126,41 +146,37 @@ inline Multidim::Array<float, 3> aggregateCost(Multidim::Array<float, 3> const& 
 	auto r_shape = feature_vol_r.shape();
 
 	if (l_shape[0] != r_shape[0]) {
-		return Multidim::Array<float, 3>(0,0,0);
+		return Multidim::Array<TCV, 3>(0,0,0);
 	}
 
-	constexpr bool r2l = dDir == dispDirection::RightToLeft;
-	Multidim::Array<float, 3> & source_feature_volume = const_cast<Multidim::Array<float, 3> &>((r2l) ? feature_vol_r : feature_vol_l);
-	Multidim::Array<float, 3> & target_feature_volume = const_cast<Multidim::Array<float, 3> &>((r2l) ? feature_vol_l : feature_vol_r);
+	Multidim::Array<T_S, 3> & source_feature_volume = const_cast<Multidim::Array<T_S, 3> &>(dirInfos.source());
+	Multidim::Array<T_T, 3> & target_feature_volume = const_cast<Multidim::Array<T_T, 3> &>(dirInfos.target());
 
 	int h = source_feature_volume.shape()[0];
 	int w = source_feature_volume.shape()[1];
 	int f = source_feature_volume.shape()[2];
 
-	Multidim::Array<float, 3> costVolume({h,w,disp_width}, {w*disp_width, 1, w});
+	Multidim::Array<TCV, 3> costVolume({h,w,disp_width}, {w*disp_width, 1, w});
 
 	#pragma omp parallel for
 	for (int i = 0; i < h; i++) {
 		#pragma omp simd
 		for (int j = 0; j < w; j++) {
 
-			Multidim::Array<float, 1> source_feature_vector(f);
-
-			for (int c = 0; c < f; c++) {
-				float s = source_feature_volume.value<Nc>(i,j,c);
-				source_feature_vector.at<Nc>(c) = s;
-			}
+			Multidim::Array<T_S, 1> source_feature_vector =
+					source_feature_volume.subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
 
 			for (int d = 0; d < disp_width; d++) {
 
-				Multidim::Array<float, 1> target_feature_vector(f);
+				Multidim::Array<T_T, 1> target_feature_vector(f);
 
 				for (int c = 0; c < f; c++) {
 					float t = target_feature_volume.valueOrAlt({i,j+deltaSign*d,c}, 0);
-					target_feature_vector.at<Nc>(c) = t;
+					target_feature_vector.template at<Nc>(c) = t;
 				}
 
-				costVolume.at<Nc>(i,j,d) = MatchingFunctionTraits<matchFunc>::featureComparison(source_feature_vector, target_feature_vector);
+				costVolume.template at<Nc>(i,j,d) =
+						MatchingFunctionTraits<matchFunc>::template featureComparison<T_S, T_T, TCV>(source_feature_vector, target_feature_vector);
 
 			}
 		}
@@ -171,11 +187,14 @@ inline Multidim::Array<float, 3> aggregateCost(Multidim::Array<float, 3> const& 
 
 }
 
-template<matchingFunctions matchFunc, dispDirection dDir = dispDirection::RightToLeft>
-inline Multidim::Array<float, 4> aggregateCost(Multidim::Array<float, 3> const& feature_vol_l,
-											   Multidim::Array<float, 3> const& feature_vol_r,
-											   searchOffset<2> searchRange) {
+template<matchingFunctions matchFunc, class T_L, class T_R, dispDirection dDir = dispDirection::RightToLeft, typename TCV = float>
+inline Multidim::Array<TCV, 4> aggregateCost(Multidim::Array<T_L, 3> const& feature_vol_l,
+											 Multidim::Array<T_R, 3> const& feature_vol_r,
+											 searchOffset<2> searchRange) {
 
+	condImgRef<T_L, T_R, dDir, 3> dirInfos(feature_vol_l, feature_vol_r);
+	using T_S = typename condImgRef<T_L, T_R, dDir>::T_S;
+	using T_T = typename condImgRef<T_L, T_R, dDir>::T_T;
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -186,9 +205,8 @@ inline Multidim::Array<float, 4> aggregateCost(Multidim::Array<float, 3> const& 
 		return Multidim::Array<float, 4>();
 	}
 
-	constexpr bool r2l = dDir == dispDirection::RightToLeft;
-	Multidim::Array<float, 3> & source_feature_volume = const_cast<Multidim::Array<float, 3> &>((r2l) ? feature_vol_r : feature_vol_l);
-	Multidim::Array<float, 3> & target_feature_volume = const_cast<Multidim::Array<float, 3> &>((r2l) ? feature_vol_l : feature_vol_r);
+	Multidim::Array<T_S, 3> & source_feature_volume = const_cast<Multidim::Array<T_S, 3> &>(dirInfos.source());
+	Multidim::Array<T_T, 3> & target_feature_volume = const_cast<Multidim::Array<T_T, 3> &>(dirInfos.target());
 
 	int h = source_feature_volume.shape()[0];
 	int w = source_feature_volume.shape()[1];
@@ -201,32 +219,29 @@ inline Multidim::Array<float, 4> aggregateCost(Multidim::Array<float, 3> const& 
 		return Multidim::Array<float, 4>();
 	}
 
-	Multidim::Array<float, 4> costVolume({h,w,disp_height,disp_width}, {w*disp_width*disp_height, 1, w*disp_width, w}); //TODO: check if those stides are otpimal
+	Multidim::Array<TCV, 4> costVolume({h,w,disp_height,disp_width}, {w*disp_width*disp_height, 1, w*disp_width, w}); //TODO: check if those stides are otpimal
 
 	#pragma omp parallel for
 	for (int i = 0; i < h; i++) {
 		#pragma omp simd
 		for (int j = 0; j < w; j++) {
 
-			Multidim::Array<float, 1> source_feature_vector(f);
-
-			for (int c = 0; c < f; c++) {
-				float s = source_feature_volume.value<Nc>(i,j,c);
-				source_feature_vector.at<Nc>(c) = s;
-			}
+			Multidim::Array<T_S, 1> source_feature_vector =
+					source_feature_volume.subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
 
 			for (int dh = 0; dh < disp_height; dh++) {
 
 				for (int dw = 0; dw < disp_width; dw++) {
 
-					Multidim::Array<float, 1> target_feature_vector(f);
+					Multidim::Array<T_T, 1> target_feature_vector(f);
 
 					for (int c = 0; c < f; c++) {
 						float t = target_feature_volume.valueOrAlt({i+dh+searchRange.lowerOffset<0>(),j+dw+searchRange.lowerOffset<1>(),c}, 0);
-						target_feature_vector.at<Nc>(c) = t;
+						target_feature_vector.template at<Nc>(c) = t;
 					}
 
-					costVolume.at<Nc>(i,j,dh,dw) = MatchingFunctionTraits<matchFunc>::featureComparison(source_feature_vector, target_feature_vector);
+					costVolume.template at<Nc>(i,j,dh,dw) =
+							MatchingFunctionTraits<matchFunc>::template featureComparison<T_S, T_T, TCV>(source_feature_vector, target_feature_vector);
 				}
 
 			}
@@ -238,25 +253,46 @@ inline Multidim::Array<float, 4> aggregateCost(Multidim::Array<float, 3> const& 
 
 }
 
-template<class T_I>
-inline Multidim::Array<float, 3> zeromeanNormalizedFeatureVolume(Multidim::Array<T_I, 3> const& feature_vol,
-																 Multidim::Array<float, 2> const& mean,
-																 Multidim::Array<float, 2> const& sigma) {
-
+template<class T_I, class T_M, class T_N, class T_O = float>
+inline Multidim::Array<T_O, 3> zeromeanNormalizedFeatureVolume(Multidim::Array<T_I, 3> const& feature_vol,
+															   Multidim::Array<T_M, 2> const& mean,
+															   Multidim::Array<T_N, 2> const& norm) {
+	using T_E = TypesManipulations::accumulation_extended_t<T_I>;
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
 	int h = feature_vol.shape()[0];
 	int w = feature_vol.shape()[1];
 	int f = feature_vol.shape()[2];
 
-	Multidim::Array<float, 3> normalized_feature_volume({h,w,f},{w*f,f,1});
+	Multidim::Array<T_O, 3> normalized_feature_volume({h,w,f},{w*f,f,1});
 
 	#pragma omp parallel for
 	for (int i = 0; i < h; i++) {
 		#pragma omp simd
 		for (int j = 0; j < w; j++) {
 			for (int c = 0; c < f; c++) {
-				normalized_feature_volume.at<Nc>(i,j,c) = (feature_vol.template value<Nc>(i,j,c) - mean.value<Nc>(i,j))/sigma.value<Nc>(i,j);
+
+				T_O val = 0;
+
+				if (std::is_integral<T_O>::value) {
+					T_E v = TypesManipulations::equivalentOneForNormalizing<T_E>();
+
+					v *= static_cast<T_E>(feature_vol.template value<Nc>(i,j,c)) - static_cast<T_E>(mean.template value<Nc>(i,j));
+					v /= norm.template value<Nc>(i,j);
+
+					constexpr int diff = sizeof (T_E) - sizeof (T_O);
+
+					if (diff > 0) {
+						v /= (1 << diff*8); //fit back into T_O
+					}
+
+					val = static_cast<T_O>(v);
+
+				} else {
+					val = static_cast<T_O>(feature_vol.template value<Nc>(i,j,c) - mean.template value<Nc>(i,j))/norm.template value<Nc>(i,j);
+				}
+
+				normalized_feature_volume.template at<Nc>(i,j,c) = val;
 			}
 		}
 	}
@@ -265,37 +301,57 @@ inline Multidim::Array<float, 3> zeromeanNormalizedFeatureVolume(Multidim::Array
 
 }
 
-template<class T_I>
-inline Multidim::Array<float, 3> normalizedFeatureVolume(Multidim::Array<T_I, 3> const& feature_vol,
-														 Multidim::Array<float, 2> const& norm) {
+template<class T_I, class T_N, class T_O = float>
+inline Multidim::Array<T_O, 3> normalizedFeatureVolume(Multidim::Array<T_I, 3> const& feature_vol,
+													   Multidim::Array<T_N, 2> const& norm) {
 
+	using T_E = TypesManipulations::accumulation_extended_t<T_I>;
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
 	int h = feature_vol.shape()[0];
 	int w = feature_vol.shape()[1];
 	int f = feature_vol.shape()[2];
 
-	Multidim::Array<float, 3> normalized_feature_volume({h,w,f},{w*f,f,1});
+	Multidim::Array<T_O, 3> normalized_feature_volume({h,w,f},{w*f,f,1});
 
 	#pragma omp parallel for
 	for (int i = 0; i < h; i++) {
 		#pragma omp simd
 		for (int j = 0; j < w; j++) {
 			for (int c = 0; c < f; c++) {
-				normalized_feature_volume.at<Nc>(i,j,c) = static_cast<float>(feature_vol.template value<Nc>(i,j,c))/norm.value<Nc>(i,j);
+
+				T_O val = 0;
+
+				if (std::is_integral<T_O>::value) {
+					T_E v = TypesManipulations::equivalentOneForNormalizing<T_E>();
+
+					v *= feature_vol.template value<Nc>(i,j,c);
+					v /= norm.template value<Nc>(i,j);
+
+					constexpr int diff = sizeof (T_E) - sizeof (T_O);
+
+					if (diff > 0) {
+						v /= (2 << diff*8); //fit back into T_O
+					}
+
+					val = static_cast<T_O>(v);
+
+				} else {
+					val = static_cast<T_O>(feature_vol.template value<Nc>(i,j,c))/norm.template value<Nc>(i,j);
+				}
+
+				normalized_feature_volume.template at<Nc>(i,j,c) = val;
 			}
 		}
 	}
 
 	return normalized_feature_volume;
 
-
-
 }
 
-template<class T_I>
-inline Multidim::Array<float, 3> zeromeanFeatureVolume(Multidim::Array<T_I, 3> const& feature_vol,
-														  Multidim::Array<float, 2> const& mean) {
+template<class T_I, class T_M, class T_O = float>
+inline Multidim::Array<T_O, 3> zeromeanFeatureVolume(Multidim::Array<T_I, 3> const& feature_vol,
+													   Multidim::Array<T_M, 2> const& mean) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -303,14 +359,14 @@ inline Multidim::Array<float, 3> zeromeanFeatureVolume(Multidim::Array<T_I, 3> c
 	int w = feature_vol.shape()[1];
 	int f = feature_vol.shape()[2];
 
-	Multidim::Array<float, 3> zeromean_feature_volume({h,w,f},{w*f,f,1});
+	Multidim::Array<T_O, 3> zeromean_feature_volume({h,w,f},{w*f,f,1});
 
 	#pragma omp parallel for
 	for (int i = 0; i < h; i++) {
 		#pragma omp simd
 		for (int j = 0; j < w; j++) {
 			for (int c = 0; c < f; c++) {
-				zeromean_feature_volume.at<Nc>(i,j,c) = feature_vol.template value<Nc>(i,j,c) - mean.value<Nc>(i,j);
+				zeromean_feature_volume.template at<Nc>(i,j,c) = static_cast<T_O>(feature_vol.template value<Nc>(i,j,c)) - static_cast<T_O>(mean.template value<Nc>(i,j));
 			}
 		}
 	}
@@ -320,35 +376,42 @@ inline Multidim::Array<float, 3> zeromeanFeatureVolume(Multidim::Array<T_I, 3> c
 }
 
 template<matchingFunctions matchFunc, class T_I>
-Multidim::Array<float,3> getFeatureVolumeForMatchFunc(Multidim::Array<T_I, 3> const& feature_vol) {
+Multidim::Array<typename MatchingFuncComputeTypeInfos<matchFunc, T_I>::FeatureType,3> getFeatureVolumeForMatchFunc(Multidim::Array<T_I, 3> const& feature_vol) {
+
+	using T_E = typename TypesManipulations::accumulation_extended_t<T_I>;
+	using FType = typename MatchingFuncComputeTypeInfos<matchFunc, T_I>::FeatureType;
 
 	if (MatchingFunctionTraits<matchFunc>::ZeroMean and MatchingFunctionTraits<matchFunc>::Normalized) {
 
-		Multidim::Array<float, 2> mean = channelsMean(feature_vol);
-		Multidim::Array<float, 2> sigma = channelsSigma(feature_vol, mean);
+		Multidim::Array<T_I, 2> mean = channelsMean<T_I, T_I>(feature_vol);
+		Multidim::Array<T_E, 2> sigma = channelsZeroMeanNorm<T_I, T_I, T_E>(feature_vol, mean);
 
-		return zeromeanNormalizedFeatureVolume(feature_vol, mean, sigma);
+		return zeromeanNormalizedFeatureVolume<T_I, T_I, T_E, FType>(feature_vol, mean, sigma);
 
 	} else if (MatchingFunctionTraits<matchFunc>::ZeroMean) {
 
-		Multidim::Array<float, 2> mean = channelsMean(feature_vol);
+		Multidim::Array<T_I, 2> mean = channelsMean<T_I, T_I>(feature_vol);
 
-		return zeromeanFeatureVolume(feature_vol, mean);
+		return zeromeanFeatureVolume<T_I, T_I, FType>(feature_vol, mean);
 
 	} else if (MatchingFunctionTraits<matchFunc>::Normalized) {
 
-		Multidim::Array<float, 2> sigma = channelsNorm(feature_vol);
+		Multidim::Array<T_E, 2> norm = channelsNorm<T_I, T_E>(feature_vol);
 
-		return normalizedFeatureVolume(feature_vol, sigma);
+		return normalizedFeatureVolume<T_I, T_E, FType>(feature_vol, norm);
 	}
 
-	Multidim::Array<float,3> fv(feature_vol.shape());
+	//if (std::is_same<FType, T_I>::value) {
+	//	return feature_vol;
+	//}
+
+	Multidim::Array<FType,3> fv(feature_vol.shape());
 
 	#pragma omp parallel for
 	for (int i = 0; i < fv.shape()[0]; i++) {
 		for (int j = 0; j < fv.shape()[1]; j++) {
 			for (int k = 0; k < fv.shape()[2]; k++) {
-				fv.atUnchecked(i,j,k) = static_cast<float>(feature_vol.valueUnchecked(i,j,k));
+				fv.atUnchecked(i,j,k) = static_cast<FType>(feature_vol.valueUnchecked(i,j,k));
 			}
 		}
 	}
@@ -357,129 +420,133 @@ Multidim::Array<float,3> getFeatureVolumeForMatchFunc(Multidim::Array<T_I, 3> co
 
 }
 
-template<matchingFunctions matchFunc, typename SearchRangeType, dispDirection dDir = dispDirection::RightToLeft>
-inline Multidim::Array<float, searchRangeTypeInfos<SearchRangeType>::CostVolumeDims>
-featureVolume2CostVolume(Multidim::Array<float, 3> const& feature_vol_l,
-						 Multidim::Array<float, 3> const& feature_vol_r,
+template<matchingFunctions matchFunc, class T_L, class T_R, typename SearchRangeType, dispDirection dDir = dispDirection::RightToLeft, typename TCV = float>
+inline Multidim::Array<TCV, searchRangeTypeInfos<SearchRangeType>::CostVolumeDims>
+featureVolume2CostVolume(Multidim::Array<T_L, 3> const& feature_vol_l,
+						 Multidim::Array<T_R, 3> const& feature_vol_r,
 						 SearchRangeType searchRange) {
 
-	return aggregateCost<matchFunc, dDir>(getFeatureVolumeForMatchFunc<matchFunc>(feature_vol_l),
-										  getFeatureVolumeForMatchFunc<matchFunc>(feature_vol_r),
-										  searchRange);
+	using FTypeL = typename MatchingFuncComputeTypeInfos<matchFunc, T_L>::FeatureType;
+	using FTypeR = typename MatchingFuncComputeTypeInfos<matchFunc, T_R>::FeatureType;
+
+	return aggregateCost<matchFunc, FTypeL, FTypeR, dDir, TCV>
+			(getFeatureVolumeForMatchFunc<matchFunc>(feature_vol_l),
+			 getFeatureVolumeForMatchFunc<matchFunc>(feature_vol_r),
+			 searchRange);
 
 }
 
-template<matchingFunctions matchFunc, class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
-Multidim::Array<float, 3> unfoldBasedCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
-												Multidim::Array<T_R, nImDim> const& img_r,
-												uint8_t h_radius,
-												uint8_t v_radius,
-												disp_t disp_width)
+template<matchingFunctions matchFunc, class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft, typename TCV = float>
+Multidim::Array<TCV, 3> unfoldBasedCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
+											  Multidim::Array<T_R, nImDim> const& img_r,
+											  uint8_t h_radius,
+											  uint8_t v_radius,
+											  disp_t disp_width)
 {
 
 	auto l_shape = img_l.shape();
 	auto r_shape = img_r.shape();
 
 	if (l_shape[0] != r_shape[0]) {
-		return Multidim::Array<float, 3>(0,0,0);
+		return Multidim::Array<TCV, 3>(0,0,0);
 	}
 
 	if (nImDim == 3) {
 		if (l_shape[2] != r_shape[2]) {
-			return Multidim::Array<float, 3>(0,0,0);
+			return Multidim::Array<TCV, 3>(0,0,0);
 		}
 	}
 
-	Multidim::Array<float, 3> left_feature_volume = unfold(h_radius, v_radius, img_l);
-	Multidim::Array<float, 3> right_feature_volume = unfold(h_radius, v_radius, img_r);
+	Multidim::Array<T_L, 3> left_feature_volume = unfold<T_L, T_L>(h_radius, v_radius, img_l);
+	Multidim::Array<T_R, 3> right_feature_volume = unfold<T_R, T_R>(h_radius, v_radius, img_r);
 
-	return featureVolume2CostVolume<matchFunc, disp_t, dDir>(left_feature_volume, right_feature_volume, disp_width);
+	return featureVolume2CostVolume<matchFunc, T_L, T_R, disp_t, dDir, TCV>(left_feature_volume, right_feature_volume, disp_width);
 }
 
-template<matchingFunctions matchFunc, class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
-Multidim::Array<float, 3> unfoldBasedCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
-												Multidim::Array<T_R, nImDim> const& img_r,
-												UnFoldCompressor const& compressor,
-												disp_t disp_width)
+template<matchingFunctions matchFunc, class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft, typename TCV = float>
+Multidim::Array<TCV, 3> unfoldBasedCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
+											  Multidim::Array<T_R, nImDim> const& img_r,
+											  UnFoldCompressor const& compressor,
+											  disp_t disp_width)
 {
 
 	auto l_shape = img_l.shape();
 	auto r_shape = img_r.shape();
 
 	if (l_shape[0] != r_shape[0]) {
-		return Multidim::Array<float, 3>(0,0,0);
+		return Multidim::Array<TCV, 3>(0,0,0);
 	}
 
 	if (nImDim == 3) {
 		if (l_shape[2] != r_shape[2]) {
-			return Multidim::Array<float, 3>(0,0,0);
+			return Multidim::Array<TCV, 3>(0,0,0);
 		}
 	}
 
 	Multidim::Array<float, 3> left_feature_volume = unfold(compressor, img_l);
 	Multidim::Array<float, 3> right_feature_volume = unfold(compressor, img_r);
 
-	return featureVolume2CostVolume<matchFunc, disp_t, dDir>(left_feature_volume, right_feature_volume, disp_width);
+	return featureVolume2CostVolume<matchFunc, float, float, disp_t, dDir, TCV>(left_feature_volume, right_feature_volume, disp_width);
 }
 
 
-template<matchingFunctions matchFunc, class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
-Multidim::Array<float, 4> unfoldBased2dDisparityCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
-														   Multidim::Array<T_R, nImDim> const& img_r,
-														   uint8_t h_radius,
-														   uint8_t v_radius,
-														   searchOffset<2> const& searchWindows) {
+template<matchingFunctions matchFunc, class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft, typename TCV = float>
+Multidim::Array<TCV, 4> unfoldBased2dDisparityCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
+														 Multidim::Array<T_R, nImDim> const& img_r,
+														 uint8_t h_radius,
+														 uint8_t v_radius,
+														 searchOffset<2> const& searchWindows) {
 
 	auto l_shape = img_l.shape();
 	auto r_shape = img_r.shape();
 
 	if (l_shape[0] != r_shape[0]) {
-		return Multidim::Array<float, 4>();
+		return Multidim::Array<TCV, 4>();
 	}
 
 	if (l_shape[1] != r_shape[1]) {
-		return Multidim::Array<float, 4>();
+		return Multidim::Array<TCV, 4>();
 	}
 
 	if (nImDim == 3) {
 		if (l_shape[2] != r_shape[2]) {
-			return Multidim::Array<float, 4>();
+			return Multidim::Array<TCV, 4>();
 		}
 	}
 
-	Multidim::Array<float, 3> left_feature_volume = unfold(h_radius, v_radius, img_l);
-	Multidim::Array<float, 3> right_feature_volume = unfold(h_radius, v_radius, img_r);
+	Multidim::Array<T_L, 3> left_feature_volume = unfold<T_L, T_L>(h_radius, v_radius, img_l);
+	Multidim::Array<T_R, 3> right_feature_volume = unfold<T_R, T_R>(h_radius, v_radius, img_r);
 
-	return featureVolume2CostVolume<matchFunc, searchOffset<2>, dDir>(left_feature_volume, right_feature_volume, searchWindows);
+	return featureVolume2CostVolume<matchFunc, T_L, T_R, searchOffset<2>, dDir, TCV>(left_feature_volume, right_feature_volume, searchWindows);
 }
 
-template<matchingFunctions matchFunc, class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
-Multidim::Array<float, 4> unfoldBased2dDisparityCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
-														   Multidim::Array<T_R, nImDim> const& img_r,
-														   UnFoldCompressor const& compressor,
-														   searchOffset<2> const& searchWindows) {
+template<matchingFunctions matchFunc, class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft, typename TCV = float>
+Multidim::Array<TCV, 4> unfoldBased2dDisparityCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
+														 Multidim::Array<T_R, nImDim> const& img_r,
+														 UnFoldCompressor const& compressor,
+														 searchOffset<2> const& searchWindows) {
 
 	auto l_shape = img_l.shape();
 	auto r_shape = img_r.shape();
 
 	if (l_shape[0] != r_shape[0]) {
-		return Multidim::Array<float, 4>();
+		return Multidim::Array<TCV, 4>();
 	}
 
 	if (l_shape[1] != r_shape[1]) {
-		return Multidim::Array<float, 4>();
+		return Multidim::Array<TCV, 4>();
 	}
 
 	if (nImDim == 3) {
 		if (l_shape[2] != r_shape[2]) {
-			return Multidim::Array<float, 4>();
+			return Multidim::Array<TCV, 4>();
 		}
 	}
 
 	Multidim::Array<float, 3> left_feature_volume = unfold(compressor, img_l);
 	Multidim::Array<float, 3> right_feature_volume = unfold(compressor, img_r);
 
-	return featureVolume2CostVolume<matchFunc, searchOffset<2>, dDir>(left_feature_volume, right_feature_volume, searchWindows);
+	return featureVolume2CostVolume<matchFunc, float, float, searchOffset<2>, dDir, TCV>(left_feature_volume, right_feature_volume, searchWindows);
 }
 
 template<matchingFunctions matchFunc, int refineRadius = 1, dispDirection dDir = dispDirection::RightToLeft>
@@ -1189,8 +1256,8 @@ Multidim::Array<float, 2> refinedBarycentricSymmetricDispFeatureVol(Multidim::Ar
 		Multidim::Array<float, 2> mean_left = channelsMean(feature_vol_l);
 		Multidim::Array<float, 2> mean_right = channelsMean(feature_vol_r);
 
-		Multidim::Array<float, 2> sigma_left = channelsSigma(feature_vol_l, mean_left);
-		Multidim::Array<float, 2> sigma_right = channelsSigma(feature_vol_r, mean_right);
+		Multidim::Array<float, 2> sigma_left = channelsZeroMeanNorm(feature_vol_l, mean_left);
+		Multidim::Array<float, 2> sigma_right = channelsZeroMeanNorm(feature_vol_r, mean_right);
 
 		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
 		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
@@ -1198,7 +1265,7 @@ Multidim::Array<float, 2> refinedBarycentricSymmetricDispFeatureVol(Multidim::Ar
 		Multidim::Array<float, 3> normalized_feature_volume_l = normalizedFeatureVolume(zeroMean_feature_volume_l, sigma_left);
 		Multidim::Array<float, 3> normalized_feature_volume_r = normalizedFeatureVolume(zeroMean_feature_volume_r, sigma_right);
 
-		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchRange);
+		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, float, float, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
@@ -1216,7 +1283,7 @@ Multidim::Array<float, 2> refinedBarycentricSymmetricDispFeatureVol(Multidim::Ar
 		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
 		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
 
-		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchRange);
+		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, float, float, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
@@ -1230,7 +1297,7 @@ Multidim::Array<float, 2> refinedBarycentricSymmetricDispFeatureVol(Multidim::Ar
 		Multidim::Array<float, 3> normalized_feature_volume_l = normalizedFeatureVolume(feature_vol_l, sigma_left);
 		Multidim::Array<float, 3> normalized_feature_volume_r = normalizedFeatureVolume(feature_vol_r, sigma_right);
 
-		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchRange);
+		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, float, float, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
@@ -1241,7 +1308,7 @@ Multidim::Array<float, 2> refinedBarycentricSymmetricDispFeatureVol(Multidim::Ar
 		return refineBarycentricSymmetricDisp<matchFunc, refineRadius, dDir>(feature_vol_l, feature_vol_r, disp, searchRange);
 
 	} else {
-		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchRange);
+		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, float, float, dDir>(feature_vol_l, feature_vol_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
@@ -1264,8 +1331,8 @@ Multidim::Array<float, 2> refinedBarycentricDispFeatureVol(Multidim::Array<float
 		Multidim::Array<float, 2> mean_left = channelsMean(feature_vol_l);
 		Multidim::Array<float, 2> mean_right = channelsMean(feature_vol_r);
 
-		Multidim::Array<float, 2> sigma_left = channelsSigma(feature_vol_l, mean_left);
-		Multidim::Array<float, 2> sigma_right = channelsSigma(feature_vol_r, mean_right);
+		Multidim::Array<float, 2> sigma_left = channelsZeroMeanNorm(feature_vol_l, mean_left);
+		Multidim::Array<float, 2> sigma_right = channelsZeroMeanNorm(feature_vol_r, mean_right);
 
 		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
 		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
@@ -1273,7 +1340,7 @@ Multidim::Array<float, 2> refinedBarycentricDispFeatureVol(Multidim::Array<float
 		Multidim::Array<float, 3> normalized_feature_volume_l = normalizedFeatureVolume(zeroMean_feature_volume_l, sigma_left);
 		Multidim::Array<float, 3> normalized_feature_volume_r = normalizedFeatureVolume(zeroMean_feature_volume_r, sigma_right);
 
-		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchRange);
+		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, float, float, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
@@ -1291,7 +1358,7 @@ Multidim::Array<float, 2> refinedBarycentricDispFeatureVol(Multidim::Array<float
 		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
 		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
 
-		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchRange);
+		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, float, float, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
@@ -1305,7 +1372,7 @@ Multidim::Array<float, 2> refinedBarycentricDispFeatureVol(Multidim::Array<float
 		Multidim::Array<float, 3> normalized_feature_volume_l = normalizedFeatureVolume(feature_vol_l, sigma_left);
 		Multidim::Array<float, 3> normalized_feature_volume_r = normalizedFeatureVolume(feature_vol_r, sigma_right);
 
-		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchRange);
+		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, float, float, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
@@ -1316,7 +1383,7 @@ Multidim::Array<float, 2> refinedBarycentricDispFeatureVol(Multidim::Array<float
 		return refineBarycentricDisp<matchFunc, dDir>(feature_vol_l, feature_vol_r, disp);
 
 	} else {
-		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchRange);
+		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, float, float, dDir>(feature_vol_l, feature_vol_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
@@ -1341,8 +1408,8 @@ Multidim::Array<float, 3> refinedBarycentric2dDispFeatureVol(Multidim::Array<flo
 		Multidim::Array<float, 2> mean_left = channelsMean(feature_vol_l);
 		Multidim::Array<float, 2> mean_right = channelsMean(feature_vol_r);
 
-		Multidim::Array<float, 2> sigma_left = channelsSigma(feature_vol_l, mean_left);
-		Multidim::Array<float, 2> sigma_right = channelsSigma(feature_vol_r, mean_right);
+		Multidim::Array<float, 2> sigma_left = channelsZeroMeanNorm(feature_vol_l, mean_left);
+		Multidim::Array<float, 2> sigma_right = channelsZeroMeanNorm(feature_vol_r, mean_right);
 
 		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
 		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
@@ -1350,7 +1417,7 @@ Multidim::Array<float, 3> refinedBarycentric2dDispFeatureVol(Multidim::Array<flo
 		Multidim::Array<float, 3> normalized_feature_volume_l = normalizedFeatureVolume(zeroMean_feature_volume_l, sigma_left);
 		Multidim::Array<float, 3> normalized_feature_volume_r = normalizedFeatureVolume(zeroMean_feature_volume_r, sigma_right);
 
-		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchWindows);
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, float, float, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchWindows);
 
 		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
 
@@ -1368,7 +1435,7 @@ Multidim::Array<float, 3> refinedBarycentric2dDispFeatureVol(Multidim::Array<flo
 		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
 		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
 
-		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchWindows);
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, float, float, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchWindows);
 
 		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
 
@@ -1382,7 +1449,7 @@ Multidim::Array<float, 3> refinedBarycentric2dDispFeatureVol(Multidim::Array<flo
 		Multidim::Array<float, 3> normalized_feature_volume_l = normalizedFeatureVolume(feature_vol_l, sigma_left);
 		Multidim::Array<float, 3> normalized_feature_volume_r = normalizedFeatureVolume(feature_vol_r, sigma_right);
 
-		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchWindows);
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, float, float, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchWindows);
 
 		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
 
@@ -1393,7 +1460,7 @@ Multidim::Array<float, 3> refinedBarycentric2dDispFeatureVol(Multidim::Array<flo
 		return refineBarycentric2dDisp<matchFunc, contiguity, dDir>(feature_vol_l, feature_vol_r, disp, searchWindows);
 
 	} else {
-		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchWindows);
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, float, float, dDir>(feature_vol_l, feature_vol_r, searchWindows);
 
 		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
 
@@ -1418,8 +1485,8 @@ Multidim::Array<float, 3> refinedBarycentricSymmetric2dDispFeatureVol(Multidim::
 		Multidim::Array<float, 2> mean_left = channelsMean(feature_vol_l);
 		Multidim::Array<float, 2> mean_right = channelsMean(feature_vol_r);
 
-		Multidim::Array<float, 2> sigma_left = channelsSigma(feature_vol_l, mean_left);
-		Multidim::Array<float, 2> sigma_right = channelsSigma(feature_vol_r, mean_right);
+		Multidim::Array<float, 2> sigma_left = channelsZeroMeanNorm(feature_vol_l, mean_left);
+		Multidim::Array<float, 2> sigma_right = channelsZeroMeanNorm(feature_vol_r, mean_right);
 
 		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
 		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
@@ -1427,7 +1494,7 @@ Multidim::Array<float, 3> refinedBarycentricSymmetric2dDispFeatureVol(Multidim::
 		Multidim::Array<float, 3> normalized_feature_volume_l = normalizedFeatureVolume(zeroMean_feature_volume_l, sigma_left);
 		Multidim::Array<float, 3> normalized_feature_volume_r = normalizedFeatureVolume(zeroMean_feature_volume_r, sigma_right);
 
-		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchWindows);
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, float, float, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchWindows);
 
 		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
 
@@ -1445,7 +1512,7 @@ Multidim::Array<float, 3> refinedBarycentricSymmetric2dDispFeatureVol(Multidim::
 		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
 		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
 
-		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchWindows);
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, float, float, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchWindows);
 
 		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
 
@@ -1459,7 +1526,7 @@ Multidim::Array<float, 3> refinedBarycentricSymmetric2dDispFeatureVol(Multidim::
 		Multidim::Array<float, 3> normalized_feature_volume_l = normalizedFeatureVolume(feature_vol_l, sigma_left);
 		Multidim::Array<float, 3> normalized_feature_volume_r = normalizedFeatureVolume(feature_vol_r, sigma_right);
 
-		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchWindows);
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, float, float, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchWindows);
 
 		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
 
@@ -1470,7 +1537,7 @@ Multidim::Array<float, 3> refinedBarycentricSymmetric2dDispFeatureVol(Multidim::
 		return refineBarycentricSymmetric2dDisp<matchFunc, contiguity, dDir>(feature_vol_l, feature_vol_r, disp, searchWindows);
 
 	} else {
-		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchWindows);
+		Multidim::Array<float, 4> CV = aggregateCost<matchFunc, float, float, dDir>(feature_vol_l, feature_vol_r, searchWindows);
 
 		Multidim::Array<disp_t, 3> disp = selected2dIndexToDisp(extractSelected2dIndex<mFTraits::extractionStrategy>(CV), searchWindows);
 
@@ -1493,8 +1560,8 @@ Multidim::Array<float, 2> refinedCostSymmetricDispFeatureVol(Multidim::Array<flo
 		Multidim::Array<float, 2> mean_left = channelsMean(feature_vol_l);
 		Multidim::Array<float, 2> mean_right = channelsMean(feature_vol_r);
 
-		Multidim::Array<float, 2> sigma_left = channelsSigma(feature_vol_l, mean_left);
-		Multidim::Array<float, 2> sigma_right = channelsSigma(feature_vol_r, mean_right);
+		Multidim::Array<float, 2> sigma_left = channelsZeroMeanNorm(feature_vol_l, mean_left);
+		Multidim::Array<float, 2> sigma_right = channelsZeroMeanNorm(feature_vol_r, mean_right);
 
 		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
 		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
@@ -1502,7 +1569,7 @@ Multidim::Array<float, 2> refinedCostSymmetricDispFeatureVol(Multidim::Array<flo
 		Multidim::Array<float, 3> normalized_feature_volume_l = normalizedFeatureVolume(zeroMean_feature_volume_l, sigma_left);
 		Multidim::Array<float, 3> normalized_feature_volume_r = normalizedFeatureVolume(zeroMean_feature_volume_r, sigma_right);
 
-		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchRange);
+		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, float, float, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
@@ -1520,7 +1587,7 @@ Multidim::Array<float, 2> refinedCostSymmetricDispFeatureVol(Multidim::Array<flo
 		Multidim::Array<float, 3> zeroMean_feature_volume_l = zeromeanFeatureVolume(feature_vol_l, mean_left);
 		Multidim::Array<float, 3> zeroMean_feature_volume_r = zeromeanFeatureVolume(feature_vol_r, mean_right);
 
-		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchRange);
+		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, float, float, dDir>(zeroMean_feature_volume_l, zeroMean_feature_volume_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
@@ -1534,7 +1601,7 @@ Multidim::Array<float, 2> refinedCostSymmetricDispFeatureVol(Multidim::Array<flo
 		Multidim::Array<float, 3> normalized_feature_volume_l = normalizedFeatureVolume(feature_vol_l, sigma_left);
 		Multidim::Array<float, 3> normalized_feature_volume_r = normalizedFeatureVolume(feature_vol_r, sigma_right);
 
-		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchRange);
+		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, float, float, dDir>(normalized_feature_volume_l, normalized_feature_volume_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 
@@ -1545,7 +1612,7 @@ Multidim::Array<float, 2> refinedCostSymmetricDispFeatureVol(Multidim::Array<flo
 		return refineCostSymmetricDisp<matchFunc, dDir>(feature_vol_l, feature_vol_r, disp, CV);
 
 	} else {
-		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, dDir>(feature_vol_l, feature_vol_r, searchRange);
+		Multidim::Array<float, 3> CV = aggregateCost<matchFunc, float, float, dDir>(feature_vol_l, feature_vol_r, searchRange);
 
 		Multidim::Array<disp_t, 2> disp = extractSelectedIndex<mFTraits::extractionStrategy>(CV);
 

@@ -227,15 +227,27 @@ Multidim::Array<disp_t, 2> testHierarchicalMatch(Multidim::Array<T_IMG, 3> const
 												 Multidim::Array<T_IMG, 3> const& img_right,
 												 StereoVision::Random::NumbersCache<int>* rngCache) {
 
+	using TCV = typename std::conditional<std::is_integral_v<T_IMG>, int32_t, float>::type;
+	constexpr dispDirection dDir = dispDirection::RightToLeft;
+
+	auto shapel = img_left.shape();
+	auto shaper = img_right.shape();
+
+	if (shapel != shaper) {
+		return Multidim::Array<disp_t, 2>();
+	}
+
 	(void) rngCache;
 
-	StereoVision::Correlation::OffsetedCostVolume result =
-			StereoVision::Correlation::hiearchicalTruncatedCostVolume<matchFunc, depth>
+	StereoVision::Correlation::OffsetedCostVolume<TCV> result =
+			StereoVision::Correlation::hiearchicalTruncatedCostVolume<matchFunc, depth, T_IMG, T_IMG, 3, dDir,TCV>
 			(img_left,
 			 img_right,
 			 searchRadius,
 			 searchRadius,
 			 searchDist);
+
+	return result.disp_estimate;
 
 	return result.disp_estimate;
 }
@@ -288,6 +300,10 @@ void BenchmarkStereoMatchingModels::benchmarkFloatDispFunc() {
 
 	QBENCHMARK {
 		disp = disp_function.dispFunc(img_left, img_right, rngCacheptr);
+	}
+
+	if (disp.empty()) {
+		QSKIP("error when computing disparity");
 	}
 }
 

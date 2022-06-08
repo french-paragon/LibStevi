@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "./cross_correlations.h"
 #include "../interpolation/downsampling.h"
+#include "../utils/types_manipulations.h"
 
 #include <set>
 #include <iostream>
@@ -28,31 +29,36 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace StereoVision {
 namespace Correlation {
 
+template<typename TCV>
 struct OffsetedCostVolume {
-	Multidim::Array<float,3> truncated_cost_volume;
+	Multidim::Array<TCV,3> truncated_cost_volume;
 	Multidim::Array<disp_t,2> disp_estimate;
 };
 
-template<matchingFunctions matchFunc, dispDirection dDir = dispDirection::RightToLeft>
-OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l,
-								   Multidim::Array<float,3> const& feature_vol_r,
-								   Multidim::Array<disp_t,2> disp_guide,
-								   disp_t upscale_disp_radius)
+template<matchingFunctions matchFunc, typename T_L, typename T_R, dispDirection dDir = dispDirection::RightToLeft, typename TCV = float>
+OffsetedCostVolume<TCV> computeGuidedCV(Multidim::Array<T_L,3> const& feature_vol_l,
+										Multidim::Array<T_R,3> const& feature_vol_r,
+										Multidim::Array<disp_t,2> disp_guide,
+										disp_t upscale_disp_radius)
 {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	condImgRef<T_L, T_R, dDir, 3> dirInfos(feature_vol_l, feature_vol_r);
+	using T_S = typename condImgRef<T_L, T_R, dDir>::T_S;
+	using T_T = typename condImgRef<T_L, T_R, dDir>::T_T;
 
 	auto l_shape = feature_vol_l.shape();
 	auto r_shape = feature_vol_r.shape();
 
 	if (l_shape[0] != r_shape[0]) {
-		return {Multidim::Array<float, 3>(), Multidim::Array<disp_t,2>()};
+		return {Multidim::Array<TCV, 3>(), Multidim::Array<disp_t,2>()};
 	}
 
 	constexpr int dirSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
 	constexpr bool r2l = dDir == dispDirection::RightToLeft;
-	Multidim::Array<float, 3> & source_feature_volume = const_cast<Multidim::Array<float, 3> &>((r2l) ? feature_vol_r : feature_vol_l);
-	Multidim::Array<float, 3> & target_feature_volume = const_cast<Multidim::Array<float, 3> &>((r2l) ? feature_vol_l : feature_vol_r);
+	Multidim::Array<T_S, 3> & source_feature_volume = const_cast<Multidim::Array<T_S, 3> &>(dirInfos.source());
+	Multidim::Array<T_T, 3> & target_feature_volume = const_cast<Multidim::Array<T_T, 3> &>(dirInfos.target());
 
 	int h = source_feature_volume.shape()[0];
 	int w = source_feature_volume.shape()[1];
@@ -62,8 +68,8 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 	int h_guide = disp_guide.shape()[0];
 	int w_guide = disp_guide.shape()[1];
 
-	OffsetedCostVolume ret = {
-		Multidim::Array<float, 3>({h,w,tcv_depth}, {w*tcv_depth, tcv_depth, 1}),
+	OffsetedCostVolume<TCV> ret = {
+		Multidim::Array<TCV, 3>({h,w,tcv_depth}, {w*tcv_depth, tcv_depth, 1}),
 		Multidim::Array<disp_t,2>(h,w)
 	};
 
@@ -116,28 +122,23 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 			//baseDisp
 			disp_t d0 = dirSign*static_cast<disp_t>(std::round(interpolatedDisp));
 
-			Multidim::Array<float, 1> source_feature_vector(f);
-
-			for (int c = 0; c < f; c++) {
-				float s = source_feature_volume.value<Nc>(i,j,c);
-				source_feature_vector.at<Nc>(c) = s;
-			}
+			Multidim::Array<T_S, 1> source_feature_vector = source_feature_volume.subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
 
 			float score = (MatchingFunctionTraits<matchFunc>::extractionStrategy == dispExtractionStartegy::Cost) ? std::numeric_limits<float>::infinity() : -std::numeric_limits<float>::infinity();
 			disp_t d_r = d0;
 
 			for (int delta_d = -upscale_disp_radius; delta_d <= upscale_disp_radius; delta_d++) {
 
-				Multidim::Array<float, 1> target_feature_vector(f);
+				Multidim::Array<T_T, 1> target_feature_vector(f);
 
 				for (int c = 0; c < f; c++) {
-					float t = target_feature_volume.valueOrAlt({i,j+d0+delta_d,c}, 0);
-					target_feature_vector.at<Nc>(c) = t;
+					T_T t = target_feature_volume.valueOrAlt({i,j+d0+delta_d,c}, 0);
+					target_feature_vector.template at<Nc>(c) = t;
 				}
 
-				float cmp = MatchingFunctionTraits<matchFunc>::featureComparison(source_feature_vector, target_feature_vector);
+				TCV cmp = MatchingFunctionTraits<matchFunc>::template featureComparison<T_S, T_T, TCV>(source_feature_vector, target_feature_vector);
 
-				ret.truncated_cost_volume.at<Nc>(i,j,dirSign*delta_d+upscale_disp_radius) = cmp;
+				ret.truncated_cost_volume.template at<Nc>(i,j,dirSign*delta_d+upscale_disp_radius) = cmp;
 
 				if (MatchingFunctionTraits<matchFunc>::extractionStrategy == dispExtractionStartegy::Cost) {
 					if (cmp < score) {
@@ -153,7 +154,7 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 
 			}
 
-			ret.disp_estimate.at<Nc>(i,j) = dirSign*d_r;
+			ret.disp_estimate.template at<Nc>(i,j) = dirSign*d_r;
 
 			if (d_r != d0) {
 				int delta = dirSign*(d0 - d_r);
@@ -163,13 +164,13 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 
 				if (delta > 0) {
 					for (int dd = tcv_depth-1; dd >= delta ; dd--) {
-						ret.truncated_cost_volume.at<Nc>(i,j,dd) = ret.truncated_cost_volume.at<Nc>(i,j,dd-delta);
+						ret.truncated_cost_volume.template at<Nc>(i,j,dd) = ret.truncated_cost_volume.template at<Nc>(i,j,dd-delta);
 					}
 					startempty = 0;
 					endempty = delta;
 				} else {
 					for (int dd = 0; dd < tcv_depth+delta; dd++) {
-						ret.truncated_cost_volume.at<Nc>(i,j,dd) = ret.truncated_cost_volume.at<Nc>(i,j,dd-delta);
+						ret.truncated_cost_volume.template at<Nc>(i,j,dd) = ret.truncated_cost_volume.template at<Nc>(i,j,dd-delta);
 					}
 					startempty = tcv_depth+delta;
 					endempty = tcv_depth;
@@ -177,14 +178,15 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 
 				for (int dd = startempty; dd < endempty; dd++) {
 
-					Multidim::Array<float, 1> target_feature_vector(f);
+					Multidim::Array<T_T, 1> target_feature_vector(f);
 
 					for (int c = 0; c < f; c++) {
-						float t = target_feature_volume.valueOrAlt({i,j+d_r+dirSign*(dd-upscale_disp_radius),c}, 0);
-						target_feature_vector.at<Nc>(c) = t;
+						T_T t = target_feature_volume.valueOrAlt({i,j+d_r+dirSign*(dd-upscale_disp_radius),c}, 0);
+						target_feature_vector.template at<Nc>(c) = t;
 					}
 
-					ret.truncated_cost_volume.at<Nc>(i,j,dd) = MatchingFunctionTraits<matchFunc>::featureComparison(source_feature_vector, target_feature_vector);
+					ret.truncated_cost_volume.template at<Nc>(i,j,dd) =
+							MatchingFunctionTraits<matchFunc>::template featureComparison<T_S, T_T, TCV>(source_feature_vector, target_feature_vector);
 				}
 			}
 
@@ -195,22 +197,25 @@ OffsetedCostVolume computeGuidedCV(Multidim::Array<float,3> const& feature_vol_l
 
 }
 
-template<matchingFunctions matchFunc, int depth, class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
-OffsetedCostVolume hiearchicalTruncatedCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
-												  Multidim::Array<T_R, nImDim> const& img_r,
-												  std::array<uint8_t, depth+1> h_radiuses,
-												  std::array<uint8_t, depth+1>  v_radiuses,
-												  disp_t disp_width,
-												  disp_t upscale_disp_radius = 2) {
+template<matchingFunctions matchFunc, int depth, class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft, class TCV = float>
+OffsetedCostVolume<TCV> hiearchicalTruncatedCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
+													   Multidim::Array<T_R, nImDim> const& img_r,
+													   std::array<uint8_t, depth+1> h_radiuses,
+													   std::array<uint8_t, depth+1>  v_radiuses,
+													   disp_t disp_width,
+													   disp_t upscale_disp_radius = 2) {
+
+	using T_LF = typename MatchingFuncComputeTypeInfos<matchFunc, T_L>::FeatureType;
+	using T_RF = typename MatchingFuncComputeTypeInfos<matchFunc, T_R>::FeatureType;
 
 	static_assert (depth > 0, "Minimum depth is 1");
 
-	Multidim::Array<float, nImDim> downscaled_l = Interpolation::averagePoolingDownsample(img_l, Interpolation::DownSampleWindows(2));
-	Multidim::Array<float, nImDim> downscaled_r = Interpolation::averagePoolingDownsample(img_r, Interpolation::DownSampleWindows(2));
+	Multidim::Array<T_L, nImDim> downscaled_l = Interpolation::averagePoolingDownsample<T_L, T_L>(img_l, Interpolation::DownSampleWindows(2));
+	Multidim::Array<T_R, nImDim> downscaled_r = Interpolation::averagePoolingDownsample<T_R, T_R>(img_r, Interpolation::DownSampleWindows(2));
 
 	if (depth == 1) {
 
-		Multidim::Array<float, 3> level_0_cv = unfoldBasedCostVolume<matchFunc, float, float, nImDim, dDir>
+		Multidim::Array<TCV, 3> level_0_cv = unfoldBasedCostVolume<matchFunc, T_L, T_R, nImDim, dDir, TCV>
 				(downscaled_l,
 				 downscaled_r,
 				 h_radiuses[0],
@@ -219,10 +224,10 @@ OffsetedCostVolume hiearchicalTruncatedCostVolume(Multidim::Array<T_L, nImDim> c
 
 		Multidim::Array<disp_t, 2> level_0_disp = extractSelectedIndex<MatchingFunctionTraits<matchFunc>::extractionStrategy>(level_0_cv);
 
-		Multidim::Array<float,3> feature_vol_l = getFeatureVolumeForMatchFunc<matchFunc>(unfold(h_radiuses[1], v_radiuses[1], img_l));
-		Multidim::Array<float,3> feature_vol_r = getFeatureVolumeForMatchFunc<matchFunc>(unfold(h_radiuses[1], v_radiuses[1], img_r));
+		Multidim::Array<T_LF,3> feature_vol_l = getFeatureVolumeForMatchFunc<matchFunc>(unfold<T_L, T_L>(h_radiuses[1], v_radiuses[1], img_l));
+		Multidim::Array<T_RF,3> feature_vol_r = getFeatureVolumeForMatchFunc<matchFunc>(unfold<T_R, T_R>(h_radiuses[1], v_radiuses[1], img_r));
 
-		return computeGuidedCV<matchFunc, dDir>(feature_vol_l, feature_vol_r, level_0_disp, upscale_disp_radius);
+		return computeGuidedCV<matchFunc, T_LF, T_RF, dDir, TCV>(feature_vol_l, feature_vol_r, level_0_disp, upscale_disp_radius);
 
 	} else {
 
@@ -236,7 +241,7 @@ OffsetedCostVolume hiearchicalTruncatedCostVolume(Multidim::Array<T_L, nImDim> c
 			return r;
 		};
 
-		auto previous_level = hiearchicalTruncatedCostVolume<matchFunc, nextDepth, float, float, nImDim, dDir>
+		auto previous_level = hiearchicalTruncatedCostVolume<matchFunc, nextDepth, T_L, T_R, nImDim, dDir, TCV>
 				(downscaled_l,
 				 downscaled_r,
 				 truncate_radiuses(h_radiuses),
@@ -244,16 +249,16 @@ OffsetedCostVolume hiearchicalTruncatedCostVolume(Multidim::Array<T_L, nImDim> c
 				 (disp_width + 1)/2,
 				 upscale_disp_radius);
 
-		Multidim::Array<float,3> feature_vol_l = getFeatureVolumeForMatchFunc<matchFunc>(unfold(h_radiuses.back(), v_radiuses.back(), img_l));
-		Multidim::Array<float,3> feature_vol_r = getFeatureVolumeForMatchFunc<matchFunc>(unfold(h_radiuses.back(), v_radiuses.back(), img_r));
+		Multidim::Array<T_LF,3> feature_vol_l = getFeatureVolumeForMatchFunc<matchFunc>(unfold<T_L, T_L>(h_radiuses.back(), v_radiuses.back(), img_l));
+		Multidim::Array<T_RF,3> feature_vol_r = getFeatureVolumeForMatchFunc<matchFunc>(unfold<T_R, T_R>(h_radiuses.back(), v_radiuses.back(), img_r));
 
-		return computeGuidedCV<matchFunc, dDir>(feature_vol_l, feature_vol_r, previous_level.disp_estimate, upscale_disp_radius);
+		return computeGuidedCV<matchFunc, T_LF, T_RF, dDir, TCV>(feature_vol_l, feature_vol_r, previous_level.disp_estimate, upscale_disp_radius);
 	}
 
 }
 
-template<matchingFunctions matchFunc, int depth, class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft>
-OffsetedCostVolume hiearchicalTruncatedCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
+template<matchingFunctions matchFunc, int depth, class T_L, class T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft, class TCV = float>
+OffsetedCostVolume<TCV> hiearchicalTruncatedCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
 												  Multidim::Array<T_R, nImDim> const& img_r,
 												  uint8_t h_radius,
 												  uint8_t  v_radius,
@@ -267,7 +272,7 @@ OffsetedCostVolume hiearchicalTruncatedCostVolume(Multidim::Array<T_L, nImDim> c
 		v_radiuses[i] = v_radius;
 	}
 
-	return hiearchicalTruncatedCostVolume<matchFunc, depth, T_L, T_R, nImDim, dDir>
+	return hiearchicalTruncatedCostVolume<matchFunc, depth, T_L, T_R, nImDim, dDir, TCV>
 			(img_l, img_r, h_radiuses, v_radiuses, disp_width, upscale_disp_radius);
 }
 
