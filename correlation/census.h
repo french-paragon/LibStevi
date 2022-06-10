@@ -20,136 +20,73 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include "./correlation_base.h"
+#include "./matching_costs.h"
+#include "./unfold.h"
 
 namespace StereoVision {
 namespace Correlation {
 
-typedef uint64_t census_data_t;
 template<typename T_I>
-Multidim::Array<census_data_t, 2> censusTransform2D(Multidim::Array<T_I, 2> const& input,
-													int8_t h_radius,
-													int8_t v_radius){
+Multidim::Array<census_data_t, 3> censusFeatures(Multidim::Array<T_I, 3> const& baseFeatures) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
-	auto shape = input.shape();
+	auto shape = baseFeatures.shape();
 
-	Multidim::Array<census_data_t, 2> census(shape);
+	if (shape[2] <= 1) {
+		return Multidim::Array<census_data_t, 3>(); //impossible to compute the census when only a single feature channel is present
+	}
 
+	int size_census_features = (shape[2] - 1)/(sizeof (census_data_t) * 8) + 1;
+
+	Multidim::Array<census_data_t, 3> census(shape[0], shape[1], size_census_features);
+
+	#pragma omp parallel for
 	for (int i = 0; i < shape[0]; i++) {
 
 		for (int j = 0; j < shape[1]; j++) {
 
+			T_I ref = baseFeatures.template value<Nc>(i,j,0);
+
 			census_data_t d = 0;
-			int b = 0;
+			size_t b = 0;
+			int census_channel = 0;
 
-			for (int k = -v_radius; k <= v_radius; k++) {
+			for (int c = 1; c < shape[2]; c++) {
+				T_I val = baseFeatures.template value<Nc>(i,j,c);
 
-				for (int l = -h_radius; l <= h_radius; l++) {
+				census_data_t g = (ref > val) ? 1 : 0;
 
-					if (i+k >= 0 and i+k < shape[0] and j+l >= 0 and j+l < shape[1]) {
-						census_data_t g = (input.template value<Nc>(i,j) > input.template value<Nc>(i+k,j+l)) ? 1 : 0;
-						d |= g << b;
-					}
+				d |= g << b;
+				b++;
 
-					b++;
+				if (b >= sizeof (census_data_t)*8) {
+					census.at<Nc>(i,j, census_channel) = d;
+					census_channel++;
+					d = 0;
+					b = 0;
 				}
-
 			}
 
-			census.at<Nc>(i,j) = d;
-
 		}
-
 	}
 
 	return census;
-
 }
 
-template<typename T_I>
-Multidim::Array<census_data_t, 2> censusTransform2D(Multidim::Array<T_I, 3> const& input,
+template<typename T_I, int nDim>
+Multidim::Array<census_data_t, 3> censusTransform2D(Multidim::Array<T_I, nDim> const& input,
 													int8_t h_radius,
-													int8_t v_radius){
+													int8_t v_radius,
+													PaddingMargins const& padding = PaddingMargins()) {
 
-	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+	static_assert (nDim == 2 or nDim == 3, "Can process only 2D (grascale images) or 3D (colored images) arrays.");
 
-	auto shape = input.shape();
+	Multidim::Array<T_I, 3> basefeatures = unfold<T_I, T_I>(h_radius, v_radius, input, padding);
 
-	Multidim::Array<census_data_t, 2> census(shape[0], shape[1]);
-
-	for (int i = 0; i < shape[0]; i++) {
-
-		for (int j = 0; j < shape[1]; j++) {
-
-			census_data_t d = 0;
-			int b = 0;
-
-			for (int k = -v_radius; k <= v_radius; k++) {
-
-				for (int l = -h_radius; l <= h_radius; l++) {
-
-					for (int c = 0; c < shape[2]; c++) {
-
-						if (i+k >= 0 and i+k < shape[0] and j+l >= 0 and j+l < shape[1]) {
-							census_data_t g = (input.template value<Nc>(i,j,c) > input.template value<Nc>(i+k,j+l,c)) ? 1 : 0;
-							d |= g << b;
-						}
-
-						b++;
-					}
-				}
-
-			}
-
-			census.at<Nc>(i,j) = d;
-
-		}
-
-	}
+	Multidim::Array<census_data_t, 3> census = censusFeatures(basefeatures);
 
 	return census;
-
-}
-
-typedef uint8_t census_cv_t;
-
-inline census_cv_t hammingDistance(census_data_t n1, census_data_t n2) {
-
-	census_data_t m = n1 ^ n2;
-
-#ifdef __GNUC__
-	return static_cast<census_cv_t>(__builtin_popcountl(m));
-#else
-	std::bitset<std::numeric_limits<uint64_t>::digits> bs( m );
-	return bs.count();
-#endif
-
-}
-
-template<typename T_L, typename T_R, int nImDim = 2, dispDirection dDir = dispDirection::RightToLeft, bool rmIncompleteRanges = false>
-Multidim::Array<census_cv_t, 3> censusCostVolume(Multidim::Array<T_L, nImDim> const& img_l,
-												 Multidim::Array<T_R, nImDim> const& img_r,
-												 uint8_t h_radius,
-												 uint8_t v_radius,
-												 disp_t disp_width,
-												 disp_t disp_offset = 0) {
-
-	Multidim::Array<census_data_t, 2> census_l = censusTransform2D(img_l, h_radius, v_radius);
-	Multidim::Array<census_data_t, 2> census_r = censusTransform2D(img_r, h_radius, v_radius);
-
-	return buildCostVolume<census_data_t,
-			census_data_t,
-			census_cv_t,
-			hammingDistance,
-			dispExtractionStartegy::Cost,
-			dDir,
-			rmIncompleteRanges> (census_l,
-								 census_r,
-								 1,
-								 1,
-								 disp_width,
-								 disp_offset);
 
 }
 

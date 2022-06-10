@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "./correlation_base.h"
 #include "./cost_based_refinement.h"
 #include "./unfold.h"
+#include "./census.h"
 
 #include "../utils/contiguity.h"
 #include "../utils/types_manipulations.h"
@@ -280,7 +281,7 @@ inline Multidim::Array<T_O, 3> zeromeanNormalizedFeatureVolume(Multidim::Array<T
 					v *= static_cast<T_E>(feature_vol.template value<Nc>(i,j,c)) - static_cast<T_E>(mean.template value<Nc>(i,j));
 					v /= norm.template value<Nc>(i,j);
 
-					constexpr int diff = sizeof (T_E) - sizeof (T_O);
+					constexpr int diff = static_cast<int>(sizeof (T_E)) - static_cast<int>(sizeof (T_O));
 
 					if (diff > 0) {
 						v /= (1 << diff*8); //fit back into T_O
@@ -328,7 +329,7 @@ inline Multidim::Array<T_O, 3> normalizedFeatureVolume(Multidim::Array<T_I, 3> c
 					v *= feature_vol.template value<Nc>(i,j,c);
 					v /= norm.template value<Nc>(i,j);
 
-					constexpr int diff = sizeof (T_E) - sizeof (T_O);
+					constexpr int diff = static_cast<int>(sizeof (T_E)) - static_cast<int>(sizeof (T_O));
 
 					if (diff > 0) {
 						v /= (2 << diff*8); //fit back into T_O
@@ -376,15 +377,22 @@ inline Multidim::Array<T_O, 3> zeromeanFeatureVolume(Multidim::Array<T_I, 3> con
 }
 
 template<matchingFunctions matchFunc, class T_I>
-Multidim::Array<typename MatchingFuncComputeTypeInfos<matchFunc, T_I>::FeatureType,3> getFeatureVolumeForMatchFunc(Multidim::Array<T_I, 3> const& feature_vol) {
+Multidim::Array<FeatureTypeForMatchFunc<matchFunc, T_I>,3> getFeatureVolumeForMatchFunc(Multidim::Array<T_I, 3> const& feature_vol) {
 
 	using T_E = typename TypesManipulations::accumulation_extended_t<T_I>;
-	using FType = typename MatchingFuncComputeTypeInfos<matchFunc, T_I>::FeatureType;
+
+	constexpr bool CensusFeatures = MatchingFunctionTraits<matchFunc>::isCensusBased;
+
+	using FType = FeatureTypeForMatchFunc<matchFunc, T_I>;
 
 	if (MatchingFunctionTraits<matchFunc>::ZeroMean and MatchingFunctionTraits<matchFunc>::Normalized) {
 
 		Multidim::Array<T_I, 2> mean = channelsMean<T_I, T_I>(feature_vol);
 		Multidim::Array<T_E, 2> sigma = channelsZeroMeanNorm<T_I, T_I, T_E>(feature_vol, mean);
+
+		if (CensusFeatures) {
+			return censusFeatures(zeromeanNormalizedFeatureVolume<T_I, T_I, T_E, T_E>(feature_vol, mean, sigma)).template cast<FType>();
+		}
 
 		return zeromeanNormalizedFeatureVolume<T_I, T_I, T_E, FType>(feature_vol, mean, sigma);
 
@@ -392,31 +400,28 @@ Multidim::Array<typename MatchingFuncComputeTypeInfos<matchFunc, T_I>::FeatureTy
 
 		Multidim::Array<T_I, 2> mean = channelsMean<T_I, T_I>(feature_vol);
 
+		if (CensusFeatures) {
+			return censusFeatures(zeromeanFeatureVolume<T_I, T_I, T_I>(feature_vol, mean)).template cast<FType>();
+		}
+
 		return zeromeanFeatureVolume<T_I, T_I, FType>(feature_vol, mean);
 
 	} else if (MatchingFunctionTraits<matchFunc>::Normalized) {
 
 		Multidim::Array<T_E, 2> norm = channelsNorm<T_I, T_E>(feature_vol);
 
+		if (CensusFeatures) {
+			return censusFeatures(normalizedFeatureVolume<T_I, T_E, T_E>(feature_vol, norm)).template cast<FType>();
+		}
+
 		return normalizedFeatureVolume<T_I, T_E, FType>(feature_vol, norm);
 	}
 
-	//if (std::is_same<FType, T_I>::value) {
-	//	return feature_vol;
-	//}
-
-	Multidim::Array<FType,3> fv(feature_vol.shape());
-
-	#pragma omp parallel for
-	for (int i = 0; i < fv.shape()[0]; i++) {
-		for (int j = 0; j < fv.shape()[1]; j++) {
-			for (int k = 0; k < fv.shape()[2]; k++) {
-				fv.atUnchecked(i,j,k) = static_cast<FType>(feature_vol.valueUnchecked(i,j,k));
-			}
-		}
+	if (CensusFeatures) {
+		return censusFeatures(feature_vol).template cast<FType>();
 	}
 
-	return fv;
+	return feature_vol.template cast<FType>();
 
 }
 
@@ -426,8 +431,8 @@ featureVolume2CostVolume(Multidim::Array<T_L, 3> const& feature_vol_l,
 						 Multidim::Array<T_R, 3> const& feature_vol_r,
 						 SearchRangeType searchRange) {
 
-	using FTypeL = typename MatchingFuncComputeTypeInfos<matchFunc, T_L>::FeatureType;
-	using FTypeR = typename MatchingFuncComputeTypeInfos<matchFunc, T_R>::FeatureType;
+	using FTypeL = FeatureTypeForMatchFunc<matchFunc, T_L>;
+	using FTypeR = FeatureTypeForMatchFunc<matchFunc, T_R>;
 
 	return aggregateCost<matchFunc, FTypeL, FTypeR, dDir, TCV>
 			(getFeatureVolumeForMatchFunc<matchFunc>(feature_vol_l),

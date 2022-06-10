@@ -61,6 +61,7 @@ set(LIB_SRC
         optimization/l0optimization.h
         optimization/l1optimization.h
         optimization/l2optimization.h
+        optimization/leastmedianoptimization.h
         optimization/sphericaloptimization.h
         optimization/affine_utils.h
         utils/contiguity.h

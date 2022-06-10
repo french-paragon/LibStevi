@@ -47,6 +47,12 @@ target_link_libraries(testL1Optimization ${STEREOVISION_LIB} Qt${QT_VERSION_MAJO
 add_test(TestL1Optimization testL1Optimization)
 
 
+add_executable(testLeastMedianOptimization testLeastMedianOptimization.cpp)
+target_link_libraries(testLeastMedianOptimization ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestLeastMedianOptimization testLeastMedianOptimization)
+
+
+
 add_executable(testOptimizationUtils testOptimizationUtils.cpp)
 target_link_libraries(testOptimizationUtils ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestOptimizationUtils testOptimizationUtils)

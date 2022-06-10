@@ -313,6 +313,8 @@ void BenchmarkStereoMatchingModels::benchmarkUint8DispFunc_data() {
 	QTest::addColumn<bool>("useRngCache");
 
 
+	//NCC cost function
+
 	QTest::newRow("testPatchMatch<cost = matchingFunctions::NCC, type = uint8_t, searchRadius = 3, searchRange = 120, niter = 5, nRandomSearch = 4> (no rng cache)")
 			<< dispFuncB({testPatchMatch<matchingFunctions::NCC,uint8_t,3,120,5,4>}) << false;
 
@@ -328,9 +330,48 @@ void BenchmarkStereoMatchingModels::benchmarkUint8DispFunc_data() {
 	QTest::newRow("testHierarchicalMatch<cost = matchingFunctions::NCC, type = uint8_t, searchRadius = 3, searchRange = 120, depth = 2>")
 			<< dispFuncB({testHierarchicalMatch<matchingFunctions::NCC,uint8_t,3,120, 2>}) << false;
 
-
 	QTest::newRow("testHierarchicalMatch<cost = matchingFunctions::NCC, type = uint8_t, searchRadius = 3, searchRange = 120, depth = 3>")
 			<< dispFuncB({testHierarchicalMatch<matchingFunctions::NCC,uint8_t,3,120, 3>}) << false;
+
+	//SAD cost function
+
+	QTest::newRow("testPatchMatch<cost = matchingFunctions::SAD, type = uint8_t, searchRadius = 3, searchRange = 120, niter = 5, nRandomSearch = 4> (no rng cache)")
+			<< dispFuncB({testPatchMatch<matchingFunctions::SAD,uint8_t,3,120,5,4>}) << false;
+
+
+	QTest::newRow("testPatchMatch<cost = matchingFunctions::SAD, type = uint8_t, searchRadius = 3, searchRange = 120, niter = 5, nRandomSearch = 4> (rng cache)")
+			<< dispFuncB({testPatchMatch<matchingFunctions::SAD,uint8_t,3,120,5,4>}) << true;
+
+
+	QTest::newRow("testDenseMatch<cost = matchingFunctions::SAD, type = uint8_t, searchRadius = 3, searchRange = 120>")
+			<< dispFuncB({testDenseMatch<matchingFunctions::SAD,uint8_t,3,120>}) << false;
+
+	QTest::newRow("testHierarchicalMatch<cost = matchingFunctions::SAD, type = uint8_t, searchRadius = 3, searchRange = 120, depth = 2>")
+			<< dispFuncB({testHierarchicalMatch<matchingFunctions::SAD,uint8_t,3,120, 2>}) << false;
+
+
+	QTest::newRow("testHierarchicalMatch<cost = matchingFunctions::SAD, type = uint8_t, searchRadius = 3, searchRange = 120, depth = 3>")
+			<< dispFuncB({testHierarchicalMatch<matchingFunctions::SAD,uint8_t,3,120, 3>}) << false;
+
+	//CENSUS cost function
+
+	QTest::newRow("testPatchMatch<cost = matchingFunctions::CENSUS, type = uint8_t, searchRadius = 3, searchRange = 120, niter = 5, nRandomSearch = 4> (no rng cache)")
+			<< dispFuncB({testPatchMatch<matchingFunctions::CENSUS,uint8_t,3,120,5,4>}) << false;
+
+
+	QTest::newRow("testPatchMatch<cost = matchingFunctions::CENSUS, type = uint8_t, searchRadius = 3, searchRange = 120, niter = 5, nRandomSearch = 4> (rng cache)")
+			<< dispFuncB({testPatchMatch<matchingFunctions::CENSUS,uint8_t,3,120,5,4>}) << true;
+
+
+	QTest::newRow("testDenseMatch<cost = matchingFunctions::CENSUS, type = uint8_t, searchRadius = 3, searchRange = 120>")
+			<< dispFuncB({testDenseMatch<matchingFunctions::CENSUS,uint8_t,3,120>}) << false;
+
+	QTest::newRow("testHierarchicalMatch<cost = matchingFunctions::CENSUS, type = uint8_t, searchRadius = 3, searchRange = 120, depth = 2>")
+			<< dispFuncB({testHierarchicalMatch<matchingFunctions::CENSUS,uint8_t,3,120, 2>}) << false;
+
+
+	QTest::newRow("testHierarchicalMatch<cost = matchingFunctions::CENSUS, type = uint8_t, searchRadius = 3, searchRange = 120, depth = 3>")
+			<< dispFuncB({testHierarchicalMatch<matchingFunctions::CENSUS,uint8_t,3,120, 3>}) << false;
 
 }
 void BenchmarkStereoMatchingModels::benchmarkUint8DispFunc() {
