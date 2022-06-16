@@ -48,9 +48,6 @@ enum class matchingFunctions{
 	ZMEDAD = 9, //zero mean median absolute difference
 	HAMMING = 10, //Hamming distance (to used with census and other binary features)
 	CENSUS = 11, //Hamming distance (but make some intermediate functions to transform your features into census features)
-	ZCENSUS = 12, //CENSUS, but intermediate features are zero-meaned
-	NCENSUS = 13, //CENSUS, but intermediate features are normalized
-	ZNCENSUS = 14, //CENSUS, but intermediate features are whitened
 };
 
 template<matchingFunctions func>
@@ -428,57 +425,6 @@ public:
 	}
 };
 
-template<>
-class MatchingFunctionTraits<matchingFunctions::ZCENSUS>{
-public:
-	static const std::string Name;
-	static constexpr bool ZeroMean = true;
-	static constexpr bool Normalized = false;
-	static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;
-
-	static constexpr bool isCensusBased = true;
-
-	template<class T_S, class T_T, class T_O = float>
-	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
-		return hammingDistance(source, target);
-	}
-};
-
-template<>
-class MatchingFunctionTraits<matchingFunctions::NCENSUS>{
-public:
-	static const std::string Name;
-	static constexpr bool ZeroMean = false;
-	static constexpr bool Normalized = true;
-	static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;
-
-	static constexpr bool isCensusBased = true;
-
-	template<class T_S, class T_T, class T_O = float>
-	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
-		return hammingDistance(source, target);
-	}
-};
-
-template<>
-class MatchingFunctionTraits<matchingFunctions::ZNCENSUS>{
-public:
-	static const std::string Name;
-	static constexpr bool ZeroMean = true;
-	static constexpr bool Normalized = true;
-	static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;
-
-	static constexpr bool isCensusBased = true;
-
-	template<class T_S, class T_T, class T_O = float>
-	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
-		return hammingDistance(source, target);
-	}
-};
-
 template<matchingFunctions func, typename ImType>
 struct MatchingFuncComputeTypeInfos {
 
@@ -527,36 +473,6 @@ struct MatchingFuncComputeTypeInfos<matchingFunctions::CENSUS, ImType> : public 
 
 template<>
 struct MatchingFuncComputeTypeInfos<matchingFunctions::CENSUS, uint8_t> : public MatchingFuncComputeTypeInfos<matchingFunctions::HAMMING, uint8_t> {
-
-};
-
-template<typename ImType>
-struct MatchingFuncComputeTypeInfos<matchingFunctions::ZCENSUS, ImType> : public MatchingFuncComputeTypeInfos<matchingFunctions::HAMMING, ImType> {
-
-};
-
-template<>
-struct MatchingFuncComputeTypeInfos<matchingFunctions::ZCENSUS, uint8_t> : public MatchingFuncComputeTypeInfos<matchingFunctions::HAMMING, uint8_t> {
-
-};
-
-template<typename ImType>
-struct MatchingFuncComputeTypeInfos<matchingFunctions::NCENSUS, ImType> : public MatchingFuncComputeTypeInfos<matchingFunctions::HAMMING, ImType> {
-
-};
-
-template<>
-struct MatchingFuncComputeTypeInfos<matchingFunctions::NCENSUS, uint8_t> : public MatchingFuncComputeTypeInfos<matchingFunctions::HAMMING, uint8_t> {
-
-};
-
-template<typename ImType>
-struct MatchingFuncComputeTypeInfos<matchingFunctions::ZNCENSUS, ImType> : public MatchingFuncComputeTypeInfos<matchingFunctions::HAMMING, ImType> {
-
-};
-
-template<>
-struct MatchingFuncComputeTypeInfos<matchingFunctions::ZNCENSUS, uint8_t> : public MatchingFuncComputeTypeInfos<matchingFunctions::HAMMING, uint8_t> {
 
 };
 

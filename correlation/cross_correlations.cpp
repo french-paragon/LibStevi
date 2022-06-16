@@ -31,9 +31,6 @@ const std::string MatchingFunctionTraits<matchingFunctions::ZSSD>::Name = "ZSSD"
 const std::string MatchingFunctionTraits<matchingFunctions::ZSAD>::Name = "ZSAD";
 const std::string MatchingFunctionTraits<matchingFunctions::HAMMING>::Name = "HAMMING";
 const std::string MatchingFunctionTraits<matchingFunctions::CENSUS>::Name = "CENSUS";
-const std::string MatchingFunctionTraits<matchingFunctions::NCENSUS>::Name = "NCENSUS";
-const std::string MatchingFunctionTraits<matchingFunctions::ZCENSUS>::Name = "ZCENSUS";
-const std::string MatchingFunctionTraits<matchingFunctions::ZNCENSUS>::Name = "ZNCENSUS";
 
 } //namespace Correlation
 } //namespace StereoVision
