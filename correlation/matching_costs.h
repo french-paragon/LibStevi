@@ -137,7 +137,7 @@ inline T_O MedianAbsDiff(Multidim::Array<T_S,1> const& source,
 		}
 	}
 
-	std::nth_element(diffs.begin(), diffs.begin()+medianPos, diffs.end);
+	std::nth_element(diffs.begin(), diffs.begin()+medianPos, diffs.end());
 	return diffs[medianPos];
 
 }
