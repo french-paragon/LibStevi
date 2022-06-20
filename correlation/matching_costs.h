@@ -36,6 +36,7 @@ namespace StereoVision {
 namespace Correlation {
 
 enum class matchingFunctions{
+	None = -1, //use to implement default implementation when
 	CC = 0, //cross correlation
 	NCC = 1, //normalized cross correlation
 	SSD = 2, //sum of square differences
@@ -172,6 +173,81 @@ inline hamming_cv_t hammingDistance(Multidim::Array<T_S,1> const& source,
 
 	return score;
 }
+
+template<>
+class MatchingFunctionTraits<matchingFunctions::None>{
+//This specialization is not meant to be used in practice, but provide a default implementation when implementing conditional templates.
+public:
+	static constexpr bool ZeroMean = false;
+	static constexpr bool Normalized = true;
+	static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;
+
+	static constexpr bool isCensusBased = false;
+
+	template<class T_S, class T_T, class T_O = float>
+	inline static T_O featureComparison(Multidim::Array<T_S,1> const& source,
+								   Multidim::Array<T_T,1> const& target) {
+		(void) source;
+		(void) target;
+		return 0;
+	}
+
+	template<int dimsIn, int dimsOuts = Eigen::Dynamic>
+	inline static Eigen::Matrix<float,dimsIn,1> barycentricBestApproximation(Eigen::Matrix<float,dimsOuts,dimsIn> const& A,
+																			 Eigen::Matrix<float,dimsOuts,1> const& b) {
+		(void) A;
+		(void) b;
+		return Eigen::Matrix<float,dimsIn,1>();
+	}
+
+	template<int dimsIn, int dimsOuts = Eigen::Dynamic>
+	inline static Eigen::Matrix<float,dimsIn,1> subpartBarycentricBestApproximation(Eigen::Matrix<float,dimsOuts,dimsIn> const& A,
+																					Eigen::Matrix<float,dimsOuts,1> const& b,
+																					Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic> const& testSetsIdxs) {
+		(void) A;
+		(void) b;
+		(void) testSetsIdxs;
+		return Eigen::Matrix<float,dimsIn,1>();
+	}
+};
+
+namespace matchingcosts_details {
+	DECLARE_METHOD_TEST(featureComparison, has_featureComparison);
+	DECLARE_METHOD_TEST(barycentricBestApproximation, has_barycentricBestApproximation);
+	DECLARE_METHOD_TEST(subpartBarycentricBestApproximation, has_subpartBarycentricBestApproximation);
+
+	template<matchingFunctions func>
+	class MatchingFunctionTraitsInfos{
+	public:
+		template<class T_S, class T_T, class T_O = float>
+		static constexpr bool traitsHasFeatureComparison() {
+				return has_featureComparison
+				<MatchingFunctionTraits<func>,
+				T_O(MatchingFunctionTraits<func>::*)(Multidim::Array<T_S,1> const&,
+													 Multidim::Array<T_T,1> const&)>::value;
+		}
+
+		template<int dimsIn, int dimsOuts = Eigen::Dynamic>
+		static constexpr bool traitsHasBarycentricBestApproximation() {
+				return has_barycentricBestApproximation
+				<MatchingFunctionTraits<func>,
+				Eigen::Matrix<float,dimsIn,1>(MatchingFunctionTraits<func>::*)
+				(Eigen::Matrix<float,dimsOuts,dimsIn> const&,
+				 Eigen::Matrix<float,dimsOuts,1> const&)>::value;
+		}
+
+		template<int dimsIn, int dimsOuts = Eigen::Dynamic>
+		static constexpr bool traitsHasSubpartBarycentricBestApproximation() {
+				return has_subpartBarycentricBestApproximation
+				<MatchingFunctionTraits<func>,
+				Eigen::Matrix<float,dimsIn,1>(MatchingFunctionTraits<func>::*)
+				(Eigen::Matrix<float,dimsOuts,dimsIn> const&,
+				 Eigen::Matrix<float,dimsOuts,1> const&,
+				 Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic> const&)>::value;
+		}
+
+	};
+};
 
 template<>
 class MatchingFunctionTraits<matchingFunctions::NCC>{
@@ -366,6 +442,14 @@ public:
 																			 Eigen::Matrix<float,dimsOuts,1> const& b) {
 		return Optimization::affineBestLeastMedianApproximation(A,b);
 	}
+
+	template<int dimsIn, int dimsOuts = Eigen::Dynamic>
+	inline static Eigen::Matrix<float,dimsIn,1> subpartBarycentricBestApproximation(Eigen::Matrix<float,dimsOuts,dimsIn> const& A,
+																					Eigen::Matrix<float,dimsOuts,1> const& b,
+																					Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic> const& testSetsIdxs) {
+
+		return Optimization::affineBestLeastMedianApproximation(A,b, testSetsIdxs);
+	}
 };
 
 template<>
@@ -388,6 +472,14 @@ public:
 	inline static Eigen::Matrix<float,dimsIn,1> barycentricBestApproximation(Eigen::Matrix<float,dimsOuts,dimsIn> const& A,
 																			 Eigen::Matrix<float,dimsOuts,1> const& b) {
 		return Optimization::affineBestLeastMedianApproximation(A,b);
+	}
+
+	template<int dimsIn, int dimsOuts = Eigen::Dynamic>
+	inline static Eigen::Matrix<float,dimsIn,1> subpartBarycentricBestApproximation(Eigen::Matrix<float,dimsOuts,dimsIn> const& A,
+																					Eigen::Matrix<float,dimsOuts,1> const& b,
+																					Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic> const& testSetsIdxs) {
+
+		return Optimization::affineBestLeastMedianApproximation(A,b, testSetsIdxs);
 	}
 };
 

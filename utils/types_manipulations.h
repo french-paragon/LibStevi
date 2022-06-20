@@ -22,6 +22,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <cstdint>
 #include <type_traits>
 
+#define DECLARE_METHOD_TEST(func, name)                                       \
+	template<typename T, typename Sign>                                       \
+	struct name {                                                             \
+	private:                                                                  \
+		typedef char yes[1];                                                  \
+		typedef char no [2];                                                  \
+		template <typename U, U> struct type_check;                           \
+		template <typename A> static yes &chk(type_check<Sign, &A::func > *); \
+		template <typename  > static no  &chk(...);                           \
+	public:                                                                   \
+		static bool const value = sizeof(chk<T>(0)) == sizeof(yes);           \
+	}
+
 namespace StereoVision {
 
 namespace TypesManipulations {

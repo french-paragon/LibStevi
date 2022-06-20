@@ -25,6 +25,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <vector>
 #include <MultidimArrays/MultidimArrays.h>
 
+#include <Eigen/Core>
+
 namespace StereoVision {
 namespace Correlation {
 
@@ -57,6 +59,64 @@ protected:
 	PaddingMargins _margins;
 	std::vector<pixelIndex> _indices;
 };
+
+inline int channelFromCord(int vertical, int horizontal, int channel, int hSize, int channels) {
+	return channels*hSize*vertical + channels*horizontal + channel;
+}
+
+/*!
+ * \brief getFeatureSlidingSubwindowIdxs return a matrix of indices allowing to identify the features corresponding to a sliding windows in image space
+ * \param h_radius_base The horizontal radius used for the unfold operator leading to the cost volume.
+ * \param v_radius_base The vertical radius used for the unfold operator leading to the cost volume.
+ * \param sub_h_radius The horizontal size of the inner sliding window.
+ * \param sub_v_radius The vertical size of the inner sliding window.
+ * \param nChannels The number of channels in the image which was used to build the feature volume.
+ * \return a matrix which rows represent the features and columns the sliding subwindows.
+ */
+inline Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic>
+getUnfoldFeatureSlidingSubwindowIdxs(uint8_t h_radius_base,
+									 uint8_t v_radius_base,
+									 uint8_t sub_h_size,
+									 uint8_t sub_v_size,
+									 int nChannels) {
+
+	int h_orig = 2*h_radius_base+1;
+	int v_orig = 2*v_radius_base+1;
+
+	long nSubFeatures = sub_h_size*sub_v_size*nChannels;
+	long nCols = (h_orig-sub_h_size+1) * (v_orig-sub_v_size+1);
+
+	if (nCols < 1) {
+		return Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic>(0,0);
+	}
+
+	if (nSubFeatures < 1) {
+		return Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic>(0,0);
+	}
+
+	Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic> out(nSubFeatures,nCols);
+
+	for(int i = 0; i < v_orig-sub_v_size+1; i++) {
+		for (int j = 0; j < h_orig-sub_h_size+1; j++) {
+
+			for (int k = 0; k < sub_v_size; k++) {
+				for (int l = 0; l < sub_h_size; l++) {
+					for (int c = 0; c < nChannels; c++) {
+
+						int channel = channelFromCord(i+k, j+l, c, h_orig, nChannels);
+						int outRow = channelFromCord(k, l, c, sub_h_size, nChannels);
+						int outCol = channelFromCord(i, j, 0, h_orig-sub_h_size+1, 1);
+
+						out(outRow,outCol) = channel;
+					}
+				}
+			}
+
+		}
+	}
+
+	return out;
+}
 
 template<class T_I, class T_O = float>
 Multidim::Array<T_O, 3> unfold(uint8_t h_radius,
@@ -93,7 +153,7 @@ Multidim::Array<T_O, 3> unfold(uint8_t h_radius,
 
 			for (int k = 0; k < v; k++) {
 				for (int l = 0; l < h; l++) {
-					int c = k*h + l;
+					int c = channelFromCord(k, l, 0, h, 1);
 					out.template at<Nc>(i,j,c) = static_cast<T_O>( in_data.valueOrAlt({in_i+k, in_j+l}, 0) );
 				}
 			}
@@ -133,7 +193,7 @@ Multidim::Array<T_O, 3> unfold(uint8_t h_radius,
 		for (int l = 0; l < h; l++) {
 			for (int in_c = 0; in_c < f; in_c++) {
 
-				int c = in_c*h*v + k*h + l;
+				int c = channelFromCord(k, l, in_c, h, f);
 
 				#pragma omp parallel for
 				for (int i = 0; i < outHeight; i++) {

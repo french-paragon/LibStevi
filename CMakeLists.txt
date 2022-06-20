@@ -40,8 +40,8 @@ set(LIB_SRC
 	geometry/pointcloudalignment.h
 	geometry/rotations.cpp
         geometry/rotations.h
-		geometry/stereorigrectifier.cpp
-		geometry/stereorigrectifier.h
+        geometry/stereorigrectifier.cpp
+        geometry/stereorigrectifier.h
         interpolation/interpolation.cpp
         interpolation/interpolation.h
         interpolation/lensdistortionsmap.cpp
@@ -55,6 +55,7 @@ set(LIB_SRC
         correlation/cross_correlations.cpp
         correlation/census.h
         correlation/cost_based_refinement.h
+        correlation/image_based_refinement.h
         correlation/sgm.h
         correlation/hierarchical.h
         correlation/patchmatch.h

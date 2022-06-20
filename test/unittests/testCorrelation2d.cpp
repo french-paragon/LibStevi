@@ -2,6 +2,7 @@
 
 #include "../test_correlation_utils.h"
 #include "correlation/cross_correlations.h"
+#include "correlation/image_based_refinement.h"
 
 typedef std::array<float,2> BidimensionalDirs;
 typedef std::array<float,4> BarycentricWeightsPix;

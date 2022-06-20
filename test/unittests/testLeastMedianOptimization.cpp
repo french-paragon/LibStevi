@@ -42,7 +42,7 @@ void TestLeastMedianOptimizationMethods::testLeastMedianAbsoluteDifferences() {
 	typedef Eigen::Matrix<float,2,1> TypeVectorX;
 
 	QFETCH(int, inputs);
-	constexpr float tol = 1e-6;
+	constexpr float tol = 1e-5;
 	constexpr float probOut = 0.1;
 
 	TypeMatrixA A = TypeMatrixA::Random(inputs,2);

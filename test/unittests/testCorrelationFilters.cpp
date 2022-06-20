@@ -2,6 +2,7 @@
 
 #include "../test_correlation_utils.h"
 #include "correlation/cross_correlations.h"
+#include "correlation/image_based_refinement.h"
 
 typedef Multidim::Array<int,2> CompressorMask;
 typedef std::array<float,3> SymmetricWeightsSplit;

@@ -29,7 +29,8 @@ namespace StereoVision {
 namespace Optimization {
 
 /*!
- * leastSquares solve a problem of the form argmin_x Median(|Ax - b|) using a robust dense solver. If the problem is underdetermined the minimal norm solution is returned.
+ * leastAbsoluteMedian solve a problem of the form argmin_x Median(|Ax - b|) using a robust dense solver.
+ * If the problem is underdetermined the minimal norm solution is returned.
  * The function is optimized for small problems
  * \return The optimal x.
  */
@@ -38,7 +39,7 @@ inline Eigen::Matrix<float,dimsIn,1> leastAbsoluteMedian(Eigen::Matrix<float,dim
 														 Eigen::Matrix<float,dimsOuts,1> const& b,
 														 float prob_optimal = 0.99,
 														 float prob_outlier = 0.3,
-														 int maxiter = 10000) {
+														 int maxiter = 100) {
 
 	using IntermMatType = Eigen::Matrix<float, dimsIn, dimsIn>;
 	using SolVecType = Eigen::Matrix<float, dimsIn, 1>;
@@ -109,6 +110,68 @@ inline Eigen::Matrix<float,dimsIn,1> leastAbsoluteMedian(Eigen::Matrix<float,dim
 }
 
 /*!
+ * leastAbsoluteMedian solve a problem of the form argmin_x Median(|Ax - b|) using a robust dense solver.
+ * If the problem is underdetermined the minimal norm solution is returned.
+ * The function is optimized for small problems
+ * \return The optimal x.
+ */
+template<int dimsIn, int dimsOuts = Eigen::Dynamic>
+inline Eigen::Matrix<float,dimsIn,1> leastAbsoluteMedian(Eigen::Matrix<float,dimsOuts,dimsIn> const& A,
+														 Eigen::Matrix<float,dimsOuts,1> const& b,
+														 Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic> const& testIdxs) {
+
+	using IntermMatType = Eigen::Matrix<float, Eigen::Dynamic, dimsIn>;
+	using SolVecType = Eigen::Matrix<float, Eigen::Dynamic, 1>;
+	using InType = Eigen::Matrix<float,dimsOuts,1>;
+
+	if (std::max(testIdxs.rows(), A.rows()) <= A.cols()) {
+		return leastSquares(A,b);
+	}
+
+	if (testIdxs.cols() < 1) {
+		return leastSquares(A,b);
+	}
+
+	int medianPos = A.rows()/2;
+
+	SolVecType sol;
+	float medErr = std::numeric_limits<float>::infinity();
+
+	for (int i = 0; i < testIdxs.cols(); i++) {
+
+		SolVecType sub_b(A.cols());
+		IntermMatType sub_A(A.cols(), A.cols());
+
+		for (int j = 0; j < testIdxs.rows(); j++) {
+			sub_b(j) = b(testIdxs(i,j));
+			sub_A.row(j) = A.row(testIdxs(i,j));
+		}
+
+		SolVecType tmp = leastSquares(sub_A, sub_b); //reuse the least square solver, which avoid numerical errors
+
+		InType s = A*tmp;
+		InType err = b - s;
+
+		std::vector<int> abs_errs(A.rows());
+
+		for (int j = 0; j < A.rows(); j++) {
+			abs_errs[j] = std::fabs(err[j]);
+		}
+
+		std::nth_element(abs_errs.begin(), abs_errs.begin()+medianPos, abs_errs.end());
+		float median_err = abs_errs[medianPos];
+
+		if (median_err < medErr) {
+			medErr = median_err;
+			sol = tmp;
+		}
+	}
+
+	return sol;
+
+}
+
+/*!
  * affineBestLeastMedianApproximation solve a problem of the form argmin_x Median(|Ax - b|) with the constraint that sum(x) == 1 using a robust dense solver.
  * The function is optimized for small problems
  * \return The optimal x.
@@ -118,18 +181,39 @@ inline Eigen::Matrix<float,dimsIn,1> affineBestLeastMedianApproximation(Eigen::M
 																		Eigen::Matrix<float,dimsOuts,1> const& b,
 																		float prob_optimal = 0.99,
 																		float prob_outlier = 0.3,
-																		int maxiter = 10000) {
+																		int maxiter = 100) {
 
 	static_assert (dimsIn >= 2, "affineBestL2Approximation expect x dimension to be greather or equal to 2.");
 
 	constexpr int referenceId = -1;
 	typedef AffineSpace<dimsIn, dimsOuts, float, referenceId> AffineSpaceA ;
 
-	typedef Eigen::Matrix<float,dimsOuts,dimsIn> TypeMatrixA;
 	typedef typename AffineSpaceA::TypeVectorCoeffs TypeVectorAlpha;
 
 	AffineSpaceA AffineA(A);
 	TypeVectorAlpha alpha = leastAbsoluteMedian(AffineA.M(), (b - AffineA.b()).eval(), prob_optimal, prob_outlier, maxiter);
+	return AffineSpaceA::fullCoeffs(alpha);
+}
+
+/*!
+ * affineBestLeastMedianApproximation solve a problem of the form argmin_x Median(|Ax - b|) with the constraint that sum(x) == 1 using a robust dense solver.
+ * The function is optimized for small problems
+ * \return The optimal x.
+ */
+template<int dimsIn, int dimsOuts = Eigen::Dynamic>
+inline Eigen::Matrix<float,dimsIn,1> affineBestLeastMedianApproximation(Eigen::Matrix<float,dimsOuts,dimsIn> const& A,
+																		Eigen::Matrix<float,dimsOuts,1> const& b,
+																		Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic> const& testIdxs) {
+
+	static_assert (dimsIn >= 2, "affineBestL2Approximation expect x dimension to be greather or equal to 2.");
+
+	constexpr int referenceId = -1;
+	typedef AffineSpace<dimsIn, dimsOuts, float, referenceId> AffineSpaceA ;
+
+	typedef typename AffineSpaceA::TypeVectorCoeffs TypeVectorAlpha;
+
+	AffineSpaceA AffineA(A);
+	TypeVectorAlpha alpha = leastAbsoluteMedian(AffineA.M(), (b - AffineA.b()).eval(), testIdxs);
 	return AffineSpaceA::fullCoeffs(alpha);
 }
 

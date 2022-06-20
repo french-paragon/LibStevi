@@ -70,6 +70,11 @@ void BenchmarkL0ApproximationFunctions::testRegionFusionL0Approximation() {
 	QFETCH(int, h);
 	QFETCH(float, lambda);
 
+	#ifndef NDEBUG
+	//no large benchmarching in debug mode, they are too slow.
+	QSKIP("Skipping in debug mode!");
+	#endif
+
 	auto img = getPiecewiseConstantImage(w,h,re);
 
 	Multidim::Array<float, 3> approx;
