@@ -73,6 +73,35 @@ bool writeImage(std::string const& fileName, Multidim::Array<InType, 3> const& i
 	return true;
 }
 
+template<typename ImgType, typename InType>
+bool writeImage(std::string const& fileName, Multidim::Array<InType, 2> const& image) {
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	if (image.empty()) {
+		return false;
+	}
+
+	typename Multidim::Array<InType, 2>::ShapeBlock shape = image.shape();
+
+	cimg_library::CImg<ImgType> img(shape[1], shape[0], 1, 1);
+
+
+	for (int i = 0; i < shape[0]; i++) {
+		for (int j = 0; j < shape[1]; j++) {
+			img(j,i) = static_cast<ImgType>(image.template value<Nc>(i,j)); //invert the height and width coordinates to match the convention followed by CImg
+		}
+	}
+
+	try {
+		img.save(fileName.c_str());
+	} catch (cimg_library::CImgException const& e) {
+		return false;
+	}
+
+	return true;
+}
+
 } //namespace IO
 } //namespace StereoVision
 
