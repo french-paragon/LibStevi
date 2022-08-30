@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
+include(CheckCXXCompilerFlag)
+
 set(STEREOVISION_LIB stevi)
 set(STEREOVISION_LIB ${STEREOVISION_LIB} PARENT_SCOPE)
 project(lib${STEREOVISION_LIB} LANGUAGES CXX)
@@ -13,7 +15,26 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fopenmp -march=native -mavx -ftree-vectorize")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fopenmp -march=native -ftree-vectorize")
+
+#SIMD for x86
+check_cxx_compiler_flag("-mavx" AVXSUPPORTED)
+check_cxx_compiler_flag("-mavx2" AVX2SUPPORTED)
+check_cxx_compiler_flag("-mfma" FMASUPPORTED)
+
+if (AVXSUPPORTED)
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mavx")
+endif()
+
+if (AVX2SUPPORTED)
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mavx2")
+endif()
+
+if (FMASUPPORTED)
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mfma")
+endif()
+
+#SIMD for ARM not supported yet
 
 find_package(Eigen3 3.3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
