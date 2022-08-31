@@ -16,3 +16,33 @@ target_link_libraries(benchmarkStereoMatchingModels ${STEREOVISION_LIB} Qt${QT_V
 
 add_executable(benchmarkRandomUtils benchmarkRandomUtils.cpp)
 target_link_libraries(benchmarkRandomUtils ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+
+add_executable(benchmarkImageSaving benchmarkImageSaving.cpp)
+target_link_libraries(benchmarkImageSaving ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+
+if (TARGET JPEG::JPEG)
+    target_link_libraries(benchmarkImageSaving JPEG::JPEG)
+    target_compile_definitions(benchmarkImageSaving PUBLIC JPEGAVAILABLE)
+endif()
+if (TARGET JPEG)
+    target_link_libraries(benchmarkImageSaving JPEG)
+    target_compile_definitions(benchmarkImageSaving PUBLIC JPEGAVAILABLE)
+endif()
+
+if (TARGET PNG::PNG)
+    target_link_libraries(benchmarkImageSaving PNG::PNG)
+    target_compile_definitions(benchmarkImageSaving PUBLIC PNGAVAILABLE)
+endif()
+if (TARGET PNG)
+    target_link_libraries(benchmarkImageSaving PNG)
+    target_compile_definitions(benchmarkImageSaving PUBLIC PNGAVAILABLE)
+endif()
+
+if (TARGET TIFF::TIFF)
+    target_link_libraries(benchmarkImageSaving TIFF::TIFF)
+    target_compile_definitions(benchmarkImageSaving PUBLIC TIFFAVAILABLE)
+endif()
+if (TARGET TIFF)
+    target_link_libraries(benchmarkImageSaving TIFF)
+    target_compile_definitions(benchmarkImageSaving PUBLIC TIFFAVAILABLE)
+endif()

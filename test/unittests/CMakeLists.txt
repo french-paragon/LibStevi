@@ -78,3 +78,8 @@ add_test(TestStereoRigRectifier testStereoRigRectifier)
 add_executable(testImageClustering testImageClusteringAlgorithms.cpp)
 target_link_libraries(testImageClustering ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestImageClustering testImageClustering)
+
+add_executable(testImageIO testImageIO.cpp)
+target_link_libraries(testImageIO ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestImageIO testImageIO)
+

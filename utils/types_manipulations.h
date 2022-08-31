@@ -21,6 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <cstdint>
 #include <type_traits>
+#include <string>
+#include <sstream>
 
 #define DECLARE_METHOD_TEST(func, name)                                       \
 	template<typename T, typename Sign>                                       \
@@ -73,6 +75,33 @@ inline constexpr T equivalentOneForNormalizing() {
 		return 1 << sizeof (T)*4;
 	}
 	return 1;
+}
+
+template<typename T>
+inline std::string dtypeDescr() {
+	if (!std::is_integral_v<T> and !std::is_floating_point_v<T>) {
+		return "";
+	}
+
+	char symbol = 'i';
+
+	if (std::is_integral_v<T> and !std::is_signed_v<T>) {
+		symbol = 'u';
+	} else if (std::is_floating_point_v<T>) {
+		symbol = 'f';
+	}
+
+	int nBit = sizeof (T)*8;
+
+	std::stringstream strs;
+	strs << symbol << nBit;
+
+	return strs.str();
+}
+
+template<typename T>
+inline bool matchdescr(std::string descr) {
+	return descr == dtypeDescr<T>();
 }
 
 } // namespace TypesManipulations

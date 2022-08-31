@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.5)
 
 include(CheckCXXCompilerFlag)
+get_directory_property(hasParent PARENT_DIRECTORY)
 
 set(STEREOVISION_LIB stevi)
-set(STEREOVISION_LIB ${STEREOVISION_LIB} PARENT_SCOPE)
+if(hasParent)
+    set(STEREOVISION_LIB ${STEREOVISION_LIB} PARENT_SCOPE)
+endif()
 project(lib${STEREOVISION_LIB} LANGUAGES CXX)
 
 option(buildTests "Build the test suits for the library" ON)
@@ -39,6 +42,9 @@ endif()
 find_package(Eigen3 3.3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
 
+find_package(JPEG)
+find_package(PNG)
+find_package(TIFF)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
