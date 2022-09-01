@@ -2,6 +2,8 @@
 
 #include "geometry/stereorigrectifier.h"
 
+#include <random>
+
 using namespace StereoVision::Geometry;
 
 class TestStereoRigRectifier: public QObject

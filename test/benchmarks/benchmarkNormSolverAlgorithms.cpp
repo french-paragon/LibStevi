@@ -2,6 +2,8 @@
 
 #include "optimization/l1optimization.h"
 
+#include <random>
+
 class BenchmarkNormSolverAlgorithms: public QObject
 {
 	Q_OBJECT

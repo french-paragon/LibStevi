@@ -4,6 +4,8 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
+#include <random>
+
 class TestCostRefinement: public QObject
 {
 	Q_OBJECT

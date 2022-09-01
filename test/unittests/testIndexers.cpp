@@ -2,6 +2,8 @@
 
 #include "utils/indexers.h"
 
+#include <random>
+
 class TestIndexers: public QObject
 {
 	Q_OBJECT

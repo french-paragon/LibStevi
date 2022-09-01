@@ -2,6 +2,8 @@
 
 #include <correlation/unfold.h>
 
+#include <random>
+
 typedef Multidim::Array<int,2> CompressorMask;
 
 Q_DECLARE_METATYPE(CompressorMask);

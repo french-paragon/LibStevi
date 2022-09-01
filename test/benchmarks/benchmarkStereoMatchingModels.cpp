@@ -4,6 +4,7 @@
 #include <QDirIterator>
 #include <QFileInfo>
 #include <QMap>
+#include <QVector>
 
 #include <MultidimArrays/MultidimArrays.h>
 
