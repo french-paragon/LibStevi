@@ -137,8 +137,8 @@ Multidim::Array<ImgType, nDim> readStevimg(std::string const& fileName) {
 			return Multidim::Array<ImgType, nDim>();
 		}
 
-		typename Multidim::Array<ImgType, 3>::ShapeBlock shape;
-		typename Multidim::Array<ImgType, 3>::ShapeBlock stride;
+		typename Multidim::Array<ImgType, nDim>::ShapeBlock shape;
+		typename Multidim::Array<ImgType, nDim>::ShapeBlock stride;
 
 		for (int i = 0; i < nDim; i++) {
 			if (i < nDimInFile) {
