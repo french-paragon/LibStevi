@@ -15,6 +15,38 @@
 namespace StereoVision {
 namespace IO {
 
+template<typename ImgType, int nDim>
+bool stevImgFileMatchTypeAndDim(std::string const& fileName) {
+
+	std::ifstream infile;
+	infile.open(fileName, std::ios_base::in);
+
+	if (infile.is_open()) {
+
+		std::string line;
+		getline( infile, line );
+
+		std::stringstream strs;
+		strs.str(line);
+
+		std::string type;
+		strs >> type;
+
+		if (type != TypesManipulations::dtypeDescr<ImgType>()) {
+			return false;
+		}
+
+		int nDimInFile;
+		strs >> nDimInFile;
+
+		if (nDimInFile > nDim) {
+			return false;
+		}
+
+	}
+
+	return true;
+}
 
 template<typename ImgType, typename InType, int nDim>
 bool writeStevimg(std::string const& fileName, Multidim::Array<InType, nDim> const& image) {
