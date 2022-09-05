@@ -99,6 +99,7 @@ set(LIB_SRC
         utils/randomcache.h
         utils/types_manipulations.h
         statistics/stereo_covering.h
+        imageProcessing/colorConversions.h
         imageProcessing/meanShiftClustering.h
         io/image_io.h
 )
