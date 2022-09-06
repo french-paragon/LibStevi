@@ -230,6 +230,8 @@ template<typename T, int nDim, typename O = T>
 Multidim::Array<O, 3> yuv2rgb(Multidim::Array<T, 3> const& yuvImg) {
 
 	using ctype = std::conditional_t<std::is_integral_v<T>, long, float>;
+	constexpr ctype whiteTin = (std::is_integral_v<T>) ? std::numeric_limits<T>::max() : 1000.0;
+	constexpr ctype blackTin = (std::is_integral_v<T>) ? 0 : -1000.0;
 
 	auto shp = yuvImg.shape();
 
@@ -247,9 +249,9 @@ Multidim::Array<O, 3> yuv2rgb(Multidim::Array<T, 3> const& yuvImg) {
 
 		for (int j = 0; j < shp[1]; j++) {
 
-			T Y = yuvImg.valueUnchecked(i,j,0);
-			T U = yuvImg.valueUnchecked(i,j,1);
-			T V = yuvImg.valueUnchecked(i,j,2);
+			ctype Y = yuvImg.valueUnchecked(i,j,0);
+			ctype U = yuvImg.valueUnchecked(i,j,1);
+			ctype V = yuvImg.valueUnchecked(i,j,2);
 
 			ctype rTmp;
 			ctype gTmp;
@@ -265,9 +267,9 @@ Multidim::Array<O, 3> yuv2rgb(Multidim::Array<T, 3> const& yuvImg) {
 				bTmp = Y + (1.732446 * (U-128.));
 			}
 
-			rgbImg.atUnchecked(i,j,0) = rTmp;
-			rgbImg.atUnchecked(i,j,1) = gTmp;
-			rgbImg.atUnchecked(i,j,2) = bTmp;
+			rgbImg.atUnchecked(i,j,0) = std::min(whiteTin, std::max(blackTin, rTmp));
+			rgbImg.atUnchecked(i,j,1) = std::min(whiteTin, std::max(blackTin, gTmp));
+			rgbImg.atUnchecked(i,j,2) = std::min(whiteTin, std::max(blackTin, bTmp));
 
 		}
 	}
@@ -280,6 +282,8 @@ template<typename T, int nDim, typename O = T>
 Multidim::Array<O, 3> yuyv2rgb(Multidim::Array<T, 3> const& yuyvImg) {
 
 	using ctype = std::conditional_t<std::is_integral_v<T>, long, float>;
+	constexpr ctype whiteTin = (std::is_integral_v<T>) ? std::numeric_limits<T>::max() : 1000.0;
+	constexpr ctype blackTin = (std::is_integral_v<T>) ? 0 : -1000.0;
 
 	auto shp = yuyvImg.shape();
 
@@ -298,12 +302,12 @@ Multidim::Array<O, 3> yuyv2rgb(Multidim::Array<T, 3> const& yuyvImg) {
 
 	for (int i = 0; i < shp[0]; i++) {
 
-		T U = yuyvImg.valueUnchecked(i,0,1);
-		T V = yuyvImg.valueUnchecked(i,1,1);
+		ctype U = yuyvImg.valueUnchecked(i,0,1);
+		ctype V = yuyvImg.valueUnchecked(i,1,1);
 
 		for (int j = 0; j < shp[1]; j++) {
 
-			T Y = yuyvImg.valueUnchecked(i,j,0);
+			ctype Y = yuyvImg.valueUnchecked(i,j,0);
 
 			if (j%2 == 0) {
 				U = yuyvImg.valueUnchecked(i,j,1);
@@ -325,9 +329,9 @@ Multidim::Array<O, 3> yuyv2rgb(Multidim::Array<T, 3> const& yuyvImg) {
 				bTmp = Y + (1.732446 * (U-128.));
 			}
 
-			rgbImg.atUnchecked(i,j,0) = rTmp;
-			rgbImg.atUnchecked(i,j,1) = gTmp;
-			rgbImg.atUnchecked(i,j,2) = bTmp;
+			rgbImg.atUnchecked(i,j,0) = std::min(whiteTin, std::max(blackTin, rTmp));
+			rgbImg.atUnchecked(i,j,1) = std::min(whiteTin, std::max(blackTin, gTmp));
+			rgbImg.atUnchecked(i,j,2) = std::min(whiteTin, std::max(blackTin, bTmp));
 
 		}
 	}
@@ -340,6 +344,8 @@ template<typename T, int nDim, typename O = T>
 Multidim::Array<O, 3> yvyu2rgb(Multidim::Array<T, 3> const& yvyuImg) {
 
 	using ctype = std::conditional_t<std::is_integral_v<T>, long, float>;
+	constexpr ctype whiteTin = (std::is_integral_v<T>) ? std::numeric_limits<T>::max() : 1000.0;
+	constexpr ctype blackTin = (std::is_integral_v<T>) ? 0 : -1000.0;
 
 	auto shp = yvyuImg.shape();
 
@@ -358,12 +364,12 @@ Multidim::Array<O, 3> yvyu2rgb(Multidim::Array<T, 3> const& yvyuImg) {
 
 	for (int i = 0; i < shp[0]; i++) {
 
-		T V = yvyuImg.valueUnchecked(i,0,1);
-		T U = yvyuImg.valueUnchecked(i,1,1);
+		ctype V = yvyuImg.valueUnchecked(i,0,1);
+		ctype U = yvyuImg.valueUnchecked(i,1,1);
 
 		for (int j = 0; j < shp[1]; j++) {
 
-			T Y = yvyuImg.valueUnchecked(i,j,0);
+			ctype Y = yvyuImg.valueUnchecked(i,j,0);
 
 			if (j%2 == 0) {
 				V = yvyuImg.valueUnchecked(i,j,1);
@@ -385,9 +391,9 @@ Multidim::Array<O, 3> yvyu2rgb(Multidim::Array<T, 3> const& yvyuImg) {
 				bTmp = Y + (1.732446 * (U-128.));
 			}
 
-			rgbImg.atUnchecked(i,j,0) = rTmp;
-			rgbImg.atUnchecked(i,j,1) = gTmp;
-			rgbImg.atUnchecked(i,j,2) = bTmp;
+			rgbImg.atUnchecked(i,j,0) = std::min(whiteTin, std::max(blackTin, rTmp));
+			rgbImg.atUnchecked(i,j,1) = std::min(whiteTin, std::max(blackTin, gTmp));
+			rgbImg.atUnchecked(i,j,2) = std::min(whiteTin, std::max(blackTin, bTmp));
 
 		}
 	}
