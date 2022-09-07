@@ -1,6 +1,7 @@
 #ifndef INDEXERS_H
 #define INDEXERS_H
 
+#include <optional>
 #include <vector>
 #include <unordered_map>
 

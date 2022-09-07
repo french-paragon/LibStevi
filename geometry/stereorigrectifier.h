@@ -4,6 +4,8 @@
 #include "./rotations.h"
 #include "MultidimArrays/MultidimArrays.h"
 
+#include <optional>
+
 namespace StereoVision {
 namespace Geometry {
 

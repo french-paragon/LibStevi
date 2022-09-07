@@ -3,6 +3,7 @@
 #include "geometry/pointcloudalignment.h"
 
 #include <random>
+#include <optional>
 #include <iostream>
 
 using namespace StereoVision::Geometry;
