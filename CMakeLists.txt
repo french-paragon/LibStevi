@@ -103,6 +103,7 @@ set(LIB_SRC
         statistics/stereo_covering.h
         imageProcessing/colorConversions.h
         imageProcessing/meanShiftClustering.h
+        imageProcessing/intrinsicImageDecomposition.h
         io/image_io.h
 )
 

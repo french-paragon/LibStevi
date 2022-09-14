@@ -1,1 +1,2 @@
  add_subdirectory(io_img_and_disp)
+ add_subdirectory(intrisic_image_decomposition)
