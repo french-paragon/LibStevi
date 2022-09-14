@@ -517,6 +517,44 @@ public:
 	}
 };
 
+
+
+template<matchingFunctions func, class T_CV = float>
+inline static constexpr T_CV defaultCvValForMatchFunc() {
+	if (MatchingFunctionTraits<func>::extractionStrategy == dispExtractionStartegy::Cost) {
+		return std::numeric_limits<T_CV>::max();
+	} else {
+		return std::numeric_limits<T_CV>::min();
+	}
+}
+
+template<matchingFunctions func, class T_Disp, class T_CV = float>
+/*!
+ * \brief optimalDispAndCost return the optimal disparity and cost for a given matching function
+ * \param current_disp the current disparity
+ * \param current_cost the current cost
+ * \param candidate_disp the candidate disparity
+ * \param candidate_cost the candidate cost
+ * \return the optimal disparity and cost
+ */
+inline std::pair<T_Disp const&,T_CV const&> optimalDispAndCost(T_Disp const& current_disp,
+												 T_CV const& current_cost,
+												 T_Disp const& candidate_disp,
+												 T_CV const& candidate_cost) {
+
+	if (MatchingFunctionTraits<func>::extractionStrategy == dispExtractionStartegy::Cost) {
+		if (candidate_cost < current_cost) {
+			return {candidate_disp, candidate_cost};
+		}
+	} else {
+		if (candidate_cost > current_cost) {
+			return {candidate_disp, candidate_cost};
+		}
+	}
+
+	return {current_disp, current_cost};
+}
+
 template<matchingFunctions func, typename ImType>
 struct MatchingFuncComputeTypeInfos {
 

@@ -52,14 +52,16 @@ template<int nDim>
 class searchOffset{
 public:
 
-	searchOffset()
+	searchOffset() :
+		_isValid(false)
 	{
 		std::fill(_upperOffsets.begin(), _upperOffsets.end(), 0);
 		std::fill(_lowerOffsets.begin(), _lowerOffsets.end(), 0);
 	}
 
 	template<typename... Ds>
-	searchOffset(disp_t lowerOffset0, disp_t upperOffset0, Ds... nextOffsets)
+	searchOffset(disp_t lowerOffset0, disp_t upperOffset0, Ds... nextOffsets) :
+		_isValid(true)
 	{
 		static_assert(sizeof...(nextOffsets) == 2*(nDim-1),
 				"The number of offsets provided to the constructor should be twice the number of dimensions !");
@@ -73,6 +75,10 @@ public:
 			_lowerOffsets[i] = nOffsets[2*(i-1)];
 			_upperOffsets[i] = nOffsets[2*(i-1)+1];
 		}
+	}
+
+	bool isValid() const {
+		return _isValid;
 	}
 
 	template<int dim>
@@ -115,11 +121,11 @@ public:
 
 	template<int dim>
 	int dimRange() const {
-		return _upperOffsets[dim] - _lowerOffsets[dim];
+		return _upperOffsets[dim] - _lowerOffsets[dim] + 1;
 	}
 
 	int dimRange(int dim) const {
-		return _upperOffsets[dim] - _lowerOffsets[dim];
+		return _upperOffsets[dim] - _lowerOffsets[dim] + 1;
 	}
 
 	template<int dim>
@@ -140,9 +146,29 @@ public:
 		return std::abs(val%dimRange(dim))+lowerOffset(dim);
 	}
 
+	template<int dim>
+	int idx2disp(int idx) const{
+		return _lowerOffsets[dim] + idx;
+	}
+
+	int idx2disp(int dim, int idx) const{
+		return _lowerOffsets[dim] + idx;
+	}
+
+	template<int dim>
+	int disp2idx(int disp) const{
+		return disp - _lowerOffsets[dim];
+	}
+
+	int disp2idx(int dim, int disp) const{
+		return disp - _lowerOffsets[dim];
+	}
+
 private:
 	std::array<disp_t,nDim> _upperOffsets;
 	std::array<disp_t,nDim> _lowerOffsets;
+
+	bool _isValid;
 };
 
 template<typename SearchRangeType>
