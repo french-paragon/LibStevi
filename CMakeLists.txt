@@ -104,6 +104,9 @@ set(LIB_SRC
         imageProcessing/colorConversions.h
         imageProcessing/meanShiftClustering.h
         imageProcessing/intrinsicImageDecomposition.h
+        imageProcessing/checkBoardDetection.h
+        imageProcessing/checkBoardDetection.cpp
+        imageProcessing/finiteDifferences.h
         io/image_io.h
 )
 

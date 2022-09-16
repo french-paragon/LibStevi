@@ -24,6 +24,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace StereoVision {
 namespace Geometry {
 
+enum class ImageAxis : char {
+	X,
+	Y
+};
+
 enum class ImageAnchors : char {
 	TopLeft,
 	TopRight,

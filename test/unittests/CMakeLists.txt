@@ -83,3 +83,12 @@ add_executable(testImageIO testImageIO.cpp)
 target_link_libraries(testImageIO ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestImageIO testImageIO)
 
+add_executable(testFiniteDifferences testFiniteDifferences.cpp)
+target_link_libraries(testFiniteDifferences ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestFiniteDifferences testFiniteDifferences)
+
+add_executable(testCheckboardDetection testCheckboardDetection.cpp)
+target_link_libraries(testCheckboardDetection ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestCheckboardDetection testCheckboardDetection)
+
+
