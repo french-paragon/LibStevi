@@ -22,6 +22,59 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <MultidimArrays/MultidimArrays.h>
 
 #include <random>
+#include <set>
+#include <vector>
+#include <utility>
+
+std::vector<StereoVision::discretCheckCornerInfos> generateTestCandidatesSet(int nVertical = 3,
+																			 int nHorizontal = 4,
+																			 int nWrong = 0,
+																			 int dist = 10) {
+
+	std::set<std::pair<int, int>> addedPoints;
+	std::vector<StereoVision::discretCheckCornerInfos> ret;
+
+	for (int i = 0; i < nVertical; i++) {
+		for (int j = 0; j < nHorizontal; j++) {
+
+			float angle = M_PI_4;
+
+			if ((i+j)%2 == 1) {
+				angle += M_PI_2;
+			}
+
+			ret.emplace_back(j*dist, i*dist, -1, 1, angle);
+
+			addedPoints.insert({j*dist, i*dist});
+		}
+	}
+
+	float wrong_angle = M_PI_2;
+	std::random_device rd;
+	std::default_random_engine re;
+	re.seed(rd());
+
+	std::uniform_int_distribution rPosHorz(-dist, dist*(nHorizontal+1));
+	std::uniform_int_distribution rPosVert(-dist, dist*(nVertical+1));
+
+	for (int i = 0; i < nWrong; i++) {
+
+		int x = rPosHorz(re);
+		int y = rPosVert(re);
+
+		while (addedPoints.count({x,y}) > 0) {
+			x++;
+			y++;
+		}
+
+		ret.emplace_back(x, y, -1, 1, wrong_angle);
+
+		addedPoints.insert({x, y});
+	}
+
+	return ret;
+
+}
 
 Multidim::Array<float, 2> generateBoard(int nVertical,
 										int nHorizontal,
@@ -85,6 +138,7 @@ private Q_SLOTS:
 	void initTestCase();
 
 	void testCandidateFinding();
+	void testCheckBoardExtraction();
 
 private:
 	std::default_random_engine re;
@@ -112,6 +166,30 @@ void TestCheckboardDetection::testCandidateFinding() {
 
 }
 
+
+void TestCheckboardDetection::testCheckBoardExtraction() {
+
+	int squareside = 30;
+	int nVert = 3;
+	int nHorz = 4;
+	int nWrong = 7;
+
+	std::vector<StereoVision::discretCheckCornerInfos> pure = generateTestCandidatesSet(nVert, nHorz, 0, squareside);
+
+	auto extracted = StereoVision::isolateCheckBoard(pure);
+
+	QCOMPARE(extracted.nPointsFound(), nVert*nHorz);
+	QCOMPARE(extracted.rows(), nVert);
+	QCOMPARE(extracted.cols(), nHorz);
+
+	std::vector<StereoVision::discretCheckCornerInfos> wrong = generateTestCandidatesSet(nVert, nHorz, nWrong, squareside);
+
+	extracted = StereoVision::isolateCheckBoard(wrong);
+
+	QCOMPARE(extracted.nPointsFound(), nVert*nHorz);
+	QCOMPARE(extracted.rows(), nVert);
+	QCOMPARE(extracted.cols(), nHorz);
+}
 
 QTEST_MAIN(TestCheckboardDetection)
 #include "testCheckboardDetection.moc"

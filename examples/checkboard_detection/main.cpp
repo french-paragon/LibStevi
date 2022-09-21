@@ -73,26 +73,42 @@ int main(int argc, char** argv) {
 	}
 
 	auto candidates = StereoVision::checkBoardCornersCandidates(greyscale, 1, 2, 6.);
+	auto filtereds = StereoVision::checkBoardFilterCandidates(greyscale, candidates, 0.2, 0.6);
 
 	out << "Found " << candidates.size() << " candidates" << Qt::endl;
+	out << "Filtered " << filtereds.size() << " candidates" << Qt::endl;
 
-	auto selected = StereoVision::isolateCheckBoard(candidates, 0.2, 0.1);
+	auto selected = StereoVision::isolateCheckBoard(filtereds, 0.3, 0.25);
+
+	out << "Selected " << selected.nPointsFound() << " candidates" << Qt::endl;
+
+	QFileInfo info(argv[2]);
+	QString rawName = info.absoluteDir().absoluteFilePath( QString("raw_") + info.fileName());
+	QFile rawFile(rawName);
+
+
+	if (!rawFile.open(QIODevice::WriteOnly)) {
+		out << "impossible to open file: " << rawName << Qt::endl;
+		return 1;
+	}
+
+	QTextStream fraw(&rawFile);
+
+	for (auto & candidate : candidates) {
+		fraw << candidate.pix_coord_x << ',' << candidate.pix_coord_y << ','
+			 << candidate.lambda_min << ',' << candidate.lambda_max << ','
+			 << candidate.main_dir << Qt::endl;
+	}
+
+	rawFile.close();
 
 	QFile outFile(argv[2]);
-
 
 	if (!outFile.open(QIODevice::WriteOnly)) {
 		out << "impossible to open file: " << argv[2] << Qt::endl;
 		return 1;
 	}
-
 	QTextStream fout(&outFile);
-
-	/*for (auto & candidate : candidates) {
-		fout << candidate.pix_coord_x << ',' << candidate.pix_coord_y << ','
-			 << candidate.lambda_min << ',' << candidate.lambda_max << ','
-			 << candidate.main_dir << Qt::endl;
-	}*/
 
 	for (int i = 0; i < selected.rows(); i++) {
 		for (int j = 0; j < selected.cols(); j++) {

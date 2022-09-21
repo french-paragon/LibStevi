@@ -87,12 +87,16 @@ protected:
 
 	friend CheckBoardPoints isolateCheckBoard(std::vector<discretCheckCornerInfos> const& candidates,
 											  float relDistanceTolerance,
-											  float angleTolerance);
+											  float angleTolerance,
+											  float observationWeight,
+											  int maxDistanceRadius);
 };
 
 CheckBoardPoints isolateCheckBoard(std::vector<discretCheckCornerInfos> const& candidates,
 								   float distanceTolerance = 0.05,
-								   float angleTolerance = 0.05);
+								   float angleTolerance = 0.05,
+								   float observationWeight = 1.,
+								   int maxDistanceRadius = 20);
 
 template<typename T>
 std::vector<discretCheckCornerInfos> checkBoardCornersCandidates(Multidim::Array<T, 2> const& img,
@@ -219,6 +223,91 @@ std::vector<discretCheckCornerInfos> checkBoardCornersCandidates(Multidim::Array
 							 lambda_max.valueUnchecked(i,j),
 							 mainDir.valueUnchecked(i,j));
 
+		}
+	}
+
+	return ret;
+
+}
+
+
+template<typename T>
+std::vector<discretCheckCornerInfos> checkBoardFilterCandidates(Multidim::Array<T, 2> const& img,
+																std::vector<discretCheckCornerInfos> const& candidates,
+																float relativeVariationHardTolerance = 0.2,
+																float relativeVariationSoftThreshold = 0.6)
+{
+
+	std::vector<discretCheckCornerInfos> ret;
+
+	for (discretCheckCornerInfos const& candidate : candidates) {
+
+		if (candidate.pix_coord_x < 3 or candidate.pix_coord_y < 3) {
+			continue;
+		}
+
+		if (candidate.pix_coord_x > img.shape()[1] - 4 or candidate.pix_coord_y > img.shape()[0] - 4) {
+			continue;
+		}
+
+		std::array<int, 8> xDeltas = {2, -2, 2, -2, 2, -2, 0, 0};
+		std::array<int, 8> yDeltas = {2, -2, 0, 0, -2, 2, 2, -2};
+
+		std::array<float, 8> meanSectionVals;
+
+		int minSectionid = 0;
+		int maxSectionid = 0;
+
+		for (int s = 0; s < 8; s++) {
+
+			std::array<T,9> vals;
+
+			int p = 0;
+
+			for (int i = -1; i <= 1; i++) {
+				for (int j = -1; j <= 1; j++) {
+					vals[p] = img.valueUnchecked(candidate.pix_coord_y+yDeltas[s]+i, candidate.pix_coord_x+xDeltas[s]+j);
+					p++;
+				}
+			}
+
+			std::sort(vals.begin(), vals.end());
+
+			float interQuantMean = 0;
+
+			for (int i = 2; i <7; i++) {
+				interQuantMean +=vals[i];
+			}
+
+			interQuantMean;
+
+			meanSectionVals[s] = interQuantMean;
+
+			if (interQuantMean < meanSectionVals[minSectionid]) {
+				minSectionid = s;
+			}
+
+			if (interQuantMean > meanSectionVals[maxSectionid]) {
+				maxSectionid = s;
+			}
+
+		}
+
+		int failureCount = 0;
+		int errorCount = 0;
+		float range = meanSectionVals[maxSectionid] - meanSectionVals[minSectionid];
+
+		for (int sp = 0; sp < 4; sp++) {
+			if (std::fabs(meanSectionVals[2*sp] - meanSectionVals[2*sp+1]) > relativeVariationHardTolerance*range) {
+				failureCount++;
+			}
+			if (std::fabs(meanSectionVals[2*sp] - meanSectionVals[2*sp+1]) > relativeVariationSoftThreshold*range) {
+				errorCount++;
+			}
+		}
+
+		if (failureCount <= 3 and errorCount <= 1) {
+			ret.push_back(candidate);
 		}
 	}
 
