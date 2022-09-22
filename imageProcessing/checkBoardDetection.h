@@ -8,6 +8,7 @@
 #include "./finiteDifferences.h"
 
 #include <Eigen/Eigenvalues>
+#include <Eigen/QR>
 
 #include <MultidimArrays/MultidimArrays.h>
 
@@ -45,19 +46,61 @@ struct discretCheckCornerInfos {
 	float main_dir;
 };
 
+struct refinedCornerInfos {
+
+	refinedCornerInfos()
+	{
+
+	}
+
+	refinedCornerInfos(int gridX,
+					   int gridY,
+					   float pixX,
+					   float pixY):
+		grid_coord_x(gridX),
+		grid_coord_y(gridY),
+		pix_coord_x(pixX),
+		pix_coord_y(pixY)
+	{
+
+	}
+
+
+	int grid_coord_x;
+	int grid_coord_y;
+	float pix_coord_x;
+	float pix_coord_y;
+
+
+};
+
 class CheckBoardPoints {
 
 public:
 	CheckBoardPoints();
 	CheckBoardPoints(discretCheckCornerInfos initial);
 
-	int rows();
-	int cols();
+	inline int rows() const {
+		return _nRows;
+	}
+	inline int cols() const {
+		return _nCols;
+	}
 
-	int nPointsFound();
+	inline int nPointsFound() const {
+		return _pointMaps.size();
+	}
 
-	bool hasPointInCoord(int row, int col);
-	std::optional<discretCheckCornerInfos> pointInCoord(int row, int col);
+	inline bool hasPointInCoord(int row, int col) const {
+		return _pointMaps.count({row, col}) > 0;
+	}
+
+	inline std::optional<discretCheckCornerInfos> pointInCoord(int row, int col) const {
+		if (hasPointInCoord(row, col)) {
+			return _pointMaps.at({row, col});
+		}
+		return std::nullopt;
+	}
 
 protected:
 
@@ -308,6 +351,136 @@ std::vector<discretCheckCornerInfos> checkBoardFilterCandidates(Multidim::Array<
 
 		if (failureCount <= 3 and errorCount <= 1) {
 			ret.push_back(candidate);
+		}
+	}
+
+	return ret;
+
+}
+
+template<typename T>
+std::vector<refinedCornerInfos> refineCheckBoardCorners(Multidim::Array<T, 2> const& img,
+														CheckBoardPoints const& discretePoints) {
+
+	constexpr int searchWindowRadius = 2;
+	constexpr int nParams = 5;
+	constexpr int nObs = (2*searchWindowRadius+1)*(2*searchWindowRadius+1);
+
+	using DerivativeMatrixType = Eigen::Matrix<float, nObs, nParams>;
+	using ObsVectorType = Eigen::Matrix<float, nObs, 1>;
+
+	std::vector<refinedCornerInfos> ret;
+	ret.reserve(discretePoints.rows()*discretePoints.cols());
+
+	DerivativeMatrixType derivative;
+
+	ObsVectorType obs;
+	obs.resize(nObs);
+
+	int idx = 0;
+	for (int dr = -searchWindowRadius; dr <= searchWindowRadius; dr++) {
+		for (int dc = -searchWindowRadius; dc <= searchWindowRadius; dc++) {
+			derivative(idx,0) = dr*dr;
+			derivative(idx,1) = dr*dc;
+			derivative(idx,2) = dc*dc;
+			derivative(idx,3) = dr;
+			derivative(idx,4) = dc;
+			idx++;
+		}
+	}
+
+	Eigen::FullPivHouseholderQR<DerivativeMatrixType> qr = derivative.fullPivHouseholderQr();
+
+	for (int i = 0; i < discretePoints.rows(); i++) {
+		for (int j = 0; j < discretePoints.cols(); j++) {
+
+			auto cornerInfos = discretePoints.pointInCoord(i,j);
+
+			if (!cornerInfos.has_value()) {
+				continue;
+			}
+
+			float mean = 0;
+			for (int dr = -searchWindowRadius-1; dr <= searchWindowRadius+1; dr++) {
+				for (int dc = -searchWindowRadius-1; dc <= searchWindowRadius+1; dc++) {
+					int coordX = cornerInfos->pix_coord_x + dr;
+					int coordY = cornerInfos->pix_coord_y + dc;
+
+					if (coordX < 0) {
+						coordX = 0;
+					}
+
+					if (coordY < 0) {
+						coordY = 0;
+					}
+
+					if (coordX >= img.shape()[1]) {
+						coordX = img.shape()[1]-1;
+					}
+
+					if (coordY < img.shape()[0]) {
+						coordY = img.shape()[0]-1;
+					}
+
+					mean += static_cast<float>(img.valueUnchecked(coordY, coordX));
+				}
+			}
+
+			mean /= nObs;
+
+			int idx = 0;
+			for (int dr = -searchWindowRadius; dr <= searchWindowRadius; dr++) {
+				for (int dc = -searchWindowRadius; dc <= searchWindowRadius; dc++) {
+					int coordX = cornerInfos->pix_coord_x + dr;
+					int coordY = cornerInfos->pix_coord_y + dc;
+
+					if (coordX < 1) {
+						coordX = 1;
+					}
+
+					if (coordY < 1) {
+						coordY = 1;
+					}
+
+					if (coordX >= img.shape()[1]-1) {
+						coordX = img.shape()[1]-2;
+					}
+
+					if (coordY < img.shape()[0]-1) {
+						coordY = img.shape()[0]-2;
+					}
+
+					float val = 0;
+
+
+					for (int d1 = -1; d1 <= 1; d1++) {
+						for (int d2 = -1; d2 <= 1; d2++) {
+
+							val += static_cast<float>(img.valueUnchecked(coordY+d1, coordX+d2)) - mean;
+						}
+					}
+
+					obs(idx) = val;
+					idx++;
+				}
+			}
+
+
+			Eigen::Matrix<float, nParams, 1> paramsEst = qr.solve(obs);
+
+			Eigen::Matrix2f gradMat;
+			gradMat(0,0) = 2*paramsEst(0);
+			gradMat(0,1) = paramsEst(1);
+			gradMat(1,0) = paramsEst(1);
+			gradMat(1,1) = 2*paramsEst(2);
+
+			Eigen::Vector2f gradConst;
+			gradConst(0) = paramsEst(3);
+			gradConst(1) = paramsEst(4);
+
+			Eigen::Vector2f delta = -gradMat.completeOrthogonalDecomposition().pseudoInverse()*gradConst;
+
+			ret.emplace_back(j,i,cornerInfos->pix_coord_x+delta.x(), cornerInfos->pix_coord_y+delta.y());
 		}
 	}
 

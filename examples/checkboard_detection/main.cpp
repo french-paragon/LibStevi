@@ -82,6 +82,10 @@ int main(int argc, char** argv) {
 
 	out << "Selected " << selected.nPointsFound() << " candidates" << Qt::endl;
 
+	auto refined = StereoVision::refineCheckBoardCorners(greyscale, selected);
+
+	out << "Refined " << refined.size() << " points" << Qt::endl;
+
 	QFileInfo info(argv[2]);
 	QString rawName = info.absoluteDir().absoluteFilePath( QString("raw_") + info.fileName());
 	QFile rawFile(rawName);
@@ -110,19 +114,20 @@ int main(int argc, char** argv) {
 	}
 	QTextStream fout(&outFile);
 
-	for (int i = 0; i < selected.rows(); i++) {
-		for (int j = 0; j < selected.cols(); j++) {
+	for (auto& point : refined) {
 
-			if (!selected.hasPointInCoord(i,j)) {
-				continue;
-			}
+		int i = point.grid_coord_y;
+		int j = point.grid_coord_x;
 
-			auto candidate = selected.pointInCoord(i,j).value();
-
-			fout << candidate.pix_coord_x << ',' << candidate.pix_coord_y << ','
-				 << candidate.lambda_min << ',' << candidate.lambda_max << ','
-				 << candidate.main_dir << Qt::endl;
+		if (!selected.hasPointInCoord(i,j)) {
+			continue;
 		}
+
+		auto candidate = selected.pointInCoord(i,j).value();
+
+		fout << point.pix_coord_x << ',' << point.pix_coord_y << ','
+			 << candidate.lambda_min << ',' << candidate.lambda_max << ','
+			 << candidate.main_dir << Qt::endl;
 	}
 
 	outFile.close();

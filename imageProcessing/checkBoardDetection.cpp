@@ -30,28 +30,6 @@ CheckBoardPoints::CheckBoardPoints(discretCheckCornerInfos initial) :
 	_pointMaps[{0,0}] = initial;
 }
 
-int CheckBoardPoints::rows() {
-	return _nRows;
-}
-int CheckBoardPoints::cols() {
-	return _nCols;
-}
-
-int CheckBoardPoints::nPointsFound() {
-	return _pointMaps.size();
-}
-
-bool CheckBoardPoints::hasPointInCoord(int row, int col) {
-	return _pointMaps.count({row, col}) > 0;
-}
-
-std::optional<discretCheckCornerInfos> CheckBoardPoints::pointInCoord(int row, int col) {
-	if (hasPointInCoord(row, col)) {
-		return _pointMaps[{row, col}];
-	}
-	return std::nullopt;
-}
-
 struct Coord {
 	int x;
 	int y;
