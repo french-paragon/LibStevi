@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <cmath>
+#include <vector>
 
 #include <MultidimArrays/MultidimArrays.h>
 #include <MultidimArrays/MultidimIndexManipulators.h>
@@ -401,6 +402,38 @@ Multidim::Array<O, 3> yvyu2rgb(Multidim::Array<T, 3> const& yvyuImg) {
 	return rgbImg;
 
 }
+
+
+template<typename T, int nDim, typename O = T>
+Multidim::Array<O, 2> img2gray(Multidim::Array<T, 3> const& img, std::vector<float> const& weights = {0.2989, 0.5870, 0.1140}) {
+
+	auto shp = img.shape();
+
+	if (weights.size() != shp[2]) {
+		return Multidim::Array<O, 2>();
+	}
+
+
+	Multidim::Array<O, 2> grayImg(shp[0], shp[1]);
+
+	for (int i = 0; i < shp[0]; i++) {
+
+		for (int j = 0; j < shp[1]; j++) {
+
+			float gray = 0;
+
+			for (int c = 0; c < shp[2]; c++) {
+				gray += weights[c]*img.valueUnchecked(i,j,c);
+			}
+
+			grayImg.atUnchecked(i,j) = static_cast<O>(gray);
+
+		}
+	}
+
+	return grayImg;
+}
+
 
 } // namespace StereoVision
 } //namespace ImageProcessing
