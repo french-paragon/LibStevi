@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
 	} else {
 		outDir = info.absoluteDir();
 	}
-	Multidim::Array<float, 3> intensityNormalized = StereoVision::ImageProcessing::normalizedIntensityRGBImage<float, 3, float>(img, 128);
+	Multidim::Array<float, 3> intensityNormalized = StereoVision::ImageProcessing::normalizedIntensityRGBImage<float, float>(img, 128);
 
 	bool ok = StereoVision::IO::writeImage<uint8_t>((outDir.filePath(info.baseName() + "_int_norm") + ".bmp" ).toStdString(), intensityNormalized);
 

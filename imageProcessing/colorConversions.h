@@ -89,7 +89,7 @@ class ColorModelTraits{
 	}
 };
 
-template<typename T, int nDim, typename O = T>
+template<typename T, typename O = T>
 Multidim::Array<O, 3> normalizedIntensityRGBImage(Multidim::Array<T, 3> const& rgbImg, O scale = 1) {
 
 	using ctypeI = TypesManipulations::accumulation_extended_t<T>;
@@ -141,7 +141,7 @@ Multidim::Array<O, 3> normalizedIntensityRGBImage(Multidim::Array<T, 3> const& r
 
 }
 
-template<typename T, int nDim, typename O = float>
+template<typename T, typename O = float>
 Multidim::Array<O, 3> rgb2hsi(Multidim::Array<T, 3> const& rgbImg) {
 
 	using ctype = TypesManipulations::accumulation_extended_t<T>;
@@ -208,7 +208,7 @@ Multidim::Array<O, 3> rgb2hsi(Multidim::Array<T, 3> const& rgbImg) {
 }
 
 
-template<typename T, int nDim>
+template<typename T>
 Multidim::Array<T, 3> bgr2rgb(Multidim::Array<T, 3> const& bgrImg) {
 
 
@@ -227,7 +227,7 @@ Multidim::Array<T, 3> bgr2rgb(Multidim::Array<T, 3> const& bgrImg) {
 	return rgbImg;
 }
 
-template<typename T, int nDim, typename O = T>
+template<typename T, typename O = T>
 Multidim::Array<O, 3> yuv2rgb(Multidim::Array<T, 3> const& yuvImg) {
 
 	using ctype = std::conditional_t<std::is_integral_v<T>, long, float>;
@@ -279,7 +279,7 @@ Multidim::Array<O, 3> yuv2rgb(Multidim::Array<T, 3> const& yuvImg) {
 
 }
 
-template<typename T, int nDim, typename O = T>
+template<typename T, typename O = T>
 Multidim::Array<O, 3> yuyv2rgb(Multidim::Array<T, 3> const& yuyvImg) {
 
 	using ctype = std::conditional_t<std::is_integral_v<T>, long, float>;
@@ -341,7 +341,7 @@ Multidim::Array<O, 3> yuyv2rgb(Multidim::Array<T, 3> const& yuyvImg) {
 
 }
 
-template<typename T, int nDim, typename O = T>
+template<typename T, typename O = T>
 Multidim::Array<O, 3> yvyu2rgb(Multidim::Array<T, 3> const& yvyuImg) {
 
 	using ctype = std::conditional_t<std::is_integral_v<T>, long, float>;
@@ -404,7 +404,7 @@ Multidim::Array<O, 3> yvyu2rgb(Multidim::Array<T, 3> const& yvyuImg) {
 }
 
 
-template<typename T, int nDim, typename O = T>
+template<typename T, typename O = T>
 Multidim::Array<O, 2> img2gray(Multidim::Array<T, 3> const& img, std::vector<float> const& weights = {0.2989, 0.5870, 0.1140}) {
 
 	auto shp = img.shape();
