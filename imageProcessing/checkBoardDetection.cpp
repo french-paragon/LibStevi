@@ -607,8 +607,6 @@ CheckBoardPoints StereoVision::isolateCheckBoard(std::vector<discretCheckCornerI
 
 	}
 
-	std::cout << "current best: " << currentBests.nPointsFound() << std::endl;
-
 	return currentBests;
 
 }
