@@ -10,6 +10,8 @@
 #include <Eigen/Eigenvalues>
 #include <Eigen/QR>
 
+#include "../optimization/l2optimization.h"
+
 #include <MultidimArrays/MultidimArrays.h>
 
 #include <vector>
@@ -358,38 +360,175 @@ std::vector<discretCheckCornerInfos> checkBoardFilterCandidates(Multidim::Array<
 
 }
 
+
 template<typename T>
-std::vector<refinedCornerInfos> refineCheckBoardCorners(Multidim::Array<T, 2> const& img,
-														CheckBoardPoints const& discretePoints) {
+Eigen::Vector2f fitCheckboardCornerCenter(Multidim::Array<T, 2> const& img,
+										  Eigen::Vector2i discretCenterEstimate,
+										  float mainDir,
+										  int windowRadius = 3,
+										  int nIter = 5) {
 
-	constexpr int searchWindowRadius = 2;
-	constexpr int nParams = 5;
-	constexpr int nObs = (2*searchWindowRadius+1)*(2*searchWindowRadius+1);
 
-	using DerivativeMatrixType = Eigen::Matrix<float, nObs, nParams>;
-	using ObsVectorType = Eigen::Matrix<float, nObs, 1>;
+	constexpr int nParams = 4;
 
-	std::vector<refinedCornerInfos> ret;
-	ret.reserve(discretePoints.rows()*discretePoints.cols());
+	typedef Eigen::Matrix<float, nParams, 1> ParamVector;
+	typedef Eigen::Matrix<float, Eigen::Dynamic, nParams> MatrixA;
 
-	DerivativeMatrixType derivative;
+	int nObs = 2*windowRadius+1;
+	nObs = nObs*nObs;
 
-	ObsVectorType obs;
+	MatrixA A;
+	A.resize(nObs, nParams);
+
+	Eigen::VectorXf obs;
 	obs.resize(nObs);
 
+	Eigen::VectorXf xsCords;
+	xsCords.resize(nObs);
+	Eigen::VectorXf ysCords;
+	ysCords.resize(nObs);
+
+	std::vector<T> vals;
+	vals.reserve(nObs);
+
 	int idx = 0;
-	for (int dr = -searchWindowRadius; dr <= searchWindowRadius; dr++) {
-		for (int dc = -searchWindowRadius; dc <= searchWindowRadius; dc++) {
-			derivative(idx,0) = dr*dr;
-			derivative(idx,1) = dr*dc;
-			derivative(idx,2) = dc*dc;
-			derivative(idx,3) = dr;
-			derivative(idx,4) = dc;
+	for (int i = -windowRadius; i <= windowRadius; i++) {
+
+		int py = discretCenterEstimate.y()+i;
+		if (py < 0) {
+			py = 0;
+		}
+		if (py >= img.shape()[0]) {
+			py = img.shape()[0]-1;
+		}
+
+		for (int j = -windowRadius; j <= windowRadius; j++) {
+
+			int px = discretCenterEstimate.x()+j;
+			if (px < 0) {
+				px = 0;
+			}
+			if (px >= img.shape()[1]) {
+				px = img.shape()[1]-1;
+			}
+
+			vals.push_back(img.valueUnchecked(py,px));
 			idx++;
 		}
 	}
 
-	Eigen::FullPivHouseholderQR<DerivativeMatrixType> qr = derivative.fullPivHouseholderQr();
+	std::vector<T> valsSorted(nObs);
+	std::copy(vals.begin(), vals.end(), valsSorted.begin());
+
+	std::sort(valsSorted.begin(), valsSorted.end());
+
+	int blackIdx = nObs/10;
+	int whiteIdx = nObs-blackIdx-1;
+
+	float black = valsSorted[blackIdx];
+	float white = valsSorted[whiteIdx];
+
+	idx = 0;
+	for (int i = -windowRadius; i <= windowRadius; i++) {
+
+		for (int j = -windowRadius; j <= windowRadius; j++) {
+
+			obs[idx] = 2*(vals[idx] - black)/(white-black) * M_PI_2 - M_PI_2; //scale by M_PI_2, so we do not have to scale the atan function
+
+			xsCords[idx] = j;
+			ysCords[idx] = i;
+
+			idx++;
+		}
+	}
+
+	float theta = mainDir - M_PI_4; //adjust coordinate system so that main angle is 45 degree
+
+	ParamVector X;
+	X[0] = 0; //x translation
+	X[1] = 0; //y translation
+	X[2] = std::cos(-theta); //rigid transform diag
+	X[3] = std::sin(-theta); //rigid transform non diag
+
+	Eigen::VectorXf estimate;
+	estimate.resize(nObs);
+
+	auto computeEstimateVector = [&X, &estimate, windowRadius] () {
+
+		int idx = 0;
+		for (int pos_y = -windowRadius; pos_y <= windowRadius; pos_y++) {
+
+			for (int pos_x = -windowRadius; pos_x <= windowRadius; pos_x++) {
+
+				float trsfX = X[2]*pos_x - X[3]*pos_y + X[0];
+				float trsfY = X[3]*pos_x + X[2]*pos_y + X[1];
+
+				estimate[idx] = std::atan(trsfX*trsfY);
+
+				idx++;
+			}
+		}
+	};
+
+	auto buildMatrixA = [&X, &A, windowRadius] () {
+
+		int idx = 0;
+		for (int pos_y = -windowRadius; pos_y <= windowRadius; pos_y++) {
+
+			for (int pos_x = -windowRadius; pos_x <= windowRadius; pos_x++) {
+
+				float trsfX = X[2]*pos_x - X[3]*pos_y + X[0];
+				float trsfY = X[3]*pos_x + X[2]*pos_y + X[1];
+
+				float attenuation = 1/((trsfX*trsfY)*(trsfX*trsfY) + 1); //diff atan
+
+				A(idx,0) = attenuation*trsfY;
+				A(idx,1) = attenuation*trsfX;
+				A(idx,2) = attenuation*(pos_y*trsfX + pos_x*trsfY);
+				A(idx,3) = attenuation*(pos_x*trsfX - pos_y*trsfY);
+
+				idx++;
+			}
+		}
+
+	};
+
+	for (int i = 0; i < nIter; i++) {
+		computeEstimateVector();
+
+		Eigen::VectorXf error = obs - estimate;
+
+		buildMatrixA();
+
+		ParamVector delta = Optimization::leastSquares(A,error);
+
+		X = X+delta;
+
+	}
+
+	Eigen::Vector2f Invret;
+	Invret.x() = X[0];
+	Invret.y() = X[1];
+
+	Eigen::Matrix2f InvModel;
+	InvModel(0,0) = X[2];
+	InvModel(1,0) = X[3];
+	InvModel(0,1) = -X[3];
+	InvModel(1,1) = X[2];
+
+	return -InvModel.completeOrthogonalDecomposition().pseudoInverse()*Invret;
+
+}
+
+template<typename T>
+std::vector<refinedCornerInfos> refineCheckBoardCorners(Multidim::Array<T, 2> const& img,
+														CheckBoardPoints const& discretePoints) {
+
+	constexpr int searchWindowRadius = 3;
+	constexpr int nIter = 5;
+
+	std::vector<refinedCornerInfos> ret;
+	ret.reserve(discretePoints.rows()*discretePoints.cols());
 
 	for (int i = 0; i < discretePoints.rows(); i++) {
 		for (int j = 0; j < discretePoints.cols(); j++) {
@@ -400,85 +539,17 @@ std::vector<refinedCornerInfos> refineCheckBoardCorners(Multidim::Array<T, 2> co
 				continue;
 			}
 
-			float mean = 0;
-			for (int dr = -searchWindowRadius-1; dr <= searchWindowRadius+1; dr++) {
-				for (int dc = -searchWindowRadius-1; dc <= searchWindowRadius+1; dc++) {
-					int coordX = cornerInfos->pix_coord_x + dr;
-					int coordY = cornerInfos->pix_coord_y + dc;
+			discretCheckCornerInfos corner = cornerInfos.value();
 
-					if (coordX < 0) {
-						coordX = 0;
-					}
+			Eigen::Vector2i discretePos;
+			discretePos.x() = corner.pix_coord_x;
+			discretePos.y() = corner.pix_coord_y;
 
-					if (coordY < 0) {
-						coordY = 0;
-					}
-
-					if (coordX >= img.shape()[1]) {
-						coordX = img.shape()[1]-1;
-					}
-
-					if (coordY < img.shape()[0]) {
-						coordY = img.shape()[0]-1;
-					}
-
-					mean += static_cast<float>(img.valueUnchecked(coordY, coordX));
-				}
-			}
-
-			mean /= nObs;
-
-			int idx = 0;
-			for (int dr = -searchWindowRadius; dr <= searchWindowRadius; dr++) {
-				for (int dc = -searchWindowRadius; dc <= searchWindowRadius; dc++) {
-					int coordX = cornerInfos->pix_coord_x + dr;
-					int coordY = cornerInfos->pix_coord_y + dc;
-
-					if (coordX < 1) {
-						coordX = 1;
-					}
-
-					if (coordY < 1) {
-						coordY = 1;
-					}
-
-					if (coordX >= img.shape()[1]-1) {
-						coordX = img.shape()[1]-2;
-					}
-
-					if (coordY < img.shape()[0]-1) {
-						coordY = img.shape()[0]-2;
-					}
-
-					float val = 0;
-
-
-					for (int d1 = -1; d1 <= 1; d1++) {
-						for (int d2 = -1; d2 <= 1; d2++) {
-
-							val += static_cast<float>(img.valueUnchecked(coordY+d1, coordX+d2)) - mean;
-						}
-					}
-
-					obs(idx) = val;
-					idx++;
-				}
-			}
-
-
-			Eigen::Matrix<float, nParams, 1> paramsEst = qr.solve(obs);
-
-			Eigen::Matrix2f gradMat;
-			gradMat(0,0) = 2*paramsEst(0);
-			gradMat(0,1) = paramsEst(1);
-			gradMat(1,0) = paramsEst(1);
-			gradMat(1,1) = 2*paramsEst(2);
-
-			Eigen::Vector2f gradConst;
-			gradConst(0) = paramsEst(3);
-			gradConst(1) = paramsEst(4);
-
-			Eigen::Vector2f delta = -gradMat.completeOrthogonalDecomposition().pseudoInverse()*gradConst;
+			Eigen::Vector2f delta = fitCheckboardCornerCenter<T>(img,
+																 discretePos,
+																 corner.main_dir,
+																 searchWindowRadius,
+																 nIter);
 
 			ret.emplace_back(j,i,cornerInfos->pix_coord_x+delta.x(), cornerInfos->pix_coord_y+delta.y());
 		}

@@ -128,6 +128,59 @@ Multidim::Array<float, 2> generateBoard(int nVertical,
 
 }
 
+Multidim::Array<float, 2> generateSubPixelModel(
+		float subX,
+		float subY,
+		float theta,
+		int radius = 3) {
+
+	constexpr int aliasing_radius = 4;
+	constexpr float aliasing_delta = 0.5;
+
+
+	int side = 2*radius+1;
+
+	Multidim::Array<float, 2> ret(side, side);
+
+	for (int pos_y = -radius; pos_y <= radius; pos_y++) {
+		for (int pos_x = -radius; pos_x <= radius; pos_x++) {
+
+			float mean = 0;
+			float sumWeight = 0;
+
+			for (int delta_pos_y = -aliasing_radius; delta_pos_y <= aliasing_radius; delta_pos_y++) {
+				for (int delta_pos_x = -aliasing_radius; delta_pos_x <= aliasing_radius; delta_pos_x++) {
+
+					float aliasingDistX = delta_pos_x*aliasing_delta;
+					float aliasingDistY = delta_pos_y*aliasing_delta;
+					float weigth = std::exp(-(aliasingDistX*aliasingDistX + aliasingDistY*aliasingDistY));
+
+					float px = pos_x + aliasingDistX - subX;
+					float py = pos_y + aliasingDistY - subY;
+
+					float trsfX = std::cos(-theta)*px - std::sin(-theta)*py;
+					float trsfY = std::cos(-theta)*py + std::sin(-theta)*px;
+
+					if (trsfX*trsfY > 0) {
+						mean += weigth;
+					}
+
+					sumWeight += weigth;
+
+				}
+			}
+
+			mean /= sumWeight;
+
+			ret.atUnchecked(pos_y+radius,pos_x+radius) = mean;
+
+		}
+	}
+
+	return ret;
+
+}
+
 class TestCheckboardDetection: public QObject
 {
 
@@ -139,6 +192,7 @@ private Q_SLOTS:
 
 	void testCandidateFinding();
 	void testCheckBoardExtraction();
+	void testCandidateRefinement();
 
 private:
 	std::default_random_engine re;
@@ -189,6 +243,31 @@ void TestCheckboardDetection::testCheckBoardExtraction() {
 	QCOMPARE(extracted.nPointsFound(), nVert*nHorz);
 	QCOMPARE(extracted.rows(), nVert);
 	QCOMPARE(extracted.cols(), nHorz);
+}
+
+
+
+void  TestCheckboardDetection::testCandidateRefinement() {
+
+	constexpr int radius = 3;
+
+	std::uniform_real_distribution<float> subPixelRange(-0.3, 0.3);
+	std::uniform_real_distribution<float> thetaRange(-M_PI, M_PI);
+
+	float subX = subPixelRange(re);
+	float subY = subPixelRange(re);
+
+	float theta = thetaRange(re);
+
+	Multidim::Array<float, 2> subpixelModel = generateSubPixelModel(subX, subY, theta, radius);
+
+	std::cout << subpixelModel << std::endl;
+
+	Eigen::Vector2f subpixel = StereoVision::fitCheckboardCornerCenter(subpixelModel, Eigen::Vector2i(radius, radius), theta + M_PI_4 + 0.01, radius, 15);
+
+	QVERIFY2(std::fabs(subpixel.x() - subX) < 1e-1, "Unacurate subpixel matching !");
+	QVERIFY2(std::fabs(subpixel.y() - subY) < 1e-1, "Unacurate subpixel matching !");
+
 }
 
 QTEST_MAIN(TestCheckboardDetection)
