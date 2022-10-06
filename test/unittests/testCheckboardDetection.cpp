@@ -233,16 +233,95 @@ void TestCheckboardDetection::testCheckBoardExtraction() {
 	auto extracted = StereoVision::isolateCheckBoard(pure);
 
 	QCOMPARE(extracted.nPointsFound(), nVert*nHorz);
-	QCOMPARE(extracted.rows(), nVert);
-	QCOMPARE(extracted.cols(), nHorz);
+	QCOMPARE(extracted.rows(), std::min(nVert, nHorz));
+	QCOMPARE(extracted.cols(), std::max(nVert, nHorz));
 
 	std::vector<StereoVision::discretCheckCornerInfos> wrong = generateTestCandidatesSet(nVert, nHorz, nWrong, squareside);
 
 	extracted = StereoVision::isolateCheckBoard(wrong);
 
 	QCOMPARE(extracted.nPointsFound(), nVert*nHorz);
-	QCOMPARE(extracted.rows(), nVert);
-	QCOMPARE(extracted.cols(), nHorz);
+	QCOMPARE(extracted.rows(), std::min(nVert, nHorz));
+	QCOMPARE(extracted.cols(), std::max(nVert, nHorz));
+
+	Multidim::Array<float, 2> board = generateBoard(nVert,nHorz,squareside);
+
+	auto candidates = StereoVision::checkBoardCornersCandidates(board, 1, 2, 0.0001);
+
+	QCOMPARE(candidates.size(), nVert*nHorz);
+
+	extracted = StereoVision::isolateCheckBoard(candidates);
+
+	QCOMPARE(extracted.nPointsFound(), nVert*nHorz);
+	QCOMPARE(extracted.rows(), std::min(nVert, nHorz));
+	QCOMPARE(extracted.cols(), std::max(nVert, nHorz));
+
+	auto candCorner = extracted.pointInCoord(0,0);
+	auto candYaxis = extracted.pointInCoord(1,0);
+	auto candXaxis = extracted.pointInCoord(0,1);
+
+	QVERIFY2(candCorner.has_value(), "0,0 should be defined");
+	QVERIFY2(candYaxis.has_value(), "1,0 should be defined");
+	QVERIFY2(candXaxis.has_value(), "0,1 should be defined");
+
+	StereoVision::discretCheckCornerInfos corner = candCorner.value();
+	StereoVision::discretCheckCornerInfos yaxis = candYaxis.value();
+	StereoVision::discretCheckCornerInfos xaxis = candXaxis.value();
+
+	Eigen::Vector2f xDir(xaxis.pix_coord_x - corner.pix_coord_x, xaxis.pix_coord_y - corner.pix_coord_y);
+	Eigen::Vector2f yDir(yaxis.pix_coord_x - corner.pix_coord_x, yaxis.pix_coord_y - corner.pix_coord_y);
+
+	float cross = xDir.x()*yDir.y() - xDir.y()*yDir.x();
+
+	QVERIFY2(cross > 0, "The grid coordinate system should be properly oriented"); //coordinate system properly oriented
+
+	Eigen::Vector2f mean = (xDir+yDir)/2;
+	Eigen::Vector2i coord = mean.cast<int>() + Eigen::Vector2i(corner.pix_coord_x, corner.pix_coord_y);
+
+	float val = board.atUnchecked(coord.y(), coord.x());
+
+	QVERIFY2(val > 0.5, "Square at the origin was expected to be white");
+
+	board = generateBoard(nVert,nHorz,squareside, true);
+
+	candidates = StereoVision::checkBoardCornersCandidates(board, 1, 2, 0.0001);
+
+	QCOMPARE(candidates.size(), nVert*nHorz);
+
+	extracted = StereoVision::isolateCheckBoard(candidates);
+
+	QCOMPARE(extracted.nPointsFound(), nVert*nHorz);
+	QCOMPARE(extracted.rows(), std::min(nVert, nHorz));
+	QCOMPARE(extracted.cols(), std::max(nVert, nHorz));
+
+	candCorner = extracted.pointInCoord(0,0);
+	candYaxis = extracted.pointInCoord(1,0);
+	candXaxis = extracted.pointInCoord(0,1);
+
+	auto candOpposite = extracted.pointInCoord(extracted.rows()-1,extracted.cols()-1);
+
+	QVERIFY2(candCorner.has_value(), "0,0 should be defined");
+	QVERIFY2(candYaxis.has_value(), "1,0 should be defined");
+	QVERIFY2(candXaxis.has_value(), "0,1 should be defined");
+	QVERIFY2(candOpposite.has_value(), "opposite corner should be defined");
+
+	corner = candCorner.value();
+	yaxis = candYaxis.value();
+	xaxis = candXaxis.value();
+
+	xDir = Eigen::Vector2f(xaxis.pix_coord_x - corner.pix_coord_x, xaxis.pix_coord_y - corner.pix_coord_y);
+	yDir = Eigen::Vector2f(yaxis.pix_coord_x - corner.pix_coord_x, yaxis.pix_coord_y - corner.pix_coord_y);
+
+	cross = xDir.x()*yDir.y() - xDir.y()*yDir.x();
+
+	QVERIFY2(cross > 0, "The grid coordinate system should be properly oriented"); //coordinate system properly oriented
+
+	mean = (xDir+yDir)/2;
+	coord = mean.cast<int>() + Eigen::Vector2i(corner.pix_coord_x, corner.pix_coord_y);
+
+	val = board.atUnchecked(coord.y(), coord.x());
+
+	QVERIFY2(val > 0.5, "Square at the origin was expected to be white");
 }
 
 
@@ -260,8 +339,6 @@ void  TestCheckboardDetection::testCandidateRefinement() {
 	float theta = thetaRange(re);
 
 	Multidim::Array<float, 2> subpixelModel = generateSubPixelModel(subX, subY, theta, radius);
-
-	std::cout << subpixelModel << std::endl;
 
 	Eigen::Vector2f subpixel = StereoVision::fitCheckboardCornerCenter(subpixelModel, Eigen::Vector2i(radius, radius), theta + M_PI_4 + 0.01, radius, 15);
 

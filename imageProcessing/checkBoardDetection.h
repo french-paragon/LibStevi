@@ -83,9 +83,15 @@ public:
 	CheckBoardPoints(discretCheckCornerInfos initial);
 
 	inline int rows() const {
+		if (_transpose) {
+			return _nCols;
+		}
 		return _nRows;
 	}
 	inline int cols() const {
+		if (_transpose) {
+			return _nRows;
+		}
 		return _nCols;
 	}
 
@@ -94,12 +100,36 @@ public:
 	}
 
 	inline bool hasPointInCoord(int row, int col) const {
-		return _pointMaps.count({row, col}) > 0;
+
+		int trow = row;
+		int tcol = col;
+
+		if (_transpose) {
+			trow = col;
+			tcol = row;
+		}
+
+		int innerRow = _rowDirection*trow + _rowDelta;
+		int innerCol = _colDirection*tcol + _colDelta;
+
+		return _pointMaps.count({innerRow, innerCol}) > 0;
 	}
 
 	inline std::optional<discretCheckCornerInfos> pointInCoord(int row, int col) const {
-		if (hasPointInCoord(row, col)) {
-			return _pointMaps.at({row, col});
+
+		int trow = row;
+		int tcol = col;
+
+		if (_transpose) {
+			trow = col;
+			tcol = row;
+		}
+
+		int innerRow = _rowDirection*trow + _rowDelta;
+		int innerCol = _colDirection*tcol + _colDelta;
+
+		if (_pointMaps.count({innerRow, innerCol}) > 0) {
+			return _pointMaps.at({innerRow, innerCol});
 		}
 		return std::nullopt;
 	}
@@ -122,6 +152,11 @@ protected:
 	};
 
 	std::map<CoordPair, discretCheckCornerInfos, coordPairCompare> _pointMaps;
+
+	bool _transpose;
+
+	int _rowDirection;
+	int _colDirection;
 
 	int _rowDelta;
 	int _colDelta;

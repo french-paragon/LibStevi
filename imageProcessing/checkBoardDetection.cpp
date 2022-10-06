@@ -12,6 +12,9 @@ using namespace StereoVision;
 
 CheckBoardPoints::CheckBoardPoints() :
 	_pointMaps(),
+	_transpose(false),
+	_rowDirection(1),
+	_colDirection(1),
 	_rowDelta(0),
 	_colDelta(0),
 	_nRows(0),
@@ -22,6 +25,9 @@ CheckBoardPoints::CheckBoardPoints() :
 
 CheckBoardPoints::CheckBoardPoints(discretCheckCornerInfos initial) :
 	_pointMaps(),
+	_transpose(false),
+	_rowDirection(1),
+	_colDirection(1),
 	_rowDelta(0),
 	_colDelta(0),
 	_nRows(1),
@@ -224,8 +230,8 @@ CheckBoardPoints StereoVision::isolateCheckBoard(std::vector<discretCheckCornerI
 			candidatePointSet._nRows = 2;
 
 
-			std::map<Coord, StateVector, std::less<Coord>, Eigen::aligned_allocator<std::pair<Coord, StateVector>>> _states_vertical;
-			std::map<Coord, Matrix4x4, std::less<Coord>, Eigen::aligned_allocator<std::pair<Coord, Matrix4x4>>> _statesVariances_vertical;
+			std::map<Coord, StateVector, std::less<Coord>> _states_vertical;
+			std::map<Coord, Matrix4x4, std::less<Coord>> _statesVariances_vertical;
 
 			StateVector v1 = StateVector::Zero();
 			v1[0] = colPrevious.pix_coord_x - rowStart.pix_coord_x;
@@ -241,8 +247,8 @@ CheckBoardPoints StereoVision::isolateCheckBoard(std::vector<discretCheckCornerI
 			_states_vertical[{1,1}] = v2;
 			_statesVariances_vertical[{1,1}] = Matrix4x4::Identity();
 
-			std::map<Coord, StateVector, std::less<Coord>, Eigen::aligned_allocator<std::pair<Coord, StateVector>>> _states_horizontal;
-			std::map<Coord, Matrix4x4, std::less<Coord>, Eigen::aligned_allocator<std::pair<Coord, Matrix4x4>>> _statesVariances_horizontal;
+			std::map<Coord, StateVector, std::less<Coord>> _states_horizontal;
+			std::map<Coord, Matrix4x4, std::less<Coord>> _statesVariances_horizontal;
 
 			v1 = StateVector::Zero();
 			v1[0] = rowCurrent.pix_coord_x - rowStart.pix_coord_x;
@@ -308,16 +314,16 @@ CheckBoardPoints StereoVision::isolateCheckBoard(std::vector<discretCheckCornerI
 						StateVector updatedState = _states_horizontal[{0,candidatePointSet._nCols-1}] + Gain*innovation;
 						Matrix4x4 updatedVar = (Matrix4x4::Identity() - Gain*ObservationModel)*predictedVar;
 
-						std::vector<StateVector,Eigen::aligned_allocator<StateVector>> newHorizontalStates = {updatedState};
+						std::vector<StateVector> newHorizontalStates = {updatedState};
 						newHorizontalStates.reserve(candidatePointSet._nRows);
 
-						std::vector<Matrix4x4,Eigen::aligned_allocator<Matrix4x4>> newHorizontalStatesVariance = {updatedVar};
+						std::vector<Matrix4x4> newHorizontalStatesVariance = {updatedVar};
 						newHorizontalStatesVariance.reserve(candidatePointSet._nRows);
 
-						std::vector<StateVector,Eigen::aligned_allocator<StateVector>> newVerticalStates;
+						std::vector<StateVector> newVerticalStates;
 						newHorizontalStates.reserve(candidatePointSet._nRows-1);
 
-						std::vector<Matrix4x4,Eigen::aligned_allocator<Matrix4x4>> newVerticalStatesVariances;
+						std::vector<Matrix4x4> newVerticalStatesVariances;
 						newVerticalStatesVariances.reserve(candidatePointSet._nRows-1);
 
 						for (int i = 1; i < candidatePointSet._nRows; i++) {
@@ -475,16 +481,16 @@ CheckBoardPoints StereoVision::isolateCheckBoard(std::vector<discretCheckCornerI
 						StateVector updatedState = _states_vertical[{candidatePointSet._nRows-1, 0}] + Gain*innovation;
 						Matrix4x4 updatedVar = (Matrix4x4::Identity() - Gain*ObservationModel)*predictedVar;
 
-						std::vector<StateVector,Eigen::aligned_allocator<StateVector>> newVerticalStates = {updatedState};
+						std::vector<StateVector> newVerticalStates = {updatedState};
 						newVerticalStates.reserve(candidatePointSet._nCols);
 
-						std::vector<Matrix4x4,Eigen::aligned_allocator<Matrix4x4>> newVerticalStatesVariances = {updatedVar};
+						std::vector<Matrix4x4> newVerticalStatesVariances = {updatedVar};
 						newVerticalStatesVariances.reserve(candidatePointSet._nCols);
 
-						std::vector<StateVector,Eigen::aligned_allocator<StateVector>> newHorizontalStates;
+						std::vector<StateVector> newHorizontalStates;
 						newHorizontalStates.reserve(candidatePointSet._nCols-1);
 
-						std::vector<Matrix4x4,Eigen::aligned_allocator<Matrix4x4>> newHorizontalStatesVariance;
+						std::vector<Matrix4x4> newHorizontalStatesVariance;
 						newHorizontalStatesVariance.reserve(candidatePointSet._nCols-1);
 
 						for (int i = 1; i < candidatePointSet._nCols; i++) {
@@ -605,6 +611,93 @@ CheckBoardPoints StereoVision::isolateCheckBoard(std::vector<discretCheckCornerI
 			}
 		}
 
+	}
+
+	//orient the checkboard
+
+	if (currentBests.rows() <= 1 or currentBests.cols() <= 1) { //do not orient if it is not a grid
+		return currentBests;
+	}
+
+	bool needTranspose = currentBests.rows() > currentBests.cols();
+	int selectedCornerRow = -1;
+	int selectedCornerCol = -1;
+
+	for (int rowCornerIdx = 0; rowCornerIdx <=1; rowCornerIdx++) {
+
+		int row = (rowCornerIdx == 0) ? 0 : currentBests._nRows-1;
+		int rowNext = (row > 0) ? row-1 : row+1;
+
+		for (int colCornerIdx = 0; colCornerIdx <=1; colCornerIdx++) {
+
+			int col = (colCornerIdx == 0) ? 0 : currentBests._nCols-1;
+			int colNext = (col > 0) ? col-1 : col+1;
+
+			auto cand = currentBests.pointInCoord(row, col);
+			auto candRow = currentBests.pointInCoord(rowNext, col);
+			auto candCol = currentBests.pointInCoord(row, colNext);
+
+			if (!cand.has_value() or !candRow.has_value() or !candCol.has_value()) {
+				continue;
+			}
+
+			discretCheckCornerInfos infos = cand.value();
+			discretCheckCornerInfos nextRow = candRow.value();
+			discretCheckCornerInfos nextCol = candCol.value();
+
+			Eigen::Vector2f yVec;
+			yVec.x() = nextRow.pix_coord_x - infos.pix_coord_x;
+			yVec.y() = nextRow.pix_coord_y - infos.pix_coord_y;
+
+			Eigen::Vector2f xVec;
+			xVec.x() = nextCol.pix_coord_x - infos.pix_coord_x;
+			xVec.y() = nextCol.pix_coord_y - infos.pix_coord_y;
+
+			if (needTranspose) {
+				Eigen::Vector2f tmp = xVec;
+				xVec = yVec;
+				yVec = tmp;
+			}
+
+			Eigen::Vector2f angleVec;
+			angleVec.x() = std::cos(infos.main_dir);
+			angleVec.y() = std::sin(infos.main_dir);
+
+			if ((angleVec.dot(yVec) > 0 and angleVec.dot(xVec) > 0) or
+				(angleVec.dot(yVec) < 0 and angleVec.dot(xVec) < 0)) {
+
+				float cross = xVec.x()*yVec.y() - xVec.y()*yVec.x();
+
+				if (cross > 0) {
+
+					selectedCornerRow = row;
+					selectedCornerCol = col;
+
+					break;
+				}
+			}
+		}
+
+		if (selectedCornerRow >= 0 and selectedCornerCol >= 0) {
+			break;
+		}
+	}
+
+	if (selectedCornerRow >= 0 and selectedCornerCol >= 0) {
+
+		if (selectedCornerRow > 0) {
+			currentBests._rowDelta = selectedCornerRow;
+			currentBests._rowDirection = -1;
+		}
+
+		if (selectedCornerCol > 0) {
+			currentBests._colDelta = selectedCornerCol;
+			currentBests._colDirection = -1;
+		}
+
+		if (needTranspose) {
+			currentBests._transpose = true;
+		}
 	}
 
 	return currentBests;
