@@ -52,20 +52,8 @@ struct HexTargetPosition {
 
 	Eigen::Vector2f posRefDot;
 
-	bool dot1positive;
-	Eigen::Vector2f posDot1;
-
-	bool dot2positive;
-	Eigen::Vector2f posDot2;
-
-	bool dot3positive;
-	Eigen::Vector2f posDot3;
-
-	bool dot4positive;
-	Eigen::Vector2f posDot4;
-
-	bool dot5positive;
-	Eigen::Vector2f posDot5;
+	std::array<bool, 5> dotsPositives;
+	std::array<Eigen::Vector2f, 5> dotsPositions;
 
 };
 
@@ -327,20 +315,20 @@ std::vector<HexTargetPosition> detectHexTargets(Multidim::Array<T, 3> const& img
 
 		hexPos.posRefDot = centroids[idxs[hexIdxs[0]]];
 
-		hexPos.posDot1 = centroids[idxs[hexIdxs[1]]];
-		hexPos.dot1positive = nodesColors[hexIdxs[1]] == PC;
+		hexPos.dotsPositions[0] = centroids[idxs[hexIdxs[1]]];
+		hexPos.dotsPositives[0] = nodesColors[hexIdxs[1]] == PC;
 
-		hexPos.posDot2 = centroids[idxs[hexIdxs[2]]];
-		hexPos.dot2positive = nodesColors[hexIdxs[2]] == PC;
+		hexPos.dotsPositions[1] = centroids[idxs[hexIdxs[2]]];
+		hexPos.dotsPositives[1] = nodesColors[hexIdxs[2]] == PC;
 
-		hexPos.posDot3 = centroids[idxs[hexIdxs[3]]];
-		hexPos.dot3positive = nodesColors[hexIdxs[3]] == PC;
+		hexPos.dotsPositions[2] = centroids[idxs[hexIdxs[3]]];
+		hexPos.dotsPositives[2] = nodesColors[hexIdxs[3]] == PC;
 
-		hexPos.posDot4 = centroids[idxs[hexIdxs[4]]];
-		hexPos.dot4positive = nodesColors[hexIdxs[4]] == PC;
+		hexPos.dotsPositions[3] = centroids[idxs[hexIdxs[4]]];
+		hexPos.dotsPositives[3] = nodesColors[hexIdxs[4]] == PC;
 
-		hexPos.posDot5 = centroids[idxs[hexIdxs[5]]];
-		hexPos.dot5positive = nodesColors[hexIdxs[5]] == PC;
+		hexPos.dotsPositions[4] = centroids[idxs[hexIdxs[5]]];
+		hexPos.dotsPositives[4] = nodesColors[hexIdxs[5]] == PC;
 
 		ret.push_back(hexPos);
 

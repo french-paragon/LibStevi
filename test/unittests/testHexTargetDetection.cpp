@@ -160,11 +160,11 @@ void TestHexTargetDetection::testTargetFinding() {
 
 	QCOMPARE(candidates.size(), 1);
 
-	QCOMPARE(candidates[0].dot1positive, color1pos);
-	QCOMPARE(candidates[0].dot2positive, color2pos);
-	QCOMPARE(candidates[0].dot3positive, color3pos);
-	QCOMPARE(candidates[0].dot4positive, color4pos);
-	QCOMPARE(candidates[0].dot5positive, color5pos);
+	QCOMPARE(candidates[0].dotsPositives[0], color1pos);
+	QCOMPARE(candidates[0].dotsPositives[1], color2pos);
+	QCOMPARE(candidates[0].dotsPositives[2], color3pos);
+	QCOMPARE(candidates[0].dotsPositives[3], color4pos);
+	QCOMPARE(candidates[0].dotsPositives[4], color5pos);
 
 }
 
