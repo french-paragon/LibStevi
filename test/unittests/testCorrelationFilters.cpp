@@ -263,6 +263,7 @@ void TestCorrelationFilters::testCrossCorrelationFilter_data() {
 	QTest::addColumn<int>("v_radius");
 	QTest::addColumn<int>("disp_w");
 
+	QTest::newRow("no disp") << 3 << 3 << 1;
 	QTest::newRow("small") << 1 << 1 << 5;
 	QTest::newRow("avg") << 3 << 3 << 5;
 	QTest::newRow("wide") << 5 << 1 << 5;
@@ -316,6 +317,7 @@ void TestCorrelationFilters::testNCCFilter_data() {
 	QTest::addColumn<int>("v_radius");
 	QTest::addColumn<int>("disp_w");
 
+	QTest::newRow("no disp") << 3 << 3 << 1;
 	QTest::newRow("small") << 1 << 1 << 5;
 	QTest::newRow("avg") << 3 << 3 << 5;
 	QTest::newRow("wide") << 5 << 1 << 5;
@@ -445,6 +447,7 @@ void TestCorrelationFilters::testUnfoldNCCFilter_data() {
 	QTest::addColumn<int>("v_radius");
 	QTest::addColumn<int>("disp_w");
 
+	QTest::newRow("no disp") << 3 << 3 << 1;
 	QTest::newRow("small") << 1 << 1 << 5;
 	QTest::newRow("avg") << 3 << 3 << 5;
 	QTest::newRow("wide") << 5 << 1 << 5;
