@@ -65,6 +65,9 @@ private Q_SLOTS:
 	void initTestCase();
 
 	void testComponentsFinding();
+	void testClusterAreas();
+	void testClusterCentroids();
+
 
 private:
 	std::default_random_engine re;
@@ -125,6 +128,43 @@ void TestConnectedComponents::testComponentsFinding() {
 
 }
 
+void TestConnectedComponents::testClusterAreas() {
+
+	int gridSide = 2;
+	int compSide = 2;
+
+	Multidim::Array<bool, 2> comps = generate2DSquareComponents(gridSide, compSide);
+
+	auto [clusters, clustersInfos] = StereoVision::ImageProcessing::connectedComponents<2, StereoVision::Contiguity::allDimsCanChange>(comps);
+
+	QCOMPARE(clustersInfos.size(), gridSide*gridSide);
+
+	for (StereoVision::ImageProcessing::ConnectedComponentInfos<2> & clusterInfos : clustersInfos) {
+		int area = StereoVision::ImageProcessing::clusterSize(clusters, clusterInfos);
+
+		QCOMPARE(area, compSide*compSide);
+	}
+
+}
+
+void TestConnectedComponents::testClusterCentroids() {
+
+	int gridSide = 2;
+	int compSide = 2;
+
+	Multidim::Array<bool, 2> comps = generate2DSquareComponents(gridSide, compSide);
+
+	auto [clusters, clustersInfos] = StereoVision::ImageProcessing::connectedComponents<2, StereoVision::Contiguity::allDimsCanChange>(comps);
+
+	QCOMPARE(clustersInfos.size(), gridSide*gridSide);
+
+	for (StereoVision::ImageProcessing::ConnectedComponentInfos<2> & clusterInfos : clustersInfos) {
+		Eigen::Vector2f centroid = StereoVision::ImageProcessing::clusterCentroid(clusters, clusterInfos);
+
+		QCOMPARE(centroid[0], (clusterInfos.boundingBoxCornerMin[0] + clusterInfos.boundingBoxCornerMax[0])/2.);
+		QCOMPARE(centroid[1], (clusterInfos.boundingBoxCornerMin[1] + clusterInfos.boundingBoxCornerMax[1])/2.);
+	}
+}
 
 QTEST_MAIN(TestConnectedComponents)
 #include "testConnectedComponents.moc"

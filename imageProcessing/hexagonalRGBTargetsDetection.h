@@ -28,6 +28,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../utils/contiguity.h"
 #include "../utils/types_manipulations.h"
 
+#include "../io/image_io.h"
+
 #include "../imageProcessing/connectedComponents.h"
 
 #include "../optimization/l2optimization.h"
@@ -119,6 +121,8 @@ std::vector<HexTargetPosition> detectHexTargets(Multidim::Array<T, 3> const& img
 		}
 	}
 
+	IO::writeImage<uint8_t>("selected.bmp", selected);
+
 	constexpr Contiguity::generalContiguity contGeneral = (Cgt == Contiguity::Rook) ? Contiguity::singleDimCanChange : Contiguity::allDimsCanChange;
 
 	auto [clusters, clustersInfos] = connectedComponents<2, contGeneral>(selected);
@@ -177,18 +181,10 @@ std::vector<HexTargetPosition> detectHexTargets(Multidim::Array<T, 3> const& img
 			distancesToIdxs.emplace_back(dist, sj);
 		}
 
-		std::sort(distancesToIdxs.begin(), distancesToIdxs.end(), [] (std::tuple<float, int> const& t1, std::tuple<float, int> const& t2) {
-			auto [dist1, id1] = t1;
-			auto [dist2, id2] = t2;
+		std::sort(distancesToIdxs.begin(), distancesToIdxs.end());
 
-			if (dist1 < dist2) {
-				return true;
-			}
-
-			return id1 < id2;
-		});
-
-		auto [opposite_dist, opposite_id] = distancesToIdxs[5];
+		float opposite_dist = std::get<0>(distancesToIdxs[5]);
+		int opposite_id = std::get<1>(distancesToIdxs[5]);
 
 		if (opposite_dist > relMaxHexDiameter*std::max(imshape[0], imshape[1])) {
 			//hexagone is too large
@@ -199,7 +195,7 @@ std::vector<HexTargetPosition> detectHexTargets(Multidim::Array<T, 3> const& img
 		Eigen::Vector2f center = Eigen::Vector2f::Zero();
 
 		for (int i = 0; i < 6; i++) {
-			auto [dist, id] = distancesToIdxs[i];
+			int id = std::get<1>(distancesToIdxs[i]);
 			center += centroids[id];
 		}
 
@@ -208,7 +204,7 @@ std::vector<HexTargetPosition> detectHexTargets(Multidim::Array<T, 3> const& img
 		Eigen::Matrix<float,6,3> A = Eigen::Matrix<float,6,3>::Zero();
 
 		for (int i = 0; i < 6; i++) {
-			auto [dist, id] = distancesToIdxs[i];
+			int id = std::get<1>(distancesToIdxs[i]);
 			Eigen::Vector2f coord0 = centroids[id] - center;
 			A(i,0) = coord0[0]*coord0[0];
 			A(i,1) = coord0[0]*coord0[1];
@@ -234,7 +230,7 @@ std::vector<HexTargetPosition> detectHexTargets(Multidim::Array<T, 3> const& img
 		//detect the color of the clusters
 		std::array<int, 6> idxs;
 		for (int i = 0; i < 6; i++) {
-			auto [dist, id] = distancesToIdxs[i];
+			int id = std::get<1>(distancesToIdxs[i]);
 			idxs[i] = id;
 		}
 
@@ -288,9 +284,11 @@ std::vector<HexTargetPosition> detectHexTargets(Multidim::Array<T, 3> const& img
 			angles[i] = std::atan2(coord0.x(), coord0.y()); //inverted trigonometric direction, to match image coordinates.
 		}
 
+		float delta = angles[mainId];
+
 		for (int i = 0; i < 6; i++) {
 
-			angles[i] -= angles[mainId];
+			angles[i] -= delta;
 
 			if (angles[i] < 0) {
 				angles[i] = 2*M_PI + angles[i];
@@ -333,7 +331,7 @@ std::vector<HexTargetPosition> detectHexTargets(Multidim::Array<T, 3> const& img
 		ret.push_back(hexPos);
 
 		for (int i = 1; i < 6; i++) {
-			hexagonesUnions.joinNode(idxs[i], idxs[0]);
+			hexagonesUnions.joinNode(idxs[hexIdxs[i]], idxs[hexIdxs[0]]);
 		}
 
 	}

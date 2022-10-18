@@ -230,7 +230,7 @@ connectedComponents(Multidim::Array<bool, nDims> const& mask) {
 
 				for (int d = 0; d < nDims; d++) {
 					clustersInfos[infosIdx].boundingBoxCornerMin[d] = std::min(clustersInfos[infosIdx].boundingBoxCornerMin[d], currentId[d]);
-					clustersInfos[infosIdx].boundingBoxCornerMax[d] = std::max(clustersInfos[infosIdx].boundingBoxCornerMin[d], currentId[d]);
+					clustersInfos[infosIdx].boundingBoxCornerMax[d] = std::max(clustersInfos[infosIdx].boundingBoxCornerMax[d], currentId[d]);
 				}
 			} else {
 				int infosIdx = clustersInfos.size();
@@ -278,7 +278,7 @@ int clusterSize(Multidim::Array<int, nDims> const& clusters, ConnectedComponentI
 
 		IdxBlock shiftedId = min + currentId;
 
-                if (clusters.template value<Nc>(shiftedId) == clusterInfos.idx) {
+		if (clusters.template value<Nc>(shiftedId) == clusterInfos.idx) {
 			count++;
 		}
 
@@ -395,7 +395,7 @@ Eigen::Matrix<float, nDims, 1> clusterCentroid(Multidim::Array<int, nDims> const
 
 		IdxBlock shiftedId = min + currentId;
 
-                if (clusters.template value<Nc>(shiftedId) == clusterInfos.idx) {
+		if (clusters.template value<Nc>(shiftedId) == clusterInfos.idx) {
 			for (int d = 0; d < nDims; d++) {
 				mean[d] += shiftedId[d];
 			}
@@ -449,9 +449,8 @@ float clusterMeanValue(Multidim::Array<int, nDims> const& clusters,
 
 		IdxBlock shiftedId = min + currentId;
 
-                if (clusters.template value<Nc>(shiftedId) == clusterInfos.idx) {
-                        mean += values.template value<Nc>(shiftedId);
-
+		if (clusters.template value<Nc>(shiftedId) == clusterInfos.idx) {
+			mean += values.template value<Nc>(shiftedId);
 			count++;
 		}
 
