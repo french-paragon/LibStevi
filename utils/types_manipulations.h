@@ -104,6 +104,18 @@ inline bool matchdescr(std::string descr) {
 	return descr == dtypeDescr<T>();
 }
 
+template<typename T>
+constexpr T defaultWhiteLevel() {
+
+	return (std::is_integral_v<T>) ? std::numeric_limits<T>::max() : 1.0;
+}
+
+template<typename T>
+constexpr T defaultBlackLevel() {
+
+	return (std::is_integral_v<T>) ? 0 : 0.0;
+}
+
 } // namespace TypesManipulations
 
 } // namespace StereoVision

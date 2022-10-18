@@ -26,6 +26,11 @@ namespace StereoVision {
 class Contiguity {
 
 public:
+	enum generalContiguity {
+		singleDimCanChange,
+                allDimsCanChange
+	};
+
 	enum bidimensionalContiguity {
 		Rook,
 		Bishop,

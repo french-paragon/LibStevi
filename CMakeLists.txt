@@ -100,13 +100,16 @@ set(LIB_SRC
         utils/propagation_direction.h
         utils/randomcache.h
         utils/types_manipulations.h
+        utils/colors.h
         statistics/stereo_covering.h
         imageProcessing/colorConversions.h
         imageProcessing/meanShiftClustering.h
         imageProcessing/intrinsicImageDecomposition.h
         imageProcessing/checkBoardDetection.h
         imageProcessing/checkBoardDetection.cpp
+        imageProcessing/hexagonalRGBTargetsDetection.h
         imageProcessing/finiteDifferences.h
+        imageProcessing/connectedComponents.h
         io/image_io.h
 )
 

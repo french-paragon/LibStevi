@@ -25,69 +25,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <MultidimArrays/MultidimArrays.h>
 #include <MultidimArrays/MultidimIndexManipulators.h>
 
+#include "../utils/colors.h"
 #include "../utils/types_manipulations.h"
 
 namespace StereoVision {
 namespace ImageProcessing {
-
-enum ColorModel {
-	RGB,
-	BGR,
-	RGBA,
-	BGRA,
-	CMYK,
-	HSI,
-	HSV,
-	YUV,
-	YUYV,
-	YVYU
-};
-
-template<ColorModel CM>
-class ColorModelTraits{
-	static constexpr int nChannels() {
-		switch (CM) {
-		case YUYV:
-		case YVYU:
-			return 2;
-		case RGB:
-		case BGR:
-		case HSI:
-		case HSV:
-		case YUV:
-			return 3;
-		case RGBA:
-		case BGRA:
-		case CMYK:
-			return 4;
-		}
-	}
-
-	static inline std::string readableName() {
-		switch (CM) {
-		case YUYV:
-			return "YUYV";
-		case YVYU:
-			return "YVYU";
-		case RGB:
-			return "RGB";
-		case BGR:
-			return "BGR";
-		case HSI:
-			return "HSI";
-		case HSV:
-			return "HSV";
-		case YUV:
-			return "YUV";
-		case RGBA:
-			return "RGBA";
-		case BGRA:
-			return "BGRA";
-		case CMYK:
-			return "CMYK";
-		}
-	}
-};
 
 template<typename T, typename O = T>
 Multidim::Array<O, 3> normalizedIntensityRGBImage(Multidim::Array<T, 3> const& rgbImg, O scale = 1) {

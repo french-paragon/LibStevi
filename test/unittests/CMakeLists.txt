@@ -91,4 +91,12 @@ add_executable(testCheckboardDetection testCheckboardDetection.cpp)
 target_link_libraries(testCheckboardDetection ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestCheckboardDetection testCheckboardDetection)
 
+add_executable(testHexTargetDetection testHexTargetDetection.cpp)
+target_link_libraries(testHexTargetDetection ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestHexTargetDetection testHexTargetDetection)
+
+add_executable(testConnectedComponents testConnectedComponents.cpp)
+target_link_libraries(testConnectedComponents ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestConnectedComponents testConnectedComponents)
+
 

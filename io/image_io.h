@@ -262,7 +262,16 @@ bool writeImage(std::string const& fileName, Multidim::Array<InType, 2> const& i
 
 	for (int i = 0; i < shape[0]; i++) {
 		for (int j = 0; j < shape[1]; j++) {
+
+			if (std::is_same_v<InType, bool>) {
+
+			}
+
 			img(j,i) = static_cast<ImgType>(image.template value<Nc>(i,j)); //invert the height and width coordinates to match the convention followed by CImg
+
+			if (std::is_same_v<InType, bool>) {
+				img(j,i) = (image.template value<Nc>(i,j)) ? TypesManipulations::defaultWhiteLevel<ImgType>() : TypesManipulations::defaultBlackLevel<ImgType>();
+			}
 		}
 	}
 

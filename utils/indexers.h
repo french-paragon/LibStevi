@@ -131,7 +131,96 @@ private:
 	std::vector<int> _groupSize;
 };
 
-}
+
+class GrowingSizeDisjointSetForest {
+public:
+	GrowingSizeDisjointSetForest(int nInitialElements = 0) :
+		_elements(nInitialElements),
+		_groupSize(nInitialElements)
+	{
+		for (int i = 0; i < nInitialElements; i++) {
+			_elements[i] = i;
+		}
+		std::fill(_groupSize.begin(), _groupSize.end(), 1);
+	}
+
+	inline int nElements() const {
+		return _elements.size();
+	}
+
+	inline int getGroup(int element) {
+		std::vector<int> path;
+		int pos = element;
+
+		while(_elements[pos] != pos) {//node is not pointing to itself
+			path.push_back(pos);
+			pos = _elements[pos];
+		}
+
+		for (int node : path) {
+			_elements[node] = pos;
+		}
+
+		return pos;
+	}
+
+	inline int getGroupSize(int element) {
+		int group = getGroup(element);
+		return _groupSize[group];
+	}
+
+	/*!
+	 * \brief joinNode join the group of the source node in the group of the target node
+	 * \param source the source node
+	 * \param target the target node
+	 * \return the index of the removed group (the group of the source node).
+	 */
+	inline int joinNode(int source, int target) {
+		int sourceGroup = getGroup(source);
+		int targetGroup = getGroup(target);
+		_elements[sourceGroup] = targetGroup;
+		_groupSize[targetGroup] += _groupSize[sourceGroup];
+		return sourceGroup;
+	}
+
+	/*!
+	 * \brief addNode add a node to the Disjoint set forest
+	 * \return the index of the new element (forming a single group).
+	 */
+	inline int addNode() {
+		int elemId = _elements.size();
+		_elements.push_back(elemId);
+		_groupSize.push_back(1);
+		return elemId;
+	}
+
+	/*!
+	 * \brief addNodes add a number of nodes to the Disjoint set forest
+	 * \return the largest index of the new elements (all forming a single group), or -1 if no element was added.
+	 */
+	inline int addNodes(int n) {
+		int ret = -1;
+		for (int i = 0; i < n; i++) {
+			ret = addNode();
+		}
+
+		return ret;
+	}
+
+	/*!
+	 * \brief addNodesToIndex add a number of nodes to the Disjoint set forest to reach a given index.
+	 * \return the largest index of the new elements (all forming a single group), or -1 if no element was added.
+	 */
+	inline int addNodesToIndex(int target) {
+		return addNodes(target - nElements() + 1);
+	}
+
+private:
+	std::vector<int> _elements;
+	std::vector<int> _groupSize;
+};
+
+} // namespace Indexers
 
 } // namespace StereoVision
 
