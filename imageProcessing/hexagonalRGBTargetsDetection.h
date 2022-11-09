@@ -87,7 +87,8 @@ std::vector<HexTargetPosition> detectHexTargets(Multidim::Array<T, 3> const& img
 												float relMaxHexDiameter = 0.2,
 												float red_gain = 1.0,
 												float green_gain = 1.0,
-												float blue_gain = 1.0) {
+												float blue_gain = 1.0,
+												float hexRelResThreshold = 0.1) {
 
 	static_assert (validateHexTargetColors(MC, PC, NC), "Invalid color scheme provided");
 
@@ -219,7 +220,7 @@ std::vector<HexTargetPosition> detectHexTargets(Multidim::Array<T, 3> const& img
 
 		float maxRes = residuals.cwiseAbs().maxCoeff();
 
-		if (maxRes > 0.1) { //misaligned with an ellipse
+		if (maxRes > hexRelResThreshold) { //misaligned with an ellipse
 			continue;
 		}
 
