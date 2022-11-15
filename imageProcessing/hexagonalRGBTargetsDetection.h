@@ -106,6 +106,22 @@ Eigen::Vector2f clusterBlurryCentroid(int clusterId,
 		}
 	}
 
+	Eigen::Vector3f mean = Eigen::Vector3f::Zero();
+	int count = 0;
+
+	for (int i = 0; i < height; i++) {
+		for (int j = 0; j < width; j++) {
+			if (extendedCluster.value<Nc>(i,j)) {
+				for (int d = 0; d < 3; d++) {
+					mean[d] += static_cast<float>(img.template value<Nc>(i+minExtClusteriCoord,j+minExtClusterjCoord, d));
+				}
+				count++;
+			}
+		}
+	}
+
+	mean /= count;
+
 	Multidim::Array<bool, 2> previousECluster = extendedCluster;
 
 	for (int it = 0; it < clusterDilationRadius; it++) {
@@ -127,22 +143,6 @@ Eigen::Vector2f clusterBlurryCentroid(int clusterId,
 
 		previousECluster = extendedCluster;
 	}
-
-	Eigen::Vector3f mean = Eigen::Vector3f::Zero();
-	int count = 0;
-
-	for (int i = 0; i < height; i++) {
-		for (int j = 0; j < width; j++) {
-			if (extendedCluster.value<Nc>(i,j)) {
-				for (int d = 0; d < 3; d++) {
-					mean[d] += static_cast<float>(img.template value<Nc>(i+minExtClusteriCoord,j+minExtClusterjCoord, d));
-				}
-				count++;
-			}
-		}
-	}
-
-	mean /= count;
 
 	float maxDistance2Mean = 0;
 
