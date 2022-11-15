@@ -59,6 +59,158 @@ struct HexTargetPosition {
 
 };
 
+template<typename T>
+Eigen::Vector2f clusterBlurryCentroid(int clusterId,
+									  Multidim::Array<T, 3> const&  img,
+									  Multidim::Array<int, 2> const& clusters,
+									  std::vector<ConnectedComponentInfos<2>> const& clustersInfos,
+									  int clusterDilationRadius = 3) {
+
+	constexpr auto Nc = Multidim::AccessCheck::Nocheck;
+
+	ConnectedComponentInfos<2> clusterInfos = clustersInfos[clusterId];
+
+	int minExtClusteriCoord = clusterInfos.boundingBoxCornerMin[0] - clusterDilationRadius;
+
+	if (minExtClusteriCoord < 0) {
+		minExtClusteriCoord = 0;
+	}
+
+	int maxExtClusteriCoord = clusterInfos.boundingBoxCornerMax[0] + clusterDilationRadius;
+
+	if (maxExtClusteriCoord >= img.shape()[0]) {
+		maxExtClusteriCoord = img.shape()[0]-1;
+	}
+
+	int minExtClusterjCoord = clusterInfos.boundingBoxCornerMin[1] - clusterDilationRadius;
+
+	if (minExtClusterjCoord < 0) {
+		minExtClusterjCoord = 0;
+	}
+
+	int maxExtClusterjCoord = clusterInfos.boundingBoxCornerMax[1] + clusterDilationRadius;
+
+	if (maxExtClusterjCoord >= img.shape()[1]) {
+		maxExtClusterjCoord = img.shape()[1]-1;
+	}
+
+	int height = maxExtClusteriCoord - minExtClusteriCoord + 1;
+	int width = maxExtClusterjCoord - minExtClusterjCoord + 1;
+
+
+	Multidim::Array<bool, 2> extendedCluster(height, width);
+
+	for (int i = 0; i < height; i++) {
+		for (int j = 0; j < width; j++) {
+			extendedCluster.at<Nc>(i,j) = (clusters.value<Nc>(i+minExtClusteriCoord,j+minExtClusterjCoord) == clusterInfos.idx);
+		}
+	}
+
+	Multidim::Array<bool, 2> previousECluster = extendedCluster;
+
+	for (int it = 0; it < clusterDilationRadius; it++) {
+		for (int i = 1; i < height-1; i++) {
+			for (int j = 1; j < width-1; j++) {
+
+				for (int di = -1; di <= 1; di++) {
+					for (int dj = -1; dj <= 1; dj++) {
+
+						if (di == 0 and dj == 0) {
+							continue;
+						}
+
+						extendedCluster.at<Nc>(i,j) = previousECluster.value<Nc>(i,j) or previousECluster.value<Nc>(i+di,j+dj);
+					}
+				}
+			}
+		}
+
+		previousECluster = extendedCluster;
+	}
+
+	Eigen::Vector3f mean = Eigen::Vector3f::Zero();
+	int count = 0;
+
+	for (int i = 0; i < height; i++) {
+		for (int j = 0; j < width; j++) {
+			if (extendedCluster.value<Nc>(i,j)) {
+				for (int d = 0; d < 3; d++) {
+					mean[d] += static_cast<float>(img.template value<Nc>(i+minExtClusteriCoord,j+minExtClusterjCoord, d));
+				}
+				count++;
+			}
+		}
+	}
+
+	mean /= count;
+
+	float maxDistance2Mean = 0;
+
+	for (int i = 0; i < height; i++) {
+		for (int j = 0; j < width; j++) {
+			if (extendedCluster.value<Nc>(i,j)) {
+
+				Eigen::Vector3f vec;
+				for (int d = 0; d < 3; d++) {
+					vec[d] = static_cast<float>(img.template value<Nc>(i+minExtClusteriCoord,j+minExtClusterjCoord, d));
+				}
+
+				float dist2mean = (mean - vec).norm();
+
+				if (dist2mean > maxDistance2Mean) {
+					maxDistance2Mean = dist2mean;
+				}
+			}
+		}
+	}
+
+	Eigen::Vector2f weigthedMeanPos = Eigen::Vector2f::Zero();
+	float weightsSum = 0;
+
+	for (int i = 0; i < height; i++) {
+		for (int j = 0; j < width; j++) {
+			if (extendedCluster.value<Nc>(i,j)) {
+
+				Eigen::Vector2f pos(i+minExtClusteriCoord,j+minExtClusterjCoord);
+
+				Eigen::Vector3f vec;
+				for (int d = 0; d < 3; d++) {
+					vec[d] = static_cast<float>(img.template value<Nc>(i+minExtClusteriCoord,j+minExtClusterjCoord, d));
+				}
+
+				float dist2mean = (mean - vec).norm();
+
+				float w = 1 - (dist2mean/maxDistance2Mean);
+
+				weigthedMeanPos += w*pos;
+				weightsSum += w;
+			}
+		}
+	}
+
+	weigthedMeanPos /= weightsSum;
+
+	return weigthedMeanPos;
+
+}
+
+template<typename T>
+std::array<Eigen::Vector2f, 6> hexagoneRefinedCenter(std::array<int, 6> idxs,
+													 Multidim::Array<T, 3> const&  img,
+													 Multidim::Array<int, 2> const& clusters,
+													 std::vector<ConnectedComponentInfos<2>> const& clustersInfos,
+													 int clusterDilationRadius = 3) {
+
+	std::array<Eigen::Vector2f, 6> refinedCentroids;
+
+	for (int i = 0; i < 6; i++) {
+		refinedCentroids[i] = clusterBlurryCentroid(idxs[i], img, clusters, clustersInfos, clusterDilationRadius);
+	}
+
+	return refinedCentroids;
+
+}
+
 template<typename T,
 		 Color::RedGreenBlue MC = Color::Blue,
 		 Color::RedGreenBlue PC = Color::Red,
@@ -224,17 +376,20 @@ std::vector<HexTargetPosition> detectHexTargets(Multidim::Array<T, 3> const& img
 			continue;
 		}
 
-		if (params[2] < (params[1]/2)*(params[1]/2)) {
+		if (params[2] < (params[1]/2)*(params[1]/2)) { //not an ellipse
 			continue;
 		}
+		//hexagone detected.
 
-		//detect the color of the clusters
 		std::array<int, 6> idxs;
+		std::array<int, 6> clusts_idxs;
 		for (int i = 0; i < 6; i++) {
 			int id = std::get<1>(distancesToIdxs[i]);
 			idxs[i] = id;
+			clusts_idxs[i] = selectedClusters[id];
 		}
 
+		//detect the color of the clusters
 		std::array<Color::RedGreenBlue,6> nodesColors;
 
 		int countMain = 0;
@@ -275,6 +430,8 @@ std::vector<HexTargetPosition> detectHexTargets(Multidim::Array<T, 3> const& img
 			continue;
 		}
 
+		std::array<Eigen::Vector2f, 6> refinedCentroids = hexagoneRefinedCenter<T>(clusts_idxs, img, clusters, clustersInfos);
+
 		// orient the target
 
 		std::array<float, 6> angles;
@@ -312,21 +469,21 @@ std::vector<HexTargetPosition> detectHexTargets(Multidim::Array<T, 3> const& img
 		//emplace the hexagone
 		HexTargetPosition hexPos;
 
-		hexPos.posRefDot = centroids[idxs[hexIdxs[0]]];
+		hexPos.posRefDot = refinedCentroids[hexIdxs[0]];
 
-		hexPos.dotsPositions[0] = centroids[idxs[hexIdxs[1]]];
+		hexPos.dotsPositions[0] = refinedCentroids[hexIdxs[1]];
 		hexPos.dotsPositives[0] = nodesColors[hexIdxs[1]] == PC;
 
-		hexPos.dotsPositions[1] = centroids[idxs[hexIdxs[2]]];
+		hexPos.dotsPositions[1] = refinedCentroids[hexIdxs[2]];
 		hexPos.dotsPositives[1] = nodesColors[hexIdxs[2]] == PC;
 
-		hexPos.dotsPositions[2] = centroids[idxs[hexIdxs[3]]];
+		hexPos.dotsPositions[2] = refinedCentroids[hexIdxs[3]];
 		hexPos.dotsPositives[2] = nodesColors[hexIdxs[3]] == PC;
 
-		hexPos.dotsPositions[3] = centroids[idxs[hexIdxs[4]]];
+		hexPos.dotsPositions[3] = refinedCentroids[hexIdxs[4]];
 		hexPos.dotsPositives[3] = nodesColors[hexIdxs[4]] == PC;
 
-		hexPos.dotsPositions[4] = centroids[idxs[hexIdxs[5]]];
+		hexPos.dotsPositions[4] = refinedCentroids[hexIdxs[5]];
 		hexPos.dotsPositives[4] = nodesColors[hexIdxs[5]] == PC;
 
 		ret.push_back(hexPos);
