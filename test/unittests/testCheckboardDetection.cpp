@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include "imageProcessing/checkBoardDetection.h"
+#include "interpolation/downsampling.h"
 
 #include <MultidimArrays/MultidimArrays.h>
 
@@ -193,6 +194,7 @@ private Q_SLOTS:
 	void testCandidateFinding();
 	void testCheckBoardExtraction();
 	void testCandidateRefinement();
+	void testHierarchicalCandidateRefinement();
 
 private:
 	std::default_random_engine re;
@@ -344,6 +346,40 @@ void  TestCheckboardDetection::testCandidateRefinement() {
 
 	QVERIFY2(std::fabs(subpixel.x() - subX) < 1e-1, "Unacurate subpixel matching !");
 	QVERIFY2(std::fabs(subpixel.y() - subY) < 1e-1, "Unacurate subpixel matching !");
+
+}
+
+
+void TestCheckboardDetection::testHierarchicalCandidateRefinement() {
+
+	constexpr int radius = 5;
+
+	std::uniform_real_distribution<float> subPixelRange(-0.3, 0.3);
+	std::uniform_real_distribution<float> thetaRange(-M_PI, M_PI);
+
+	float subX = subPixelRange(re);
+	float subY = subPixelRange(re);
+
+	float theta = thetaRange(re);
+
+	Multidim::Array<float, 2> level2 = generateSubPixelModel(subX, subY, theta, 4*radius);
+	Multidim::Array<float, 2> level1 = StereoVision::Interpolation::averagePoolingDownsample(level2,
+																							 StereoVision::Interpolation::DownSampleWindows(2));
+	Multidim::Array<float, 2> level0 = StereoVision::Interpolation::averagePoolingDownsample(level1,
+																							 StereoVision::Interpolation::DownSampleWindows(2));
+
+	Eigen::Vector2f pos = StereoVision::fitCheckboardCornerCenterHiearchical<float, 3>({&level0, &level1, &level2},
+																					   Eigen::Vector2i(radius, radius),
+																					   theta + M_PI_4 + 0.01,
+																					   2,
+																					   {3, 3, 3},
+																					   {15, 15, 25});
+
+	float errorX = pos.x() - 4*radius - subX;
+	float errorY = pos.y() - 4*radius - subY;
+
+	QVERIFY2(std::fabs(errorX) < 1e-1, qPrintable(QString("Unacurate subpixel matching (X error = %1) !").arg(errorX)));
+	QVERIFY2(std::fabs(errorY) < 1e-1, qPrintable(QString("Unacurate subpixel matching (Y error = %1) !").arg(errorY)));
 
 }
 

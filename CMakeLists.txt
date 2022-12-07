@@ -101,6 +101,7 @@ set(LIB_SRC
         utils/randomcache.h
         utils/types_manipulations.h
         utils/colors.h
+		utils/array_utils.h
         statistics/stereo_covering.h
         imageProcessing/colorConversions.h
         imageProcessing/meanShiftClustering.h
