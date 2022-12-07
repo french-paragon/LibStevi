@@ -36,6 +36,12 @@ public:
 					   std::optional<Eigen::Vector2f> tCam2,
 					   std::optional<Eigen::Vector2f> BCam2);
 
+	StereoRigRectifier(StereoRigRectifier const& other);
+	StereoRigRectifier(StereoRigRectifier && other);
+
+	StereoRigRectifier& operator=(StereoRigRectifier const& other);
+	StereoRigRectifier& operator=(StereoRigRectifier && other);
+
 	void clear();
 	bool compute(TargetRangeSetMethod roiSetMethod, TargetRangeSetMethod resolutionSetMethod);
 

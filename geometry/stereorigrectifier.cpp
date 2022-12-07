@@ -36,6 +36,227 @@ StereoRigRectifier::StereoRigRectifier(ShapePreservingTransform cam2tocam1,
 	_cam2Tocam1.s = 1;
 }
 
+StereoRigRectifier::StereoRigRectifier(StereoRigRectifier const& other) :
+	StereoRigRectifier(other._cam2Tocam1,
+					   other._fLenCam1Px,
+					   other._ppCam1,
+					   other._sizeCam1,
+					   other._kCam1,
+					   other._tCam1,
+					   other._BCam1,
+					   other._fLenCam2Px,
+					   other._ppCam2,
+					   other._sizeCam2,
+					   other._kCam2,
+					   other._tCam2,
+					   other._BCam2)
+{
+
+	_CorrRComputed = other._CorrRComputed;
+	_CorrRCam1 = other._CorrRCam1;
+	_CorrRCam2 = other._CorrRCam2;
+
+	_forwardMapsComputed = other._forwardMapsComputed;
+	_cordTopLeftC1 = other._cordTopLeftC1;
+	_cordTopRightC1 = other._cordTopRightC1;
+	_cordBottomLeftC1 = other._cordBottomLeftC1;
+	_cordBottomRightC1 = other._cordBottomRightC1;
+
+	_cordTopLeftC2 = other._cordTopLeftC2;
+	_cordTopRightC2 = other._cordTopRightC2;
+	_cordBottomLeftC2 = other._cordBottomLeftC2;
+	_cordBottomRightC2 = other._cordBottomRightC2;
+
+	_ROIComputed = other._ROIComputed;
+	_ROIC1TopLeft = other._ROIC1TopLeft;
+	_ROIC1BottomRight = other._ROIC1BottomRight;
+
+	_refocalLengthComputed = other._refocalLengthComputed;
+	_reprojectionFLen = other._reprojectionFLen;
+	_nsizeCam1 = other._nsizeCam1;
+	_nsizeCam2 = other._nsizeCam2;
+	_nppCam1 = other._nppCam1;
+	_nppCam2 = other._nppCam2;
+
+	_ROIC2TopLeft = other._ROIC2TopLeft;
+	_ROIC2BottomRight = other._ROIC2BottomRight;
+
+	_backwardMapsComputed = other._backwardMapsComputed;
+	_backwardCam1 = other._backwardCam1;
+	_backwardCam2 = other._backwardCam2;
+
+	_normalizedBasline = other._normalizedBasline;
+	_dispDelta = other._dispDelta;
+
+}
+StereoRigRectifier::StereoRigRectifier(StereoRigRectifier && other) :
+	StereoRigRectifier(other._cam2Tocam1,
+					   other._fLenCam1Px,
+					   other._ppCam1,
+					   other._sizeCam1,
+					   other._kCam1,
+					   other._tCam1,
+					   other._BCam1,
+					   other._fLenCam2Px,
+					   other._ppCam2,
+					   other._sizeCam2,
+					   other._kCam2,
+					   other._tCam2,
+					   other._BCam2)
+{
+
+
+	_CorrRComputed = other._CorrRComputed;
+	_CorrRCam1 = other._CorrRCam1;
+	_CorrRCam2 = other._CorrRCam2;
+
+	_forwardMapsComputed = other._forwardMapsComputed;
+	_cordTopLeftC1 = other._cordTopLeftC1;
+	_cordTopRightC1 = other._cordTopRightC1;
+	_cordBottomLeftC1 = other._cordBottomLeftC1;
+	_cordBottomRightC1 = other._cordBottomRightC1;
+
+	_cordTopLeftC2 = other._cordTopLeftC2;
+	_cordTopRightC2 = other._cordTopRightC2;
+	_cordBottomLeftC2 = other._cordBottomLeftC2;
+	_cordBottomRightC2 = other._cordBottomRightC2;
+
+	_ROIComputed = other._ROIComputed;
+	_ROIC1TopLeft = other._ROIC1TopLeft;
+	_ROIC1BottomRight = other._ROIC1BottomRight;
+
+	_refocalLengthComputed = other._refocalLengthComputed;
+	_reprojectionFLen = other._reprojectionFLen;
+	_nsizeCam1 = other._nsizeCam1;
+	_nsizeCam2 = other._nsizeCam2;
+	_nppCam1 = other._nppCam1;
+	_nppCam2 = other._nppCam2;
+
+	_ROIC2TopLeft = other._ROIC2TopLeft;
+	_ROIC2BottomRight = other._ROIC2BottomRight;
+
+	_backwardMapsComputed = other._backwardMapsComputed;
+	_backwardCam1 = std::move(other._backwardCam1);
+	_backwardCam2 = std::move(other._backwardCam2);
+
+	_normalizedBasline = other._normalizedBasline;
+	_dispDelta = other._dispDelta;
+
+}
+
+
+StereoRigRectifier& StereoRigRectifier::operator=(StereoRigRectifier const& other) {
+
+	_cam2Tocam1 = other._cam2Tocam1;
+	_fLenCam1Px = other._fLenCam1Px;
+	_ppCam1 = other._ppCam1;
+	_sizeCam1 = other._sizeCam1;
+	_kCam1 = other._kCam1;
+	_tCam1 = other._tCam1;
+	_BCam1 = other._BCam1;
+	_fLenCam2Px = other._fLenCam2Px;
+	_ppCam2 = other._ppCam2;
+	_sizeCam2 = other._sizeCam2;
+	_kCam2 = other._kCam2;
+	_tCam2 = other._tCam2;
+	_BCam2 = other._BCam2;
+
+
+	_CorrRComputed = other._CorrRComputed;
+	_CorrRCam1 = other._CorrRCam1;
+	_CorrRCam2 = other._CorrRCam2;
+
+	_forwardMapsComputed = other._forwardMapsComputed;
+	_cordTopLeftC1 = other._cordTopLeftC1;
+	_cordTopRightC1 = other._cordTopRightC1;
+	_cordBottomLeftC1 = other._cordBottomLeftC1;
+	_cordBottomRightC1 = other._cordBottomRightC1;
+
+	_cordTopLeftC2 = other._cordTopLeftC2;
+	_cordTopRightC2 = other._cordTopRightC2;
+	_cordBottomLeftC2 = other._cordBottomLeftC2;
+	_cordBottomRightC2 = other._cordBottomRightC2;
+
+	_ROIComputed = other._ROIComputed;
+	_ROIC1TopLeft = other._ROIC1TopLeft;
+	_ROIC1BottomRight = other._ROIC1BottomRight;
+
+	_refocalLengthComputed = other._refocalLengthComputed;
+	_reprojectionFLen = other._reprojectionFLen;
+	_nsizeCam1 = other._nsizeCam1;
+	_nsizeCam2 = other._nsizeCam2;
+	_nppCam1 = other._nppCam1;
+	_nppCam2 = other._nppCam2;
+
+	_ROIC2TopLeft = other._ROIC2TopLeft;
+	_ROIC2BottomRight = other._ROIC2BottomRight;
+
+	_backwardMapsComputed = other._backwardMapsComputed;
+	_backwardCam1 = other._backwardCam1;
+	_backwardCam2 = other._backwardCam2;
+
+	_normalizedBasline = other._normalizedBasline;
+	_dispDelta = other._dispDelta;
+
+	return *this;
+}
+
+StereoRigRectifier& StereoRigRectifier::operator=(StereoRigRectifier && other) {
+
+	_cam2Tocam1 = other._cam2Tocam1;
+	_fLenCam1Px = other._fLenCam1Px;
+	_ppCam1 = other._ppCam1;
+	_sizeCam1 = other._sizeCam1;
+	_kCam1 = other._kCam1;
+	_tCam1 = other._tCam1;
+	_BCam1 = other._BCam1;
+	_fLenCam2Px = other._fLenCam2Px;
+	_ppCam2 = other._ppCam2;
+	_sizeCam2 = other._sizeCam2;
+	_kCam2 = other._kCam2;
+	_tCam2 = other._tCam2;
+	_BCam2 = other._BCam2;
+
+
+	_CorrRComputed = other._CorrRComputed;
+	_CorrRCam1 = other._CorrRCam1;
+	_CorrRCam2 = other._CorrRCam2;
+
+	_forwardMapsComputed = other._forwardMapsComputed;
+	_cordTopLeftC1 = other._cordTopLeftC1;
+	_cordTopRightC1 = other._cordTopRightC1;
+	_cordBottomLeftC1 = other._cordBottomLeftC1;
+	_cordBottomRightC1 = other._cordBottomRightC1;
+
+	_cordTopLeftC2 = other._cordTopLeftC2;
+	_cordTopRightC2 = other._cordTopRightC2;
+	_cordBottomLeftC2 = other._cordBottomLeftC2;
+	_cordBottomRightC2 = other._cordBottomRightC2;
+
+	_ROIComputed = other._ROIComputed;
+	_ROIC1TopLeft = other._ROIC1TopLeft;
+	_ROIC1BottomRight = other._ROIC1BottomRight;
+
+	_refocalLengthComputed = other._refocalLengthComputed;
+	_reprojectionFLen = other._reprojectionFLen;
+	_nsizeCam1 = other._nsizeCam1;
+	_nsizeCam2 = other._nsizeCam2;
+	_nppCam1 = other._nppCam1;
+	_nppCam2 = other._nppCam2;
+
+	_ROIC2TopLeft = other._ROIC2TopLeft;
+	_ROIC2BottomRight = other._ROIC2BottomRight;
+
+	_backwardMapsComputed = other._backwardMapsComputed;
+	_backwardCam1 = std::move(other._backwardCam1);
+	_backwardCam2 = std::move(other._backwardCam2);
+
+	_normalizedBasline = other._normalizedBasline;
+	_dispDelta = other._dispDelta;
+
+	return *this;
+}
+
 void StereoRigRectifier::clear() {
 
 	_CorrRComputed = false;
