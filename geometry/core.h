@@ -54,8 +54,9 @@ public:
 	AffineTransform();
 
 	Eigen::Vector3f operator*(Eigen::Vector3f const& pt) const;
-	Eigen::Matrix3Xf operator*(Eigen::Matrix3Xf const& pts) const;
-	Eigen::Array3Xf operator*(Eigen::Array3Xf const& pts) const;
+        Eigen::Matrix3Xf operator*(Eigen::Matrix3Xf const& pts) const;
+        Eigen::Array3Xf operator*(Eigen::Array3Xf const& pts) const;
+        AffineTransform operator*(AffineTransform const& other) const;
 
 	inline bool isFinite() const {
 		return t.array().isFinite().all() and R.array().isFinite().all();

@@ -80,6 +80,10 @@ Eigen::Array3Xf AffineTransform::operator*(Eigen::Array3Xf const& pts) const {
 	return applyOnto(pts);
 }
 
+AffineTransform AffineTransform::operator*(AffineTransform const& other) const {
+	return AffineTransform(R*other.R, R*other.t + t);
+}
+
 Eigen::Array3Xf AffineTransform::applyOnto(Eigen::Array3Xf const& pts) const {
 
 	Eigen::Array3Xf transformedPts;
