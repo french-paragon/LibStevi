@@ -60,8 +60,7 @@ set(LIB_SRC
 	geometry/alignement.cpp
 	geometry/alignement.h
 	geometry/imagecoordinates.cpp
-	geometry/imagecoordinates.h
-	geometry/lensdistortion.cpp
+        geometry/imagecoordinates.h
 	geometry/lensdistortion.h
 	geometry/pointcloudalignment.cpp
 	geometry/pointcloudalignment.h
@@ -101,7 +100,8 @@ set(LIB_SRC
         utils/randomcache.h
         utils/types_manipulations.h
         utils/colors.h
-		utils/array_utils.h
+        utils/array_utils.h
+        utils/stevimath.h
         statistics/stereo_covering.h
         imageProcessing/colorConversions.h
         imageProcessing/meanShiftClustering.h
