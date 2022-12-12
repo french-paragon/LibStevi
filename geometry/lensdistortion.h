@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include "../geometry/core.h"
+#include "../geometry/imagecoordinates.h"
 #include "../utils/stevimath.h"
 
 #include <optional>
@@ -157,14 +158,44 @@ Eigen::Matrix<Pos_T, 2, 1> invertRadialTangentialDistorstion(Eigen::Matrix<Pos_T
 }
 
 template<typename Pos_T, typename B_T>
-Eigen::Matrix<Pos_T, 2, 1> skewDistortion(Eigen::Matrix<Pos_T, 2, 1> pos, Eigen::Matrix<B_T, 2, 1>  B12, Pos_T f, Eigen::Matrix<Pos_T, 2, 1> pp) {
+Eigen::Matrix<Pos_T, 2, 1> skewDistortion(Eigen::Matrix<Pos_T, 2, 1> const& pos,
+										  Eigen::Matrix<B_T, 2, 1> const&  B12,
+										  Eigen::Matrix<Pos_T, 2, 1> const&  f,
+										  Eigen::Matrix<Pos_T, 2, 1> const&  pp) {
 
 	static_assert (std::is_floating_point_v<Pos_T> and std::is_floating_point_v<B_T>, "The position and B parameters type should be float point types");
 
-	Eigen::Matrix<Pos_T, 2, 1> r = f*pos + pp;
+	Eigen::Matrix<Pos_T, 2, 1> r = Homogeneous2ImageCoordinates(pos, f, pp, ImageAnchors::TopLeft);
 	r[0] += B12[0]*pos[0] + B12[1]*pos[1];
 	return r;
 
+}
+
+template<typename Pos_T, typename B_T>
+Eigen::Matrix<Pos_T, 2, 1> skewDistortion(Eigen::Matrix<Pos_T, 2, 1> const& pos,
+										  Eigen::Matrix<B_T, 2, 1> const&  B12,
+										  Pos_T f,
+										  Eigen::Matrix<Pos_T, 2, 1> const&  pp) {
+
+	return skewDistortion(pos, B12, Eigen::Matrix<Pos_T, 2, 1>(f,f), pp);
+}
+
+template<typename Pos_T, typename B_T>
+Eigen::Matrix<Pos_T, 2, 1> inverseSkewDistortion(Eigen::Matrix<Pos_T, 2, 1> const& pos,
+									  Eigen::Matrix<B_T, 2, 1> const& B12,
+									  Eigen::Matrix<Pos_T, 2, 1> const& f,
+									  Eigen::Matrix<Pos_T, 2, 1> const& pp) {
+
+	static_assert (std::is_floating_point_v<Pos_T> and std::is_floating_point_v<B_T>, "The position and B parameters type should be float point types");
+
+	Eigen::Matrix<Pos_T, 2, 1> r = pos;
+	r[1] -= pp[1];
+	r[1] /= f[1];
+	r[0] -= B12[1]*r[1];
+	r[0] -= pp[0];
+	r[0] /= (f[0] + B12[0]);
+
+	return r;
 }
 
 template<typename Pos_T, typename B_T>
@@ -172,15 +203,7 @@ Eigen::Matrix<Pos_T, 2, 1> inverseSkewDistortion(Eigen::Matrix<Pos_T, 2, 1> pos,
 									  Eigen::Matrix<B_T, 2, 1> B12,
 									  Pos_T f,
 									  Eigen::Matrix<Pos_T, 2, 1> pp) {
-
-	static_assert (std::is_floating_point_v<Pos_T> and std::is_floating_point_v<B_T>, "The position and B parameters type should be float point types");
-
-	Pos_T y = (pos[1] - pp[1])/f;
-	Pos_T x = (pos[0] - B12[1]*y - pp[0])/(f + B12[0]);
-
-	Eigen::Matrix<Pos_T, 2, 1> r(x,y);
-
-	return r;
+	return inverseSkewDistortion(pos, B12, Eigen::Matrix<Pos_T, 2, 1>(f,f), pp);
 }
 
 
@@ -189,9 +212,9 @@ template<typename Pos_T, typename K_T, typename T_T, typename B_T>
  * \brief fullLensDistortionHomogeneousCoordinates represent a full distortion model were the radial and tangential distortion coefficients are measured in homogeneous coordinates.
  * \return The distorted point in pixel coordinate
  */
-Eigen::Matrix<Pos_T, 2, 1> fullLensDistortionHomogeneousCoordinates(Eigen::Matrix<Pos_T, 2, 1> pos,
-																	Pos_T f,
-																	Eigen::Matrix<Pos_T, 2, 1> pp,
+Eigen::Matrix<Pos_T, 2, 1> fullLensDistortionHomogeneousCoordinates(Eigen::Matrix<Pos_T, 2, 1> const& pos,
+																	Eigen::Matrix<Pos_T, 2, 1> const& f,
+																	Eigen::Matrix<Pos_T, 2, 1> const& pp,
 																	std::optional<Eigen::Matrix<K_T, 3, 1>> k123 = std::nullopt,
 																	std::optional<Eigen::Matrix<T_T, 2, 1>> t12 = std::nullopt,
 																	std::optional<Eigen::Matrix<B_T, 2, 1>>  B12 = std::nullopt) {
@@ -218,14 +241,25 @@ Eigen::Matrix<Pos_T, 2, 1> fullLensDistortionHomogeneousCoordinates(Eigen::Matri
 		return skewDistortion(mpos, B12.value(), f, pp);
 	}
 
-	return f*mpos + pp;
+	return Homogeneous2ImageCoordinates(mpos, f, pp, ImageAnchors::TopLeft);
 
 }
 
 template<typename Pos_T, typename K_T, typename T_T, typename B_T>
-Eigen::Matrix<Pos_T, 2, 1> invertFullLensDistortionHomogeneousCoordinates(Eigen::Matrix<Pos_T, 2, 1> pos,
-																		  Pos_T f,
-																		  Eigen::Matrix<Pos_T, 2, 1> pp,
+Eigen::Matrix<Pos_T, 2, 1> fullLensDistortionHomogeneousCoordinates(Eigen::Matrix<Pos_T, 2, 1> const& pos,
+																	Pos_T f,
+																	Eigen::Matrix<Pos_T, 2, 1> const& pp,
+																	std::optional<Eigen::Matrix<K_T, 3, 1>> k123 = std::nullopt,
+																	std::optional<Eigen::Matrix<T_T, 2, 1>> t12 = std::nullopt,
+																	std::optional<Eigen::Matrix<B_T, 2, 1>>  B12 = std::nullopt) {
+
+	return fullLensDistortionHomogeneousCoordinates(pos, Eigen::Matrix<Pos_T, 2, 1>(f,f), pp, k123, t12, B12);
+}
+
+template<typename Pos_T, typename K_T, typename T_T, typename B_T>
+Eigen::Matrix<Pos_T, 2, 1> invertFullLensDistortionHomogeneousCoordinates(Eigen::Matrix<Pos_T, 2, 1> const& pos,
+																		  Eigen::Matrix<Pos_T, 2, 1> const& f,
+																		  Eigen::Matrix<Pos_T, 2, 1> const& pp,
 																		  std::optional<Eigen::Matrix<K_T, 3, 1>> k123 = std::nullopt,
 																		  std::optional<Eigen::Matrix<T_T, 2, 1>> t12 = std::nullopt,
 																		  std::optional<Eigen::Matrix<B_T, 2, 1>>  B12 = std::nullopt,
@@ -242,7 +276,9 @@ Eigen::Matrix<Pos_T, 2, 1> invertFullLensDistortionHomogeneousCoordinates(Eigen:
 	if (B12.has_value()) {
 		invSkew = inverseSkewDistortion(pos, B12.value(), f, pp);
 	} else {
-		invSkew = (pos-pp)/f;
+		invSkew = (pos-pp);
+		invSkew[0] /= f[0];
+		invSkew[1] /= f[1];
 	}
 
 	if (!k123.has_value() and !t12.has_value()) {
@@ -255,6 +291,17 @@ Eigen::Matrix<Pos_T, 2, 1> invertFullLensDistortionHomogeneousCoordinates(Eigen:
 
 	return invertRadialTangentialDistorstion(invSkew, k123.value(), t12.value(), iters);
 
+}
+
+template<typename Pos_T, typename K_T, typename T_T, typename B_T>
+Eigen::Matrix<Pos_T, 2, 1> invertFullLensDistortionHomogeneousCoordinates(Eigen::Matrix<Pos_T, 2, 1> const& pos,
+																		  Pos_T f,
+																		  Eigen::Matrix<Pos_T, 2, 1> const& pp,
+																		  std::optional<Eigen::Matrix<K_T, 3, 1>> k123 = std::nullopt,
+																		  std::optional<Eigen::Matrix<T_T, 2, 1>> t12 = std::nullopt,
+																		  std::optional<Eigen::Matrix<B_T, 2, 1>>  B12 = std::nullopt,
+																		  int iters = 5) {
+	return invertFullLensDistortionHomogeneousCoordinates(pos, Eigen::Matrix<Pos_T, 2, 1>(f,f), pp, k123, t12, B12, iters);
 }
 
 } // namespace Geometry

@@ -6,7 +6,7 @@
 namespace StereoVision {
 namespace Geometry {
 
-StereoRigRectifier::StereoRigRectifier(ShapePreservingTransform cam2tocam1,
+StereoRigRectifier::StereoRigRectifier(ShapePreservingTransform<float> cam2tocam1,
 									   float fLenCam1Px,
 									   Eigen::Vector2f ppCam1,
 									   Eigen::Vector2i sizeCam1,

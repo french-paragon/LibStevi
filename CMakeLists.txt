@@ -53,18 +53,15 @@ include_directories(${MODULES_INCLUDE_DIRECTORIES})
 
 set(LIB_SRC 
         stevi_global.h
-	geometry/core.cpp
 	geometry/core.h
 	geometry/geometricexception.cpp
 	geometry/geometricexception.h
 	geometry/alignement.cpp
-	geometry/alignement.h
-	geometry/imagecoordinates.cpp
+        geometry/alignement.h
         geometry/imagecoordinates.h
 	geometry/lensdistortion.h
 	geometry/pointcloudalignment.cpp
-	geometry/pointcloudalignment.h
-	geometry/rotations.cpp
+        geometry/pointcloudalignment.h
         geometry/rotations.h
         geometry/stereorigrectifier.cpp
         geometry/stereorigrectifier.h

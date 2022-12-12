@@ -3,7 +3,7 @@
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 
-Copyright (C) 2021  Paragon<french.paragon@gmail.com>
+Copyright (C) 2021-2022 Paragon<french.paragon@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -28,12 +28,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace  StereoVision {
 namespace Geometry {
 
-AffineTransform estimateAffineMap(Eigen::VectorXf const& obs,
+AffineTransform<float> estimateAffineMap(Eigen::VectorXf const& obs,
 								  Eigen::Matrix3Xf const& pts,
 								  std::vector<int> const& idxs,
 								  std::vector<Axis> const& coordinate);
 
-AffineTransform estimateQuasiShapePreservingMap(Eigen::VectorXf const& obs,
+AffineTransform<float> estimateQuasiShapePreservingMap(Eigen::VectorXf const& obs,
 												Eigen::Matrix3Xf const& pts,
 												std::vector<int> const& idxs,
 												std::vector<Axis> const& coordinate,
@@ -43,7 +43,7 @@ AffineTransform estimateQuasiShapePreservingMap(Eigen::VectorXf const& obs,
 												int iterationLimit = 500,
 												bool verbose = false);
 
-AffineTransform estimateQuasiRigidMap(Eigen::VectorXf const& obs,
+AffineTransform<float> estimateQuasiRigidMap(Eigen::VectorXf const& obs,
 									  Eigen::Matrix3Xf const& pts,
 									  std::vector<int> const& idxs,
 									  std::vector<Axis> const& coordinate,
@@ -53,23 +53,23 @@ AffineTransform estimateQuasiRigidMap(Eigen::VectorXf const& obs,
 									  int iterationLimit = 500,
 									  bool verbose = false);
 
-ShapePreservingTransform affine2ShapePreservingMap(AffineTransform const & initial);
+ShapePreservingTransform<float> affine2ShapePreservingMap(AffineTransform<float> const & initial);
 
-ShapePreservingTransform estimateTranslationMap(Eigen::VectorXf const& obs,
+ShapePreservingTransform<float> estimateTranslationMap(Eigen::VectorXf const& obs,
 												Eigen::Matrix3Xf const& pts,
 												std::vector<int> const& idxs,
 												std::vector<Axis> const& coordinate,
 												float *residual,
 												bool verbose);
 
-ShapePreservingTransform estimateScaleMap(Eigen::VectorXf const& obs,
+ShapePreservingTransform<float> estimateScaleMap(Eigen::VectorXf const& obs,
 										  Eigen::Matrix3Xf const& pts,
 										  std::vector<int> const& idxs,
 										  std::vector<Axis> const& coordinate,
 										  float *residual,
 										  bool verbose);
 
-ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
+ShapePreservingTransform<float> estimateRotationMap(Eigen::VectorXf const& obs,
 											 Eigen::Matrix3Xf const& pts,
 											 std::vector<int> const& idxs,
 											 std::vector<Axis> const& coordinate,
@@ -79,7 +79,7 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 											 int n_steps = 50,
 											 float incrLimit = 1e-8);
 
-ShapePreservingTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
+ShapePreservingTransform<float> estimateShapePreservingMap(Eigen::VectorXf const& obs,
 													Eigen::Matrix3Xf const& pts,
 													std::vector<int> const& idxs,
 													std::vector<Axis> const& coordinate,
@@ -91,7 +91,7 @@ ShapePreservingTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
 
 
 //! \brief this function gives a coarse estimate of a shape preserving map, if at least three points have all their coordinates observed.
-std::optional<ShapePreservingTransform> initShapePreservingMapEstimate(Eigen::VectorXf const& obs,
+std::optional<ShapePreservingTransform<float>> initShapePreservingMapEstimate(Eigen::VectorXf const& obs,
 																	   Eigen::Matrix3Xf const& pts,
 																	   std::vector<int> const& idxs,
 																	   std::vector<Axis> const& coordinate);

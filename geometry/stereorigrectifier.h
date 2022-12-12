@@ -22,7 +22,7 @@ public:
 		Same, //! \brief target the range to match the original image.
 	};
 
-	StereoRigRectifier(ShapePreservingTransform cam2tocam1,
+	StereoRigRectifier(ShapePreservingTransform<float> cam2tocam1,
 					   float fLenCam1Px,
 					   Eigen::Vector2f ppCam1,
 					   Eigen::Vector2i sizeCam1,
@@ -111,7 +111,7 @@ public:
 
 protected:
 
-	ShapePreservingTransform _cam2Tocam1;
+	ShapePreservingTransform<float> _cam2Tocam1;
 
 	bool _CorrRComputed;
 	Eigen::Matrix3f _CorrRCam1;

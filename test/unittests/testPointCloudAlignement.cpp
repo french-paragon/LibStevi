@@ -12,8 +12,8 @@ std::default_random_engine rd;
 std::default_random_engine engine(rd());
 std::uniform_real_distribution<float> uDist(0.1, 10);
 
-AffineTransform generateRandomTransform() {
-	AffineTransform T;
+AffineTransform<float> generateRandomTransform() {
+	AffineTransform<float> T;
 
 	T.R.setRandom();
 	T.t.setRandom();
@@ -21,8 +21,8 @@ AffineTransform generateRandomTransform() {
 	return T;
 }
 
-AffineTransform generateShapePreservingRandomTransform() {
-	ShapePreservingTransform T;
+AffineTransform<float> generateShapePreservingRandomTransform() {
+	ShapePreservingTransform<float> T;
 
 	T.s = uDist(engine);
 	T.r.setRandom();
@@ -31,8 +31,8 @@ AffineTransform generateShapePreservingRandomTransform() {
 	return T.toAffineTransform();
 }
 
-AffineTransform generateRigidRandomTransform() {
-	ShapePreservingTransform T;
+AffineTransform<float> generateRigidRandomTransform() {
+	ShapePreservingTransform<float> T;
 
 	T.s = 1;
 	T.r.setRandom();
@@ -42,8 +42,8 @@ AffineTransform generateRigidRandomTransform() {
 }
 
 
-AffineTransform generateScalingRandomTransform() {
-	ShapePreservingTransform T;
+AffineTransform<float> generateScalingRandomTransform() {
+	ShapePreservingTransform<float> T;
 
 	T.s = uDist(engine);
 	T.r.setZero();
@@ -53,8 +53,8 @@ AffineTransform generateScalingRandomTransform() {
 }
 
 
-AffineTransform generateTranslateRandomTransform() {
-	ShapePreservingTransform T;
+AffineTransform<float> generateTranslateRandomTransform() {
+	ShapePreservingTransform<float> T;
 
 	T.s = 1.;
 	T.r.setZero();
@@ -64,8 +64,8 @@ AffineTransform generateTranslateRandomTransform() {
 }
 
 
-AffineTransform generateRotationRandomTransform() {
-	ShapePreservingTransform T;
+AffineTransform<float> generateRotationRandomTransform() {
+	ShapePreservingTransform<float> T;
 
 	T.s = 1.;
 	T.r.setRandom();
@@ -80,7 +80,7 @@ void generateObs(int nPts,
 				 Eigen::Matrix3Xf & pts,
 				 std::vector<int> & idxs,
 				 std::vector<Axis> & coordinate,
-				 AffineTransform const& T) {
+				 AffineTransform<float> const& T) {
 
 	std::random_device rd;
 	std::default_random_engine engine(rd());
@@ -199,7 +199,7 @@ void TestPointCloudAlignement::testAffineMap() {
 	Eigen::Matrix3Xf pts;
 	std::vector<int> idxs;
 	std::vector<Axis> coordinate;
-	AffineTransform T = generateRandomTransform();
+	AffineTransform<float> T = generateRandomTransform();
 
 	generateObs(nPts, nObsPerPoints, obs, pts, idxs, coordinate, T);
 
@@ -241,7 +241,7 @@ void TestPointCloudAlignement::testQuasiShapePreservingMap() {
 	Eigen::Matrix3Xf pts;
 	std::vector<int> idxs;
 	std::vector<Axis> coordinate;
-	AffineTransform T = generateShapePreservingRandomTransform();
+	AffineTransform<float> T = generateShapePreservingRandomTransform();
 
 	generateObs(nPts, nObsPerPoints, obs, pts, idxs, coordinate, T);
 
@@ -291,7 +291,7 @@ void TestPointCloudAlignement::testQuasiRigidMap() {
 	Eigen::Matrix3Xf pts;
 	std::vector<int> idxs;
 	std::vector<Axis> coordinate;
-	AffineTransform T = generateRigidRandomTransform();
+	AffineTransform<float> T = generateRigidRandomTransform();
 
 	generateObs(nPts, nObsPerPoints, obs, pts, idxs, coordinate, T);
 
@@ -334,17 +334,17 @@ void TestPointCloudAlignement::testInitShapePreservingMap() {
 	Eigen::Matrix3Xf pts;
 	std::vector<int> idxs;
 	std::vector<Axis> coordinate;
-	AffineTransform T = generateShapePreservingRandomTransform();
+	AffineTransform<float> T = generateShapePreservingRandomTransform();
 
 	generateObs(nPts, 3, obs, pts, idxs, coordinate, T);
 
-	std::optional<ShapePreservingTransform> out = initShapePreservingMapEstimate(obs,
+	std::optional<ShapePreservingTransform<float>> out = initShapePreservingMapEstimate(obs,
 																				 pts,
 																				 idxs,
 																				 coordinate);
 
 	QVERIFY2(out.has_value(), "Missing output value in initializer solution.");
-	AffineTransform F = out.value().toAffineTransform();
+	AffineTransform<float> F = out.value().toAffineTransform();
 
 	Eigen::Matrix3Xf tTrue = T*pts;
 	Eigen::Matrix3Xf tFound = F*pts;
@@ -388,7 +388,7 @@ void TestPointCloudAlignement::testShapePreservingMap() {
 	Eigen::Matrix3Xf pts;
 	std::vector<int> idxs;
 	std::vector<Axis> coordinate;
-	AffineTransform T = generateShapePreservingRandomTransform();
+	AffineTransform<float> T = generateShapePreservingRandomTransform();
 
 	generateObs(nPts, nObsPerPoints, obs, pts, idxs, coordinate, T);
 
@@ -454,7 +454,7 @@ void TestPointCloudAlignement::testExtractScaleMap() {
 	Eigen::Matrix3Xf pts;
 	std::vector<int> idxs;
 	std::vector<Axis> coordinate;
-	AffineTransform T = generateScalingRandomTransform();
+	AffineTransform<float> T = generateScalingRandomTransform();
 
 	generateObs(nPts, nObsPerPoints, obs, pts, idxs, coordinate, T);
 
@@ -503,7 +503,7 @@ void TestPointCloudAlignement::testExtractTranslationMap() {
 	Eigen::Matrix3Xf pts;
 	std::vector<int> idxs;
 	std::vector<Axis> coordinate;
-	AffineTransform T = generateTranslateRandomTransform();
+	AffineTransform<float> T = generateTranslateRandomTransform();
 
 	generateObs(nPts, nObsPerPoints, obs, pts, idxs, coordinate, T);
 
@@ -552,7 +552,7 @@ void TestPointCloudAlignement::testExtractRotationMap() {
 	Eigen::Matrix3Xf pts;
 	std::vector<int> idxs;
 	std::vector<Axis> coordinate;
-	AffineTransform T = generateRotationRandomTransform();
+	AffineTransform<float> T = generateRotationRandomTransform();
 
 	generateObs(nPts, nObsPerPoints, obs, pts, idxs, coordinate, T);
 
@@ -592,7 +592,7 @@ void TestPointCloudAlignement::testExtractShapePreservingMap() {
 
 	for (int i = 0; i < 10; i++) {
 
-		AffineTransform T = generateShapePreservingRandomTransform();
+		AffineTransform<float> T = generateShapePreservingRandomTransform();
 		ShapePreservingTransform F = affine2ShapePreservingMap(T);
 
 		AffineTransform FT = F.toAffineTransform();
