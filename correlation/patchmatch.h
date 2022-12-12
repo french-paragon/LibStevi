@@ -166,9 +166,20 @@ inline int patchMatchTestCost(Multidim::Array<disp_t, 3> & solution,
 	std::array<int, searchSpaceDim> d_c;
 	if (searchSpaceDim == 1) {
 		d_c[0] = disp_j;
+		if (disp_j < 0 or disp_j >= cost.shape()[2]) {
+			return 0;
+		}
 	} else {
 		d_c[0] = disp_i;
 		d_c[1] = disp_j;
+
+		if (disp_i < 0 or disp_j >= cost.shape()[2]) {
+			return 0;
+		}
+
+		if (disp_j < 0 or disp_j >= cost.shape()[3]) {
+			return 0;
+		}
 	}
 
 	std::array<int, searchSpaceDim> d_a;
@@ -271,6 +282,7 @@ int patchMatchSearch(Multidim::Array<disp_t, 3> & solution,
 
 				disp_t disp_i;
 				disp_t disp_j;
+
 
 				for (int k = 0; k < nRandomSearch; k++) {
 
