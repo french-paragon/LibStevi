@@ -40,7 +40,7 @@ template <typename Pos_T>
 Eigen::Matrix<Pos_T, 2,1> Image2HomogeneousCoordinates(Eigen::Matrix<Pos_T, 2,1> const& pt,
 													   Eigen::Matrix<Pos_T, 2,1> const& f,
 													   Eigen::Matrix<Pos_T, 2,1> const& pp,
-													   ImageAnchors imageOrigin) {
+													   ImageAnchors imageOrigin = ImageAnchors::TopLeft) {
 
 	Eigen::Matrix<Pos_T, 2,1> r = pt - pp;
 	r[0] /= f[0];
@@ -65,10 +65,10 @@ Eigen::Matrix<Pos_T, 2,1> Image2HomogeneousCoordinates(Eigen::Matrix<Pos_T, 2,1>
 
 }
 template <typename Pos_T>
-Eigen::Vector2f Image2HomogeneousCoordinates(Eigen::Matrix<Pos_T, 2,1> const& pt,
+Eigen::Matrix<Pos_T, 2,1> Image2HomogeneousCoordinates(Eigen::Matrix<Pos_T, 2,1> const& pt,
 											 Pos_T f,
 											 Eigen::Matrix<Pos_T, 2,1> const& pp,
-											 ImageAnchors imageOrigin) {
+											 ImageAnchors imageOrigin = ImageAnchors::TopLeft) {
 	return Image2HomogeneousCoordinates(pt, Eigen::Matrix<Pos_T, 2,1>(f, f), pp, imageOrigin);
 }
 
@@ -76,7 +76,7 @@ template <typename Pos_T, int nCols>
 Eigen::Array<Pos_T, 2, nCols> Image2HomogeneousCoordinates(Eigen::Array<Pos_T, 2, nCols> const& pt,
 														   Eigen::Matrix<Pos_T, 2,1> f,
 														   Eigen::Matrix<Pos_T, 2,1> const& pp,
-														   ImageAnchors imageOrigin) {
+														   ImageAnchors imageOrigin = ImageAnchors::TopLeft) {
 
 	Eigen::Array<Pos_T, 2, nCols> r = pt;
 	r.row(0) -= pp.x();
@@ -108,7 +108,7 @@ template <typename Pos_T, int nCols>
 Eigen::Array<Pos_T, 2, nCols> Image2HomogeneousCoordinates(Eigen::Array<Pos_T, 2, nCols> const& pt,
 														   float f,
 														   Eigen::Matrix<Pos_T, 2,1> const& pp,
-														   ImageAnchors imageOrigin) {
+														   ImageAnchors imageOrigin = ImageAnchors::TopLeft) {
 	return Image2HomogeneousCoordinates(pt, Eigen::Matrix<Pos_T, 2,1>(f, f), pp, imageOrigin);
 }
 
