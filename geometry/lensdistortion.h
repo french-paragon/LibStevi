@@ -23,6 +23,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../geometry/imagecoordinates.h"
 #include "../utils/stevimath.h"
 
+#include <MultidimArrays/MultidimArrays.h>
+
 #include <optional>
 #include <Eigen/Dense>
 
@@ -303,6 +305,294 @@ Eigen::Matrix<Pos_T, 2, 1> invertFullLensDistortionHomogeneousCoordinates(Eigen:
 																		  int iters = 5) {
 	return invertFullLensDistortionHomogeneousCoordinates(pos, Eigen::Matrix<Pos_T, 2, 1>(f,f), pp, k123, t12, B12, iters);
 }
+
+template<typename T>
+class ImageRectifier
+{
+public:
+
+	/*!
+	 * \brief The TargetRangeSetMethod enum describe how automatic methods to choose the final images ROI will operate
+	 */
+	enum TargetRangeSetMethod {
+		Minimal, //! \brief target the minimal range so that no filling up or interpolation is required.
+		Maximal, //! \brief target the maximal range, even if some values needs to be filled up or interpolated.
+		Same, //! \brief target the range to match the original image.
+	};
+
+	ImageRectifier(Eigen::Matrix<T, 2, 1> const& f,
+				   Eigen::Matrix<T, 2, 1> const& pp,
+				   Eigen::Vector2i const& sourceSize,
+				   std::optional<Eigen::Matrix<T, 3, 1>> k123 = std::nullopt,
+				   std::optional<Eigen::Matrix<T, 2, 1>> t12 = std::nullopt,
+				   std::optional<Eigen::Matrix<T, 2, 1>> B12 = std::nullopt) :
+		_f(f),
+		_source_pp(pp),
+		_k123(k123),
+		_t12(t12),
+		_B12(B12),
+		_sourceSize(sourceSize),
+		_roiComputed(false),
+		_backwardMapComputed(false)
+	{
+
+	}
+
+	ImageRectifier(T f,
+				   Eigen::Matrix<T, 2, 1> const& pp,
+				   Eigen::Vector2i const& sourceSize,
+				   std::optional<Eigen::Matrix<T, 3, 1>> k123 = std::nullopt,
+				   std::optional<Eigen::Matrix<T, 2, 1>> t12 = std::nullopt,
+				   std::optional<Eigen::Matrix<T, 2, 1>> B12 = std::nullopt) :
+		_f(f, f),
+		_source_pp(pp),
+		_k123(k123),
+		_t12(t12),
+		_B12(B12),
+		_sourceSize(sourceSize),
+		_roiComputed(false),
+		_backwardMapComputed(false)
+	{
+
+	}
+
+	void clear() {
+		_roiComputed = false;
+		_backwardMapComputed = false;
+	}
+	bool compute(TargetRangeSetMethod roiSetMethod) {
+
+		clear();
+
+		bool ok = true;
+
+		ok = ok and computeROI(roiSetMethod);
+
+		if (!ok) {
+			return false;
+		}
+
+		ok = ok and computeBackwardMaps();
+
+		return ok;
+	}
+
+	inline Multidim::Array<T,3> const& backWardMap() const {
+
+		return _backwardMap;
+	}
+
+	Eigen::Matrix<T, 2, 1> targetPP() const {
+		return _source_pp - _roiTopLeft.cast<T>();
+	}
+
+	inline bool hasResultsComputed() const {
+		return _backwardMapComputed;
+	}
+
+private:
+
+	inline bool computeROI(TargetRangeSetMethod roiSetMethod) {
+
+		constexpr int nIter = 5;
+
+		if (roiSetMethod == Same) {
+			_roiTopLeft = Eigen::Vector2i::Zero();
+			_roiBottomRight = _sourceSize -Eigen::Vector2i::Ones();
+
+			_roiComputed = true;
+			return true;
+		}
+
+		_roiTopLeft = _sourceSize/2;
+		_roiBottomRight = _sourceSize/2;
+
+		if (roiSetMethod == Maximal) {
+			for(int i = 0; i < _sourceSize[0]; i++) {
+				for(int j = 0; j < _sourceSize[1]; j += _sourceSize[1]-1) {
+					Eigen::Matrix<T, 2, 1> pos;
+					pos << j,i;
+
+					Eigen::Matrix<T, 2, 1> invHom =
+							invertFullLensDistortionHomogeneousCoordinates(pos, _f, _source_pp, _k123, _t12, _B12, nIter);
+
+					Eigen::Matrix<T, 2, 1> inv = Homogeneous2ImageCoordinates(invHom, _f, _source_pp);
+
+					if (inv[0] < _roiTopLeft[1]) {
+						_roiTopLeft[1] = std::floor(inv[0]);
+					}
+
+					if (inv[1] < _roiTopLeft[0]) {
+						_roiTopLeft[0] = std::floor(inv[1]);
+					}
+
+					if (inv[0] > _roiBottomRight[1]) {
+						_roiBottomRight[1] = std::ceil(inv[0]);
+					}
+
+					if (inv[1] > _roiBottomRight[0]) {
+						_roiBottomRight[0] = std::ceil(inv[1]);
+					}
+				}
+			}
+
+			for(int i = 0; i < _sourceSize[0]; i += _sourceSize[0]-1) {
+				for(int j = 0; j < _sourceSize[1]; j++) {
+					Eigen::Matrix<T, 2, 1> pos;
+					pos << j,i;
+
+					int nIter = 5;
+
+					Eigen::Matrix<T, 2, 1> invHom =
+							invertFullLensDistortionHomogeneousCoordinates(pos, _f, _source_pp, _k123, _t12, _B12, nIter);
+
+					Eigen::Matrix<T, 2, 1> inv = Homogeneous2ImageCoordinates(invHom, _f, _source_pp);
+
+					if (inv[0] < _roiTopLeft[1]) {
+						_roiTopLeft[1] = std::floor(inv[0]);
+					}
+
+					if (inv[1] < _roiTopLeft[0]) {
+						_roiTopLeft[0] = std::floor(inv[1]);
+					}
+
+					if (inv[0] > _roiBottomRight[1]) {
+						_roiBottomRight[1] = std::ceil(inv[0]);
+					}
+
+					if (inv[1] > _roiBottomRight[0]) {
+						_roiBottomRight[0] = std::ceil(inv[1]);
+					}
+				}
+			}
+
+			_roiComputed = true;
+			return true;
+		}
+
+		if (roiSetMethod == Minimal) {
+
+			_roiTopLeft = Eigen::Vector2i::Zero();
+			_roiBottomRight = _sourceSize -Eigen::Vector2i::Ones();
+
+			for(int i = 0; i < _sourceSize[0]; i++) {
+				Eigen::Matrix<T, 2, 1> pos_left;
+				pos_left << 0,i;
+
+				Eigen::Matrix<T, 2, 1> invHomLeft =
+						invertFullLensDistortionHomogeneousCoordinates(pos_left, _f, _source_pp, _k123, _t12, _B12, nIter);
+
+				Eigen::Matrix<T, 2, 1> invLeft = Homogeneous2ImageCoordinates(invHomLeft, _f, _source_pp);
+
+				if (invLeft[0] > _roiTopLeft[1]) {
+					_roiTopLeft[1] = std::ceil(invLeft[0]);
+				}
+
+				Eigen::Matrix<T, 2, 1> pos_right;
+				pos_right << _sourceSize[1]-1,i;
+
+				Eigen::Matrix<T, 2, 1> invHomRight =
+						invertFullLensDistortionHomogeneousCoordinates(pos_right, _f, _source_pp, _k123, _t12, _B12, nIter);
+
+				Eigen::Matrix<T, 2, 1> invRight = Homogeneous2ImageCoordinates(invHomRight, _f, _source_pp);
+
+				if (invRight[0] < _roiBottomRight[1]) {
+					_roiBottomRight[1] = std::floor(invLeft[0]);
+				}
+
+			}
+
+
+
+			for(int j = 0; j < _sourceSize[1]; j++) {
+				Eigen::Matrix<T, 2, 1> pos_top;
+				pos_top << j,0;
+
+				Eigen::Matrix<T, 2, 1> invHomTop =
+						invertFullLensDistortionHomogeneousCoordinates(pos_top, _f, _source_pp, _k123, _t12, _B12, nIter);
+
+				Eigen::Matrix<T, 2, 1> invTop = Homogeneous2ImageCoordinates(invHomTop, _f, _source_pp);
+
+				if (invTop[1] > _roiTopLeft[0]) {
+					_roiTopLeft[0] = std::ceil(invTop[1]);
+				}
+
+				Eigen::Matrix<T, 2, 1> pos_bottom;
+				pos_bottom << j,_sourceSize[0]-1;
+
+				Eigen::Matrix<T, 2, 1> invHomBottom =
+						invertFullLensDistortionHomogeneousCoordinates(pos_bottom, _f, _source_pp, _k123, _t12, _B12, nIter);
+
+				Eigen::Matrix<T, 2, 1> invBottom = Homogeneous2ImageCoordinates(invHomBottom, _f, _source_pp);
+
+				if (invBottom[1] < _roiBottomRight[0]) {
+					_roiBottomRight[0] = std::ceil(invBottom[1]);
+				}
+
+			}
+
+			_roiComputed = true;
+			return true;
+		}
+
+		return false;
+
+	}
+
+	inline bool computeBackwardMaps() {
+
+		constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+		_backwardMapComputed = false;
+
+		if (!_roiComputed) {
+			return false;
+		}
+
+		Eigen::Vector2i range = _roiBottomRight - _roiTopLeft;
+
+		if (range[0] <= 0 or  range[1] <= 0) {
+			return false;
+		}
+
+		Eigen::Matrix<T, 2, 1> new_pp = targetPP();
+
+		_backwardMap = Multidim::Array<float,3>(range[0], range[1], 2);
+
+		for (int i = 0; i < range[0]; i++) {
+			for (int j = 0; j < range[1]; j++) {
+				Eigen::Matrix<T, 2, 1> pos;
+				pos << j,i;
+
+				Eigen::Matrix<T, 2, 1> hom = Image2HomogeneousCoordinates<T>(pos, _f, new_pp);
+				Eigen::Matrix<T, 2, 1> source_coord = fullLensDistortionHomogeneousCoordinates(hom, _f, _source_pp, _k123, _t12, _B12);
+
+				_backwardMap.at<Nc>(i,j,0) = source_coord[1];
+				_backwardMap.at<Nc>(i,j,1) = source_coord[0];
+			}
+		}
+
+		_backwardMapComputed = true;
+		return true;
+	}
+
+	Eigen::Matrix<T, 2, 1> _f;
+	Eigen::Matrix<T, 2, 1> _source_pp;
+	std::optional<Eigen::Matrix<T, 3, 1>> _k123;
+	std::optional<Eigen::Matrix<T, 2, 1>> _t12;
+	std::optional<Eigen::Matrix<T, 2, 1>> _B12;
+
+	Eigen::Vector2i _sourceSize;
+
+	bool _roiComputed;
+	Eigen::Vector2i _roiTopLeft;
+	Eigen::Vector2i _roiBottomRight;
+
+	bool _backwardMapComputed;
+	Multidim::Array<float,3> _backwardMap;
+};
+
+
 
 } // namespace Geometry
 } // namespace StereoVision
