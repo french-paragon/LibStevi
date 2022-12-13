@@ -457,6 +457,120 @@ AffineTransform<float> pnp(Eigen::Array2Xf const& pt_cam, std::vector<int> const
 AffineTransform<double> pnp(Eigen::Array2Xd const& pt_cam, Eigen::Array3Xd const& pt_coords);
 AffineTransform<double> pnp(Eigen::Array2Xd const& pt_cam, std::vector<int> const& idxs, Eigen::Array3Xd const& pt_coords);
 
+
+
+template <typename Pos_T>
+/*!
+ * \brief The imageToImageReprojector class represent the coordinate on a point in a target image
+ */
+class ImageToImageReprojector {
+
+public:
+
+	ImageToImageReprojector(Eigen::Matrix<Pos_T, 2,1> const& source_f,
+							Eigen::Matrix<Pos_T, 2,1> const& source_pp,
+							Eigen::Matrix<Pos_T, 2,1> const& target_f,
+							Eigen::Matrix<Pos_T, 2,1> const& target_pp,
+							AffineTransform<Pos_T> const& sourceToTarget,
+							ImageAnchors source_imageOrigin = ImageAnchors::TopLeft,
+							ImageAnchors target_imageOrigin = ImageAnchors::TopLeft) :
+		_source_f(source_f),
+		_source_pp(source_pp),
+		_target_f(target_f),
+		_target_pp(target_pp),
+		_sourceToTarget(sourceToTarget),
+		_source_imageOrigin(source_imageOrigin),
+		_target_imageOrigin(target_imageOrigin)
+	{
+
+	}
+
+	ImageToImageReprojector(Eigen::Matrix<Pos_T, 2,1> const& source_f,
+							 Eigen::Matrix<Pos_T, 2,1> const& source_pp,
+							 Pos_T target_f,
+							 Eigen::Matrix<Pos_T, 2,1> const& target_pp,
+							 AffineTransform<Pos_T> const& sourceToTarget,
+							 ImageAnchors source_imageOrigin = ImageAnchors::TopLeft,
+							 ImageAnchors target_imageOrigin = ImageAnchors::TopLeft) :
+		 ImageToImageReprojector(source_f,
+								 source_pp,
+								 Eigen::Matrix<Pos_T, 2,1>(target_f, target_f),
+								 target_pp,
+								 sourceToTarget,
+								 source_imageOrigin,
+								 target_imageOrigin)
+	 {
+
+	 }
+
+	ImageToImageReprojector(Pos_T source_f,
+							 Eigen::Matrix<Pos_T, 2,1> const& source_pp,
+							 Eigen::Matrix<Pos_T, 2,1> const& target_f,
+							 Eigen::Matrix<Pos_T, 2,1> const& target_pp,
+							 AffineTransform<Pos_T> const& sourceToTarget,
+							 ImageAnchors source_imageOrigin = ImageAnchors::TopLeft,
+							 ImageAnchors target_imageOrigin = ImageAnchors::TopLeft) :
+		 ImageToImageReprojector(Eigen::Matrix<Pos_T, 2,1>(source_f, source_f),
+								 source_pp,
+								 target_f,
+								 target_pp,
+								 sourceToTarget,
+								 source_imageOrigin,
+								 target_imageOrigin)
+	 {
+
+	 }
+
+	ImageToImageReprojector(Pos_T source_f,
+							 Eigen::Matrix<Pos_T, 2,1> const& source_pp,
+							 Pos_T target_f,
+							 Eigen::Matrix<Pos_T, 2,1> const& target_pp,
+							 AffineTransform<Pos_T> const& sourceToTarget,
+							 ImageAnchors source_imageOrigin = ImageAnchors::TopLeft,
+							 ImageAnchors target_imageOrigin = ImageAnchors::TopLeft) :
+		 ImageToImageReprojector(Eigen::Matrix<Pos_T, 2,1>(source_f, source_f),
+								 source_pp,
+								 Eigen::Matrix<Pos_T, 2,1>(target_f, target_f),
+								 target_pp,
+								 sourceToTarget,
+								 source_imageOrigin,
+								 target_imageOrigin)
+	 {
+
+	 }
+
+	virtual Eigen::Matrix<Pos_T, 2,1> reprojected(Eigen::Matrix<Pos_T, 2,1> const& sourcePos, Pos_T depth) {
+		Eigen::Matrix<Pos_T, 3,1> coordsSource;
+		coordsSource.template block<2,1>(0,0) = Image2HomogeneousCoordinates(sourcePos, _source_f, _source_pp, _source_imageOrigin);
+		coordsSource[2] = 1;
+
+		coordsSource *= depth;
+
+
+		Eigen::Matrix<Pos_T, 3,1> coordsTarget = _sourceToTarget*coordsSource;
+
+		Eigen::Matrix<Pos_T, 2,1> proj = projectPoints(coordsTarget);
+
+		return Homogeneous2ImageCoordinates(proj, _target_f, _target_pp, _target_imageOrigin);
+
+	}
+
+	Eigen::Matrix<Pos_T, 2,1> operator()(Eigen::Matrix<Pos_T, 2,1> const& sourcePos, Pos_T depth) {
+		return reprojected(sourcePos, depth);
+	}
+
+private:
+	Eigen::Matrix<Pos_T, 2,1> _source_f;
+	Eigen::Matrix<Pos_T, 2,1> _source_pp;
+	Eigen::Matrix<Pos_T, 2,1> _target_f;
+	Eigen::Matrix<Pos_T, 2,1> _target_pp;
+	AffineTransform<Pos_T> _sourceToTarget;
+	ImageAnchors _source_imageOrigin;
+	ImageAnchors _target_imageOrigin;
+};
+
+
+
 } //namespace Geometry
 } // namespace StereoVision
 
