@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <array>
 #include <vector>
+#include <map>
 #include <MultidimArrays/MultidimArrays.h>
 
 #include <Eigen/Core>
@@ -43,7 +44,82 @@ public:
 		float weight;
 	};
 
-	explicit UnFoldCompressor(Multidim::Array<int,2> const& mask);
+	template<Multidim::ArrayDataAccessConstness viewConstness>
+	explicit UnFoldCompressor(Multidim::Array<int,2, viewConstness> const& mask) {
+		int height = mask.shape()[0];
+		int width = mask.shape()[1];
+
+		int s = height*width;
+
+		int v_offset = height/2;
+		int h_offset = width/2;
+
+		int minH = 0;
+		int maxH = 0;
+		int minW = 0;
+		int maxW = 0;
+
+		std::map<int, int> pixPerSuperpix;
+		std::vector<int> feats;
+		feats.reserve(s);
+
+		for (int i = 0; i < height; i++) {
+			for (int j = 0; j < width; j++) {
+				int feat = mask.value(i,j);
+
+				if (feat > 0) {
+
+					if (i - v_offset < minH) {
+						minH = i - v_offset;
+					}
+					if (i - v_offset > maxH) {
+						maxH = i - v_offset;
+					}
+					if (j - h_offset < minW) {
+						minW = j - h_offset;
+					}
+					if (j - h_offset > maxW) {
+						maxW = j - h_offset;
+					}
+
+					if (pixPerSuperpix.count(feat)) {
+						pixPerSuperpix[feat]++;
+					} else {
+						pixPerSuperpix[feat] = 1;
+						feats.push_back(feat);
+					}
+				}
+			}
+		}
+
+		_height = maxH - minH + 1;
+		_width = maxW - minW + 1;
+
+		_margins = PaddingMargins(-minW,-minH,maxW,maxH);
+
+		_nFeatures = pixPerSuperpix.size();
+		std::sort(feats.begin(), feats.end()); //features are in order of number used in the mask;
+
+		_indices.reserve(s);
+
+		for(int f = 0; f < _nFeatures; f++) {
+
+			for (int i = 0; i < height; i++) {
+				for (int j = 0; j < width; j++) {
+					int feat = mask.value(i,j);
+
+					if (feat == feats[f]) {
+
+						_indices.push_back({i - v_offset,
+											j - h_offset,
+											f,
+											static_cast<float>(1./pixPerSuperpix[feat])});
+					}
+				}
+			}
+
+		}
+	}
 
 	inline int nFeatures() const { return _nFeatures; }
 	inline int width() const { return _width; }
