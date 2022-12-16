@@ -47,7 +47,7 @@ void TestStereoRigRectifier::testAlignementEstimate() {
 	Eigen::Matrix3f RCam2toCam1 = RCam1.transpose()*RCam2;
 	Eigen::Vector3f tCam2toCam1 = RCam1.transpose()*t;
 
-	ShapePreservingTransform Cam2ToCam1(inverseRodriguezFormula(RCam2toCam1), tCam2toCam1, 1.);
+	ShapePreservingTransform<float> Cam2ToCam1(inverseRodriguezFormula(RCam2toCam1), tCam2toCam1, 1.);
 
 	StereoRigRectifier rectifier(Cam2ToCam1,
 								 1,

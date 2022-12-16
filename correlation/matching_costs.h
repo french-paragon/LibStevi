@@ -55,9 +55,9 @@ template<matchingFunctions func>
 class MatchingFunctionTraits{
 };
 
-template<class T_S, class T_T, class T_O = float>
-inline T_O dotProduct(Multidim::Array<T_S,1> const& source,
-					  Multidim::Array<T_T,1> const& target) {
+template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+inline T_O dotProduct(Multidim::Array<T_S,1, viewConstness> const& source,
+					  Multidim::Array<T_T,1, viewConstness> const& target) {
 
 	static_assert ((std::is_integral_v<T_S> and std::is_integral_v<T_T>) or !std::is_integral_v<T_O>,
 			"Cannot process floating point inputs for non floating point output");
@@ -76,9 +76,9 @@ inline T_O dotProduct(Multidim::Array<T_S,1> const& source,
 
 }
 
-template<class T_S, class T_T, class T_O = float>
-inline T_O SumSquareDiff(Multidim::Array<T_S,1> const& source,
-						 Multidim::Array<T_T,1> const& target) {
+template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+inline T_O SumSquareDiff(Multidim::Array<T_S,1, viewConstness> const& source,
+						 Multidim::Array<T_T,1, viewConstness> const& target) {
 
 	static_assert ((std::is_integral_v<T_S> and std::is_integral_v<T_T>) or !std::is_integral_v<T_O>,
 			"Cannot process floating point inputs for non floating point output");
@@ -94,9 +94,9 @@ inline T_O SumSquareDiff(Multidim::Array<T_S,1> const& source,
 
 }
 
-template<class T_S, class T_T, class T_O = float>
-inline T_O SumAbsDiff(Multidim::Array<T_S,1> const& source,
-					  Multidim::Array<T_T,1> const& target) {
+template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+inline T_O SumAbsDiff(Multidim::Array<T_S,1, viewConstness> const& source,
+					  Multidim::Array<T_T,1, viewConstness> const& target) {
 
 	static_assert ((std::is_integral_v<T_S> and std::is_integral_v<T_T>) or !std::is_integral_v<T_O>,
 			"Cannot process floating point inputs for non floating point output");
@@ -117,9 +117,9 @@ inline T_O SumAbsDiff(Multidim::Array<T_S,1> const& source,
 }
 
 
-template<class T_S, class T_T, class T_O = float>
-inline T_O MedianAbsDiff(Multidim::Array<T_S,1> const& source,
-						 Multidim::Array<T_T,1> const& target) {
+template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+inline T_O MedianAbsDiff(Multidim::Array<T_S,1, viewConstness> const& source,
+						 Multidim::Array<T_T,1, viewConstness> const& target) {
 
 	static_assert ((std::is_integral_v<T_S> and std::is_integral_v<T_T>) or !std::is_integral_v<T_O>,
 			"Cannot process floating point inputs for non floating point output");
@@ -161,9 +161,9 @@ inline hamming_cv_t hammingScalar(T_S n1, T_T n2) {
 #endif
 }
 
-template<class T_S, class T_T>
-inline hamming_cv_t hammingDistance(Multidim::Array<T_S,1> const& source,
-									Multidim::Array<T_T,1> const& target) {
+template<class T_S, class T_T, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+inline hamming_cv_t hammingDistance(Multidim::Array<T_S,1, viewConstness> const& source,
+									Multidim::Array<T_T,1, viewConstness> const& target) {
 
 	hamming_cv_t score = 0;
 
@@ -184,9 +184,9 @@ public:
 
 	static constexpr bool isCensusBased = false;
 
-	template<class T_S, class T_T, class T_O = float>
-	inline static T_O featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
+	template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+	inline static T_O featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
+								   Multidim::Array<T_T,1, viewConstness> const& target) {
 		(void) source;
 		(void) target;
 		return 0;
@@ -259,9 +259,9 @@ public:
 
 	static constexpr bool isCensusBased = false;
 
-	template<class T_S, class T_T, class T_O = float>
-	inline static T_O featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
+	template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+	inline static T_O featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
+								   Multidim::Array<T_T,1, viewConstness> const& target) {
 		return dotProduct<T_S, T_T, T_O>(source, target);
 	}
 
@@ -282,9 +282,9 @@ public:
 
 	static constexpr bool isCensusBased = false;
 
-	template<class T_S, class T_T, class T_O = float>
-	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
+	template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+	inline static float featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
+								   Multidim::Array<T_T,1, viewConstness> const& target) {
 		return dotProduct<T_S, T_T, T_O>(source, target);
 	}
 };
@@ -299,9 +299,9 @@ public:
 
 	static constexpr bool isCensusBased = false;
 
-	template<class T_S, class T_T, class T_O = float>
-	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
+	template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+	inline static float featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
+								   Multidim::Array<T_T,1, viewConstness> const& target) {
 		return SumSquareDiff<T_S, T_T, T_O>(source, target);
 	}
 
@@ -322,9 +322,9 @@ public:
 
 	static constexpr bool isCensusBased = false;
 
-	template<class T_S, class T_T, class T_O = float>
-	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
+	template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+	inline static float featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
+								   Multidim::Array<T_T,1, viewConstness> const& target) {
 		return SumAbsDiff<T_S, T_T, T_O>(source, target);
 	}
 
@@ -345,9 +345,9 @@ public:
 
 	static constexpr bool isCensusBased = false;
 
-	template<class T_S, class T_T, class T_O = float>
-	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
+	template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+	inline static float featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
+								   Multidim::Array<T_T,1, viewConstness> const& target) {
 		return dotProduct<T_S, T_T, T_O>(source, target);
 	}
 };
@@ -362,9 +362,9 @@ public:
 
 	static constexpr bool isCensusBased = false;
 
-	template<class T_S, class T_T, class T_O = float>
-	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
+	template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+	inline static float featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
+								   Multidim::Array<T_T,1, viewConstness> const& target) {
 		return dotProduct<T_S, T_T, T_O>(source, target);
 	}
 
@@ -385,9 +385,9 @@ public:
 
 	static constexpr bool isCensusBased = false;
 
-	template<class T_S, class T_T, class T_O = float>
-	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
+	template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+	inline static float featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
+								   Multidim::Array<T_T,1, viewConstness> const& target) {
 		return SumSquareDiff<T_S, T_T, T_O>(source, target);
 	}
 
@@ -408,9 +408,9 @@ public:
 
 	static constexpr bool isCensusBased = false;
 
-	template<class T_S, class T_T, class T_O = float>
-	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
+	template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+	inline static float featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
+								   Multidim::Array<T_T,1, viewConstness> const& target) {
 		return SumAbsDiff<T_S, T_T, T_O>(source, target);
 	}
 
@@ -431,9 +431,9 @@ public:
 
 	static constexpr bool isCensusBased = false;
 
-	template<class T_S, class T_T, class T_O = float>
-	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
+	template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+	inline static float featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
+								   Multidim::Array<T_T,1, viewConstness> const& target) {
 		return MedianAbsDiff<T_S, T_T, T_O>(source, target);
 	}
 
@@ -462,9 +462,9 @@ public:
 
 	static constexpr bool isCensusBased = false;
 
-	template<class T_S, class T_T, class T_O = float>
-	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
+	template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+	inline static float featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
+								   Multidim::Array<T_T,1, viewConstness> const& target) {
 		return MedianAbsDiff<T_S, T_T, T_O>(source, target);
 	}
 
@@ -493,9 +493,9 @@ public:
 
 	static constexpr bool isCensusBased = true;
 
-	template<class T_S, class T_T, class T_O = float>
-	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
+	template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+	inline static float featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
+								   Multidim::Array<T_T,1, viewConstness> const& target) {
 		return hammingDistance(source, target);
 	}
 };
@@ -510,9 +510,9 @@ public:
 
 	static constexpr bool isCensusBased = true;
 
-	template<class T_S, class T_T, class T_O = float>
-	inline static float featureComparison(Multidim::Array<T_S,1> const& source,
-								   Multidim::Array<T_T,1> const& target) {
+	template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+	inline static float featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
+								   Multidim::Array<T_T,1, viewConstness> const& target) {
 		return hammingDistance(source, target);
 	}
 };
@@ -558,10 +558,8 @@ inline std::pair<T_Disp const&,T_CV const&> optimalDispAndCost(T_Disp const& cur
 template<matchingFunctions func, typename ImType>
 struct MatchingFuncComputeTypeInfos {
 
-	typedef float FeatureType;
+	typedef TypesManipulations::accumulation_extended_t<ImType> FeatureType;
 
-	static constexpr bool SupportFloatCV = true;
-	static constexpr bool SupportIntCV = false;
 };
 
 template<matchingFunctions func>
@@ -572,8 +570,6 @@ struct MatchingFuncComputeTypeInfos<func, uint8_t> {
 						int16_t,
 						typename std::conditional<MatchingFunctionTraits<func>::ZeroMean, int16_t, uint8_t>::type>::type FeatureType;
 
-	static constexpr bool SupportFloatCV = true;
-	static constexpr bool SupportIntCV = true;
 };
 
 template<typename ImType>
@@ -581,8 +577,6 @@ struct MatchingFuncComputeTypeInfos<matchingFunctions::HAMMING, ImType> {
 
 	typedef uint32_t FeatureType;
 
-	static constexpr bool SupportFloatCV = false;
-	static constexpr bool SupportIntCV = true;
 };
 
 template<>
@@ -590,8 +584,6 @@ struct MatchingFuncComputeTypeInfos<matchingFunctions::HAMMING, uint8_t> {
 
 	typedef uint32_t FeatureType;
 
-	static constexpr bool SupportFloatCV = false;
-	static constexpr bool SupportIntCV = true;
 };
 
 typedef typename MatchingFuncComputeTypeInfos<matchingFunctions::HAMMING, uint8_t>::FeatureType census_data_t;

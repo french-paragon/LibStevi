@@ -103,4 +103,8 @@ add_executable(testMatchPattern testMatchPattern.cpp)
 target_link_libraries(testMatchPattern ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestMatchPattern testMatchPattern)
 
+add_executable(testOnDemandCostVolume testOnDemandCostVolume.cpp)
+target_link_libraries(testOnDemandCostVolume ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestOnDemandCostVolume testOnDemandCostVolume)
+
 

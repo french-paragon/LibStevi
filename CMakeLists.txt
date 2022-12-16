@@ -53,19 +53,15 @@ include_directories(${MODULES_INCLUDE_DIRECTORIES})
 
 set(LIB_SRC 
         stevi_global.h
-	geometry/core.cpp
 	geometry/core.h
 	geometry/geometricexception.cpp
 	geometry/geometricexception.h
 	geometry/alignement.cpp
-	geometry/alignement.h
-	geometry/imagecoordinates.cpp
-	geometry/imagecoordinates.h
-	geometry/lensdistortion.cpp
+        geometry/alignement.h
+        geometry/imagecoordinates.h
 	geometry/lensdistortion.h
 	geometry/pointcloudalignment.cpp
-	geometry/pointcloudalignment.h
-	geometry/rotations.cpp
+        geometry/pointcloudalignment.h
         geometry/rotations.h
         geometry/stereorigrectifier.cpp
         geometry/stereorigrectifier.h
@@ -87,8 +83,10 @@ set(LIB_SRC
         correlation/hierarchical.h
         correlation/patchmatch.h
         correlation/on_demand_cost_volume.h
-        correlation/fast_approximate_matching.h
+		correlation/fast_approximate_matching.h
 		correlation/template_matching.h
+        correlation/dynamic_programing_stereo.h
+		correlation/disparity_plus_background_segmentation.h
         optimization/l0optimization.h
         optimization/l1optimization.h
         optimization/l2optimization.h
@@ -102,7 +100,8 @@ set(LIB_SRC
         utils/randomcache.h
         utils/types_manipulations.h
         utils/colors.h
-		utils/array_utils.h
+        utils/array_utils.h
+        utils/stevimath.h
         statistics/stereo_covering.h
         imageProcessing/colorConversions.h
         imageProcessing/meanShiftClustering.h

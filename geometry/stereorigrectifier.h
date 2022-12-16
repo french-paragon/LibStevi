@@ -22,7 +22,7 @@ public:
 		Same, //! \brief target the range to match the original image.
 	};
 
-	StereoRigRectifier(ShapePreservingTransform cam2tocam1,
+	StereoRigRectifier(ShapePreservingTransform<float> cam2tocam1,
 					   float fLenCam1Px,
 					   Eigen::Vector2f ppCam1,
 					   Eigen::Vector2i sizeCam1,
@@ -35,6 +35,12 @@ public:
 					   std::optional<Eigen::Vector3f> kCam2,
 					   std::optional<Eigen::Vector2f> tCam2,
 					   std::optional<Eigen::Vector2f> BCam2);
+
+	StereoRigRectifier(StereoRigRectifier const& other);
+	StereoRigRectifier(StereoRigRectifier && other);
+
+	StereoRigRectifier& operator=(StereoRigRectifier const& other);
+	StereoRigRectifier& operator=(StereoRigRectifier && other);
 
 	void clear();
 	bool compute(TargetRangeSetMethod roiSetMethod, TargetRangeSetMethod resolutionSetMethod);
@@ -105,7 +111,7 @@ public:
 
 protected:
 
-	ShapePreservingTransform _cam2Tocam1;
+	ShapePreservingTransform<float> _cam2Tocam1;
 
 	bool _CorrRComputed;
 	Eigen::Matrix3f _CorrRCam1;

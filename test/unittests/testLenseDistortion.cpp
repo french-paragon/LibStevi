@@ -27,6 +27,9 @@ private Q_SLOTS:
 	void testSkewInverse_data();
 	void testSkewInverse();
 
+	void testDistortionModelInverse_data();
+	void testDistortionModelInverse();
+
 private:
 	std::default_random_engine re;
 };
@@ -207,6 +210,59 @@ void TestLenseDistortion::testSkewInverse() {
 		QVERIFY2(missalignement < 1e-2, qPrintable(QString("Reconstructed initial image coordinates not correct (norm (pos - rpos) = %1)").arg(missalignement)));
 	}
 
+}
+
+void TestLenseDistortion::testDistortionModelInverse_data() {
+
+	QTest::addColumn<float>("f");
+	QTest::addColumn<Eigen::Vector2f>("pp");
+
+	QTest::addColumn<Eigen::Vector3f>("k123");
+	QTest::addColumn<Eigen::Vector2f>("t12");
+	QTest::addColumn<Eigen::Vector2f>("B12");
+
+	QTest::newRow("Zero distortion") << 1.f << Eigen::Vector2f(0.5, 0.5) << Eigen::Vector3f(0, 0, 0) << Eigen::Vector2f(0, 0) << Eigen::Vector2f(0, 0);
+
+	QTest::newRow("Small distortion 1") << 10.f << Eigen::Vector2f(7.5, 5.5) << Eigen::Vector3f(0.01, 0, 0) << Eigen::Vector2f(0.01, 0) << Eigen::Vector2f(0.1, -0.3);
+	QTest::newRow("Small distortion 2") << 15.f << Eigen::Vector2f(4.5, 6.5) << Eigen::Vector3f(0.02, -0.03, 0.005) << Eigen::Vector2f(0.02, -0.03) << Eigen::Vector2f(1, 1);
+	QTest::newRow("Small distortion 3") << 12.f << Eigen::Vector2f(5.5, 5.5) << Eigen::Vector3f(-0.006, 0.01, 0.01) << Eigen::Vector2f(-0.06, 0.01) << Eigen::Vector2f(-0.1, 0.07);
+
+}
+void TestLenseDistortion::testDistortionModelInverse() {
+
+	static const float distLimit = 1.5;
+
+	std::uniform_real_distribution<float> posDist(-1, 1);
+
+	QFETCH(float, f);
+	QFETCH(Eigen::Vector2f, pp);
+
+	QFETCH(Eigen::Vector3f, k123);
+	QFETCH(Eigen::Vector2f, t12);
+	QFETCH(Eigen::Vector2f, B12);
+
+
+	for (int i = 0; i < 100; i++) {
+		float x = posDist(re);
+		float y = posDist(re);
+
+		Eigen::Vector2f pos(x, y);
+		Eigen::Vector2f upos = f*pos + pp;
+
+		Eigen::Vector2f mpos = fullLensDistortionHomogeneousCoordinates<float, float, float, float>(pos, f, pp, k123, t12, B12);
+
+		float oNorm = upos.norm();
+		float mNorm = mpos.norm();
+
+		if (std::max(oNorm, mNorm)/std::min(oNorm, mNorm) > distLimit) {
+			QSKIP("Distortion too important, passing test");
+		}
+
+		Eigen::Vector2f rpos = invertFullLensDistortionHomogeneousCoordinates<float, float, float, float>(mpos, f, pp, k123, t12, B12, 5);
+
+		float missalignement = (pos - rpos).norm();
+		QVERIFY2(missalignement < 1e-2, qPrintable(QString("Reconstructed initial image coordinates not correct (norm (pos - rpos) = %1)").arg(missalignement)));
+	}
 }
 
 QTEST_MAIN(TestLenseDistortion)

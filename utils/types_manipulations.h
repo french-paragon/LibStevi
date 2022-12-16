@@ -71,8 +71,9 @@ template <class T>
  * For integer types, the value is garanteed to be a power of 2 (for optimization).
  */
 inline constexpr T equivalentOneForNormalizing() {
+    using I_T = std::conditional_t<std::is_integral_v<T>, T, long>;
 	if (std::is_integral_v<T>) {
-		return 1 << sizeof (T)*4;
+                return I_T(1) << sizeof (T)*4;
 	}
 	return 1;
 }

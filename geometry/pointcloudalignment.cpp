@@ -28,7 +28,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace StereoVision {
 namespace Geometry {
 
-AffineTransform estimateAffineMap(Eigen::VectorXf const& obs,
+AffineTransform<float> estimateAffineMap(Eigen::VectorXf const& obs,
 												Eigen::Matrix3Xf const& pts,
 												std::vector<int> const& idxs,
 												std::vector<Axis> const& coordinate) {
@@ -86,7 +86,7 @@ AffineTransform estimateAffineMap(Eigen::VectorXf const& obs,
 
 }
 
-AffineTransform estimateQuasiShapePreservingMap(Eigen::VectorXf const& obs,
+AffineTransform<float> estimateQuasiShapePreservingMap(Eigen::VectorXf const& obs,
 												Eigen::Matrix3Xf const& pts,
 												std::vector<int> const& idxs,
 												std::vector<Axis> const& coordinate,
@@ -207,7 +207,7 @@ AffineTransform estimateQuasiShapePreservingMap(Eigen::VectorXf const& obs,
 
 }
 
-AffineTransform estimateQuasiRigidMap(Eigen::VectorXf const& obs,
+AffineTransform<float> estimateQuasiRigidMap(Eigen::VectorXf const& obs,
 									  Eigen::Matrix3Xf const& pts,
 									  std::vector<int> const& idxs,
 									  std::vector<Axis> const& coordinate,
@@ -338,9 +338,9 @@ AffineTransform estimateQuasiRigidMap(Eigen::VectorXf const& obs,
 
 }
 
-ShapePreservingTransform affine2ShapePreservingMap(AffineTransform const & initial) {
+ShapePreservingTransform<float> affine2ShapePreservingMap(const AffineTransform<float> &initial) {
 
-	ShapePreservingTransform T;
+	ShapePreservingTransform<float> T;
 	T.t = initial.t;
 
 	auto svd = initial.R.jacobiSvd(Eigen::ComputeFullU|Eigen::ComputeFullV);
@@ -355,7 +355,7 @@ ShapePreservingTransform affine2ShapePreservingMap(AffineTransform const & initi
 		U = -U;
 	}
 
-	T.r = inverseRodriguezFormula(U*V.transpose());
+	T.r = inverseRodriguezFormula<float>(U*V.transpose());
 
 	T.s = svd.singularValues().mean();
 
@@ -368,7 +368,7 @@ ShapePreservingTransform affine2ShapePreservingMap(AffineTransform const & initi
 }
 
 
-ShapePreservingTransform estimateTranslationMap(Eigen::VectorXf const& obs,
+ShapePreservingTransform<float> estimateTranslationMap(Eigen::VectorXf const& obs,
 												Eigen::Matrix3Xf const& pts,
 												std::vector<int> const& idxs,
 												std::vector<Axis> const& coordinate,
@@ -423,13 +423,13 @@ ShapePreservingTransform estimateTranslationMap(Eigen::VectorXf const& obs,
 		*residual = (A*opt - deltaObs).norm()/n_obs;
 	}
 
-	ShapePreservingTransform optimal(Eigen::Vector3f::Zero(), opt, 1.);
+	ShapePreservingTransform<float> optimal(Eigen::Vector3f::Zero(), opt, 1.);
 	return optimal;
 }
 
 
 
-ShapePreservingTransform estimateScaleMap(Eigen::VectorXf const& obs,
+ShapePreservingTransform<float> estimateScaleMap(Eigen::VectorXf const& obs,
 										  Eigen::Matrix3Xf const& pts,
 										  std::vector<int> const& idxs,
 										  std::vector<Axis> const& coordinate,
@@ -482,11 +482,11 @@ ShapePreservingTransform estimateScaleMap(Eigen::VectorXf const& obs,
 		*residual = (A*s - obs).norm()/n_obs;
 	}
 
-	ShapePreservingTransform optimal(Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero(), s);
+	ShapePreservingTransform<float> optimal(Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero(), s);
 	return optimal;
 }
 
-ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
+ShapePreservingTransform<float> estimateRotationMap(Eigen::VectorXf const& obs,
 											 Eigen::Matrix3Xf const& pts,
 											 std::vector<int> const& idxs,
 											 std::vector<Axis> const& coordinate,
@@ -509,7 +509,7 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 
 	Eigen::VectorXf f0;
 
-	ShapePreservingTransform current(ParamVector::Zero(), Eigen::Vector3f::Zero(), 1);
+	ShapePreservingTransform<float> current(ParamVector::Zero(), Eigen::Vector3f::Zero(), 1);
 
 
 	IterativeTermination stat = IterativeTermination::MaxStepReached;
@@ -569,7 +569,7 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 		Eigen::VectorXf r = obs - f0;
 		Eigen::Vector3f delta = pseudoInverse*A.transpose()*r;
 
-		ShapePreservingTransform change(delta, Eigen::Vector3f::Zero(), 1);
+		ShapePreservingTransform<float> change(delta, Eigen::Vector3f::Zero(), 1);
 		current = change*current;
 
 		if (verbose) {
@@ -587,7 +587,7 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 		*status = stat;
 	}
 
-	ShapePreservingTransform& r = current;
+	ShapePreservingTransform<float>& r = current;
 
 	Eigen::Matrix3Xf tpts = r*pts;
 
@@ -625,7 +625,7 @@ ShapePreservingTransform estimateRotationMap(Eigen::VectorXf const& obs,
 }
 
 
-ShapePreservingTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
+ShapePreservingTransform<float> estimateShapePreservingMap(Eigen::VectorXf const& obs,
 													Eigen::Matrix3Xf const& pts,
 													std::vector<int> const& idxs,
 													std::vector<Axis> const& coordinate,
@@ -639,7 +639,7 @@ ShapePreservingTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
 	typedef Eigen::Matrix<float, 7, 7> MatrixQxx ;
 	typedef Eigen::Matrix<float, Eigen::Dynamic, 7, Eigen::RowMajor> MatrixA ;
 
-	ShapePreservingTransform current(Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero(), 1);
+	ShapePreservingTransform<float> current(Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero(), 1);
 
 	//check if the initializer can do most of the job already.
 	auto test = initShapePreservingMapEstimate(obs, pts, idxs, coordinate);
@@ -707,7 +707,7 @@ ShapePreservingTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
 		delta.block<6,1>(0,0) *= damping;
 		delta[6] *= dampingScale;
 
-		ShapePreservingTransform change(delta.block<3,1>(0,0), delta.block<3,1>(3,0), exp(delta[6]));
+		ShapePreservingTransform<float> change(delta.block<3,1>(0,0), delta.block<3,1>(3,0), exp(delta[6]));
 		current = change*current;
 
 		float n = delta.norm();
@@ -726,7 +726,7 @@ ShapePreservingTransform estimateShapePreservingMap(Eigen::VectorXf const& obs,
 
 }
 
-std::optional<ShapePreservingTransform> initShapePreservingMapEstimate(Eigen::VectorXf const& obs,
+std::optional<ShapePreservingTransform<float>> initShapePreservingMapEstimate(Eigen::VectorXf const& obs,
 																	   Eigen::Matrix3Xf const& pts,
 																	   std::vector<int> const& idxs,
 																	   std::vector<Axis> const& coordinate) {
@@ -786,8 +786,8 @@ std::optional<ShapePreservingTransform> initShapePreservingMapEstimate(Eigen::Ve
 		}
 	}
 
-	ShapePreservingTransform translate(Eigen::Vector3f::Zero(), -ptRef_obs, 1);
-	ShapePreservingTransform current(Eigen::Vector3f::Zero(), ptRef_obs - ptRef_orig, 1);
+	ShapePreservingTransform<float> translate(Eigen::Vector3f::Zero(), -ptRef_obs, 1);
+	ShapePreservingTransform<float> current(Eigen::Vector3f::Zero(), ptRef_obs - ptRef_orig, 1);
 
 	Eigen::Vector3f trsfm = current*ptPiv1_orig - ptRef_obs;
 	Eigen::Vector3f axis_alignement = ptPiv1_obs - ptRef_obs;
@@ -796,7 +796,7 @@ std::optional<ShapePreservingTransform> initShapePreservingMapEstimate(Eigen::Ve
 	Eigen::Vector3f rot1 = (trsfm/trsfm.norm()).cross(axis_alignement);
 	float scale = std::asin(rot1.norm())/rot1.norm();
 
-	ShapePreservingTransform R1(scale*rot1, Eigen::Vector3f::Zero(), 1);
+	ShapePreservingTransform<float> R1(scale*rot1, Eigen::Vector3f::Zero(), 1);
 
 	trsfm = current*ptPiv2_orig - ptRef_obs;
 	trsfm = R1*trsfm;
@@ -809,9 +809,9 @@ std::optional<ShapePreservingTransform> initShapePreservingMapEstimate(Eigen::Ve
 	Eigen::Vector3f rot2 = (proj1/proj1.norm()).cross(proj2/proj2.norm());
 	scale = std::asin(rot2.norm())/rot2.norm();
 
-	ShapePreservingTransform R2(scale*rot2, Eigen::Vector3f::Zero(), 1);
+	ShapePreservingTransform<float> R2(scale*rot2, Eigen::Vector3f::Zero(), 1);
 
-	ShapePreservingTransform total = R2*R1*translate*current;
+	ShapePreservingTransform<float> total = R2*R1*translate*current;
 
 	Eigen::Matrix3Xf tpts = total*pts;
 
@@ -824,7 +824,7 @@ std::optional<ShapePreservingTransform> initShapePreservingMapEstimate(Eigen::Ve
 		obs_offst[i] -= ptRef_obs[rowId];
 	}
 
-	ShapePreservingTransform scaling = estimateScaleMap(obs_offst, tpts, idxs, coordinate, nullptr, false);
+	ShapePreservingTransform<float> scaling = estimateScaleMap(obs_offst, tpts, idxs, coordinate, nullptr, false);
 
 	return translate.inverse()*scaling*total;
 

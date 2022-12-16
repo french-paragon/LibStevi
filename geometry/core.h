@@ -3,7 +3,7 @@
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 
-Copyright (C) 2021  Paragon<french.paragon@gmail.com>
+Copyright (C) 2021-2022 Paragon<french.paragon@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -24,17 +24,38 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace StereoVision {
 namespace Geometry {
 
-Eigen::Matrix3f skew(Eigen::Vector3f const& v);
-Eigen::Vector3f unskew(Eigen::Matrix3f const& m);
+template<typename T = float>
+Eigen::Matrix<T,3,3> skew(Eigen::Matrix<T,3,1> const& v) {
+	Eigen::Matrix<T,3,3> r;
+	r << 0, -v.z(), v.y(),
+		 v.z(), 0, -v.x(),
+		 -v.y(), v.x(), 0;
 
-Eigen::Matrix3d skewD(Eigen::Vector3d const& v);
-Eigen::Vector3d unskewD(Eigen::Matrix3d const& m);
+	return r;
+}
+
+template<typename T = float>
+Eigen::Matrix<T,3,1> unskew(Eigen::Matrix<T,3,3> const& m) {
+	return Eigen::Matrix<T,3,1>(m(2,1), -m(2,0), m(1,0));
+}
 
 enum class Axis : char {
 	X,
 	Y,
 	Z
 };
+
+inline Eigen::Vector3f pathFromDiff(Axis dir) {
+	switch (dir) {
+	case Axis::X:
+		return Eigen::Vector3f(1.,0,0);
+	case Axis::Y:
+		return Eigen::Vector3f(0,1.,0);
+	case Axis::Z:
+	default:
+		return Eigen::Vector3f(0,0,1.);
+	}
+}
 
 
 enum class IterativeTermination : char {
@@ -45,28 +66,56 @@ enum class IterativeTermination : char {
 
 Eigen::Vector3f pathFromDiff(Axis dir);
 
+template<typename T = float>
 class AffineTransform
 {
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-	AffineTransform(Eigen::Matrix3f R, Eigen::Vector3f t);
-	AffineTransform();
+		AffineTransform(Eigen::Matrix<T,3,3> R, Eigen::Matrix<T,3,1> t):
+			t(t),
+			R(R) {
 
-	Eigen::Vector3f operator*(Eigen::Vector3f const& pt) const;
-	Eigen::Matrix3Xf operator*(Eigen::Matrix3Xf const& pts) const;
-	Eigen::Array3Xf operator*(Eigen::Array3Xf const& pts) const;
+		}
+		AffineTransform():
+			t(Eigen::Matrix<T,3,1>::Zero()),
+			R(Eigen::Matrix<T,3,3>::Identity()) {
+
+		}
+
+		Eigen::Matrix<T,3,1> operator*(Eigen::Vector3f const& pt) const {
+			return R*pt + t;
+		}
+		Eigen::Matrix<T,3,Eigen::Dynamic> operator*(Eigen::Matrix<T,3,Eigen::Dynamic> const& pts) const {
+			return applyOnto(pts.array()).matrix();
+		}
+		Eigen::Array<T,3,Eigen::Dynamic> operator*(Eigen::Array<T,3,Eigen::Dynamic> const& pts) const {
+			return applyOnto(pts);
+		}
+		AffineTransform<T> operator*(AffineTransform<T> const& other) const {
+			return AffineTransform<T>(R*other.R, R*other.t + t);
+		}
 
 	inline bool isFinite() const {
 		return t.array().isFinite().all() and R.array().isFinite().all();
 	}
 
-	Eigen::Vector3f t;
-	Eigen::Matrix3f R;
+		Eigen::Matrix<T,3,1> t;
+		Eigen::Matrix<T,3,3> R;
 
 protected:
 
-	Eigen::Array3Xf applyOnto(Eigen::Array3Xf const& pts) const;
+		Eigen::Array<T,3,Eigen::Dynamic> applyOnto(Eigen::Array<T,3,Eigen::Dynamic> const& pts) const {
+
+			Eigen::Array<T,3,Eigen::Dynamic> transformedPts;
+			transformedPts.resize(3, pts.cols());
+
+			for (int i = 0; i < transformedPts.cols(); i++) {
+				transformedPts.col(i) = R*(pts.col(i).matrix()) + t;
+			}
+
+			return transformedPts;
+		}
 };
 
 } // namespace Geometry

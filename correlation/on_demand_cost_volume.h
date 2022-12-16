@@ -21,246 +21,195 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "./correlation_base.h"
 #include "./matching_costs.h"
+#include "./cross_correlations.h"
 
 #include <MultidimArrays/MultidimArrays.h>
 
 namespace StereoVision {
 namespace Correlation {
 
-template<matchingFunctions matchFunc, class T_L, class T_R, class T_CV, dispDirection dDir = dispDirection::RightToLeft>
-class OnDemandStereoCostVolume {
-
-	using T_S = typename condImgRef<T_L, T_R, dDir, 3>::T_S;
-	using T_T = typename condImgRef<T_L, T_R, dDir, 3>::T_T;
-
-	static_assert (matchingcosts_details::MatchingFunctionTraitsInfos<matchFunc>::template traitsHasFeatureComparison<T_S, T_T, T_CV>(),
-	"Trying to implement an OnDemandCostVolume with incompatible feature and cost volume types.");
+template<matchingFunctions matchFunc, class T_CV, class T_S, class T_T,
+		 Multidim::ArrayDataAccessConstness constnessS,
+		 Multidim::ArrayDataAccessConstness constnessT,
+		 typename... Ds>
+class GenericOnDemandCostVolume {
 
 public:
+	using SearchSpaceType = FixedSearchSpace<Ds...>;
 
-	explicit OnDemandStereoCostVolume(Multidim::Array<T_L, 3> const& left, Multidim::Array<T_R, 3> const& right, int searchRange) :
-		_feature_volumes(left, right),
-		_cv(_feature_volumes.source().shape()[0], _feature_volumes.source().shape()[1], searchRange),
-		_computed(_feature_volumes.source().shape()[0], _feature_volumes.source().shape()[1], searchRange)
-	{
+	using T_SF = typename MatchingFuncComputeTypeInfos<matchFunc, T_S>::FeatureType;
+	using T_TF = typename MatchingFuncComputeTypeInfos<matchFunc, T_T>::FeatureType;
 
-		for(int i = 0; i < _computed.flatLenght(); i++) {
-			(&_computed.atUnchecked(0,0,0))[i] = false;
-		}
+	static constexpr int nDim = SearchSpaceType::nDim;
+	static constexpr int nSearchDim = SearchSpaceType::nDimsOfType(SearchSpaceBase::Search);
+	static constexpr int featureDim = SearchSpaceType::featuresDim();
+	static constexpr int nCostVolDim = nDim + nSearchDim - 1;
 
-	}
+	static_assert (featureDim >= 0 and featureDim < nDim, "Invalid search space");
 
-	inline T_CV costValue(int i, int j, int d) const {
-
-		if (_computed.valueUnchecked(i,j,d)) {
-			return _cv.valueUnchecked(i,j,d);
-		}
-
-		constexpr int dirSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
-
-		if (d < 0 or d >= _cv.shape()[2]) {
-			return defaultCvValForMatchFunc<matchFunc>();
-		}
-
-		if (j+dirSign*d >= _feature_volumes.target().shape()[1] or j+dirSign*d < 0) {
-
-			_cv.atUnchecked(i,j,d) = defaultCvValForMatchFunc<matchFunc>();
-			_computed.atUnchecked(i,j,d) = true;
-
-		} else {
-
-			auto fSource = const_cast<Multidim::Array<T_S,3>&>(_feature_volumes.source()).subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
-			auto fTarget = const_cast<Multidim::Array<T_T,3>&>(_feature_volumes.target()).subView(Multidim::DimIndex(i), Multidim::DimIndex(j+dirSign*d), Multidim::DimSlice());
-
-			T_CV val = MatchingFunctionTraits<matchFunc>::template featureComparison<T_S, T_T, T_CV>(fSource, fTarget);
-
-			_cv.atUnchecked(i,j,d) = val;
-			_computed.atUnchecked(i,j,d) = true;
-		}
-
-		return _cv.valueUnchecked(i,j,d);
-	}
-
-private:
-
-	condImgRef<T_L, T_R, dDir, 3> _feature_volumes;
-
-	mutable Multidim::Array<T_CV,3> _cv;
-	mutable Multidim::Array<bool,3> _computed;
-
-};
-
-template<matchingFunctions matchFunc, class T_S, class T_T, class T_CV, int searchSpaceDims>
-class OnDemandCostVolume {
-	static_assert (searchSpaceDims == 1 or searchSpaceDims == 2, "Cannot search in more than 2 dimensions yet");
-};
-
-template<matchingFunctions matchFunc, class T_S, class T_T, class T_CV>
-class OnDemandCostVolume<matchFunc, T_S, T_T, T_CV, 1> {
-
-public:
-
-	explicit OnDemandCostVolume(Multidim::Array<T_S, 3> const& source, Multidim::Array<T_T, 3> const& target, searchOffset<1> searchRange):
-		_searchRange(searchRange),
+	explicit GenericOnDemandCostVolume(Multidim::Array<T_S, nDim, constnessS> const& source,
+									   Multidim::Array<T_T, nDim, constnessT> const& target,
+									   SearchSpaceType const& searchSpace) :
 		_source(source),
 		_target(target),
-		_cv(_source.shape()[0],_source.shape()[1], searchRange.dimRange<0>()),
-		_computed(_source.shape()[0], _source.shape()[1], searchRange.dimRange<0>())
+		_search_space(searchSpace)
 	{
 
-		for(int i = 0; i < _computed.flatLenght(); i++) {
-			(&_computed.atUnchecked(0,0,0))[i] = false;
+		if (MatchingFunctionTraits<matchFunc>::Normalized or MatchingFunctionTraits<matchFunc>::ZeroMean) {
+
+			_source_processed = getFeatureVolumeForMatchFunc<matchFunc, T_S, Multidim::NonConstView, T_SF>(source);
+			_target_processed = getFeatureVolumeForMatchFunc<matchFunc, T_T, Multidim::NonConstView, T_TF>(target);
+
 		}
+
+		std::array<Multidim::array_size_t, nCostVolDim> cvShape{};
+
+		for (int i = 0, s = 0; i < nDim; i++) {
+			int d = (i >= featureDim) ? i-1 : i;
+
+			if (_search_space.getDimType(i) == SearchSpaceBase::Search) {
+
+				_searchDims[s] = i;
+				s++;
+			}
+
+			if (_search_space.getDimType(i) != SearchSpaceBase::Feature) {
+				cvShape[d] = source.shape()[i];
+			}
+
+		}
+
+		for (int i = 0; i < nSearchDim; i++) {
+
+			int range = _search_space.dimRange(_searchDims[i]);
+
+			cvShape[nDim-1+i] = range;
+		}
+
+		_cost_volume = Multidim::Array<T_CV, nCostVolDim>(cvShape);
+		_computed = Multidim::Array<bool, nCostVolDim>(cvShape);
+
+		int l = _computed.flatLenght();
+		std::fill(&_computed.atUnchecked(0), &_computed.atUnchecked(0)+l, false);
 	}
 
-	inline T_CV costValue(int i, int j, std::array<int, 1> d) const {
-		return costValue(i, j, d[0]);
+	inline auto shape() const {
+		return _cost_volume.shape();
 	}
 
-	inline T_CV costValue(int i, int j, int d) const {
+	inline std::optional<T_CV> costValue(std::array<int, nDim-1> pos, std::array<int, nSearchDim> disp) const {
 
-		int d_id = _searchRange.disp2idx<0>(d);
+		constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
-		if (_computed.valueUnchecked(i,j,d_id)) {
-			return _cv.valueUnchecked(i,j,d_id);
+		std::array<int, nDim-1> sourcePos = pos;
+		std::array<int, nDim-1> targetPos = pos;
+
+		std::array<Multidim::array_size_t, nCostVolDim> cvIndex{};
+
+		for(int i = 0; i < nDim-1; i++) {
+			cvIndex[i] = pos[i];
 		}
 
-		if (!_searchRange.valueInRange<0>(d)) {
-			return defaultCvValForMatchFunc<matchFunc, T_CV>();
+		for (int i = 0; i < nSearchDim; i++) {
+
+			cvIndex[nDim+i-1] = _search_space.disp2idx(_searchDims[i], disp[i]);
 		}
 
-		if (j+d >= _target.shape()[1] or j+d < 0) {
+		for (int i = 0; i < nCostVolDim; i++) {
 
-			_cv.atUnchecked(i,j,d_id) = defaultCvValForMatchFunc<matchFunc, T_CV>();
-			_computed.atUnchecked(i,j,d_id) = true;
+			if (cvIndex[i] < 0) {
+				return std::nullopt;
+			}
+
+			if (cvIndex[i] >= _cost_volume.shape()[i]) {
+				return std::nullopt;
+			}
+		}
+
+		if (_computed.template at<Nc>(cvIndex)) {
+			return _cost_volume.template at<Nc>(cvIndex);
+		}
+
+		for (int i = 0, s = 0; i < nDim; i++) {
+
+			int d = (i >= featureDim) ? i-1 : i;
+
+			if (_search_space.getDimType(i) == SearchSpaceBase::Search) {
+
+				if (disp[s] < _search_space.getDimMinSearchRange(i)) {
+					return std::nullopt;
+				}
+
+				if (disp[s] > _search_space.getDimMaxSearchRange(i)) {
+					return std::nullopt;
+				}
+
+				targetPos[d] += disp[s];
+
+				if (targetPos[d] < 0 or targetPos[d] >= _target.shape()[i]) {
+					return std::nullopt;
+				}
+				s++;
+			}
+		}
+
+		T_CV cost;
+		if (MatchingFunctionTraits<matchFunc>::Normalized or MatchingFunctionTraits<matchFunc>::ZeroMean) {
+
+			Multidim::Array<T_SF,1,Multidim::ConstView> source_features = _source_processed.indexDimView(featureDim, sourcePos);
+			Multidim::Array<T_TF,1,Multidim::ConstView> target_features = _target_processed.indexDimView(featureDim, targetPos);
+
+			cost = MatchingFunctionTraits<matchFunc>::template featureComparison<T_SF, T_TF, T_CV>(source_features, target_features);
 
 		} else {
 
-			auto fSource = const_cast<Multidim::Array<T_S,3>&>(_source).subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
-			auto fTarget = const_cast<Multidim::Array<T_T,3>&>(_target).subView(Multidim::DimIndex(i), Multidim::DimIndex(j+d), Multidim::DimSlice());
+			Multidim::Array<T_S,1,Multidim::ConstView> source_features = _source.indexDimView(featureDim, sourcePos);
+			Multidim::Array<T_T,1,Multidim::ConstView> target_features = _target.indexDimView(featureDim, targetPos);
 
-			T_CV val = MatchingFunctionTraits<matchFunc>::template featureComparison<T_S, T_T, T_CV>(fSource, fTarget);
-
-			_cv.atUnchecked(i,j,d_id) = val;
-			_computed.atUnchecked(i,j,d_id) = true;
+			cost = MatchingFunctionTraits<matchFunc>::template featureComparison<T_S, T_T, T_CV>(source_features, target_features);
 		}
 
-		return _cv.valueUnchecked(i,j,d_id);
+		_computed.template at<Nc>(cvIndex) = true;
+		_cost_volume.template at<Nc>(cvIndex) = cost;
+
+		return cost;
 	}
 
-	auto shape() const {
-		return _cv.shape();
+	inline SearchSpace<sizeof... (Ds)> const& searchSpace() const {
+		return _search_space;
 	}
 
-	searchOffset<1> const& searchRange() const {
-		return _searchRange;
-	}
+protected:
 
-	Multidim::Array<T_S, 3> const& source() const {
-		return _source;
-	}
+	std::array<Multidim::array_size_t, nSearchDim> _searchDims;
 
-	Multidim::Array<T_S, 3> const& target() const {
-		return _target;
-	}
+	Multidim::Array<T_S, nDim, constnessS> const& _source;
+	Multidim::Array<T_S, nDim, constnessT> const& _target;
 
-private:
+	Multidim::Array<T_SF, nDim> _source_processed;
+	Multidim::Array<T_TF, nDim> _target_processed;
 
-	searchOffset<1> _searchRange;
+	mutable Multidim::Array<T_CV, nCostVolDim> _cost_volume;
+	mutable Multidim::Array<bool, nCostVolDim> _computed;
 
-	Multidim::Array<T_S, 3> const& _source;
-	Multidim::Array<T_T, 3> const& _target;
-
-	mutable Multidim::Array<T_CV,3> _cv;
-	mutable Multidim::Array<bool,3> _computed;
-
+	SearchSpaceType _search_space;
 };
 
-template<matchingFunctions matchFunc, class T_S, class T_T, class T_CV>
-class OnDemandCostVolume<matchFunc, T_S, T_T, T_CV, 2> {
+template<matchingFunctions matchFunc, class T_CV, class T_S, class T_T,
+		 Multidim::ArrayDataAccessConstness constnessS,
+		 Multidim::ArrayDataAccessConstness constnessT>
+using OnDemandStereoCostVolume =
+GenericOnDemandCostVolume<matchFunc, T_CV, T_S, T_T,
+constnessS, constnessT,
+SearchSpaceBase::IgnoredDim, SearchSpaceBase::SearchDim, SearchSpaceBase::FeatureDim>;
 
-public:
-
-	explicit OnDemandCostVolume(Multidim::Array<T_S, 3> const& source, Multidim::Array<T_T, 3> const& target, searchOffset<1> searchRange):
-		_searchRange(searchRange),
-		_source(source),
-		_target(target),
-		_cv(_source.shape()[0],_source.shape()[1], searchRange.dimRange<0>(), searchRange.dimRange<1>()),
-		_computed(_source.shape()[0], _source.shape()[1], searchRange.dimRange<0>(), searchRange.dimRange<1>())
-	{
-
-		for(int i = 0; i < _computed.flatLenght(); i++) {
-			(&_computed.atUnchecked(0,0,0))[i] = false;
-		}
-	}
-
-	inline T_CV costValue(int i, int j, std::array<int, 2> d) const {
-		return costValue(i, j, d[0], d[1]);
-	}
-
-	inline T_CV costValue(int i, int j, int d1, int d2) const {
-
-		int d1_id = _searchRange.disp2idx<0>(d1);
-		int d2_id = _searchRange.disp2idx<0>(d2);
-
-		if (_computed.valueUnchecked(i,j,d1_id, d2_id)) {
-			return _cv.valueUnchecked(i,j,d1_id,d2_id);
-		}
-
-		if (!_searchRange.valueInRange<0>(d1)) {
-			return defaultCvValForMatchFunc<matchFunc>();
-		}
-
-		if (!_searchRange.valueInRange<1>(d2)) {
-			return defaultCvValForMatchFunc<matchFunc>();
-		}
-
-		if (i+d1 >= _target.shape()[0] or i+d1 < 0 or j+d2 >= _target.shape()[1] or j+d2 < 0) {
-
-			_cv.atUnchecked(i,j,d1_id,d2_id) = defaultCvValForMatchFunc<matchFunc>();
-			_computed.atUnchecked(i,j,d1_id,d2_id) = true;
-
-		} else {
-
-			auto fSource = const_cast<Multidim::Array<T_S,3>&>(_source).subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
-			auto fTarget = const_cast<Multidim::Array<T_T,3>&>(_target).subView(Multidim::DimIndex(i+d1), Multidim::DimIndex(j+d2), Multidim::DimSlice());
-
-			T_CV val = MatchingFunctionTraits<matchFunc>::template featureComparison<T_S, T_T, T_CV>(fSource, fTarget);
-
-			_cv.atUnchecked(i,j,d1_id,d2_id) = val;
-			_computed.atUnchecked(i,j,d1_id,d2_id) = true;
-		}
-
-		return _cv.valueUnchecked(i,j,d1_id,d2_id);
-	}
-
-	auto shape() const {
-		return _cv.shape();
-	}
-
-	searchOffset<1> const& searchRange() const {
-		return _searchRange;
-	}
-
-	Multidim::Array<T_S, 3> const& source() const {
-		return _source;
-	}
-
-	Multidim::Array<T_S, 3> const& target() const {
-		return _target;
-	}
-
-private:
-
-	searchOffset<1> _searchRange;
-
-	Multidim::Array<T_S, 3> const& _source;
-	Multidim::Array<T_T, 3> const& _target;
-
-	mutable Multidim::Array<T_CV,4> _cv;
-	mutable Multidim::Array<bool,4> _computed;
-
-};
+template<matchingFunctions matchFunc, class T_CV, class T_S, class T_T,
+		 Multidim::ArrayDataAccessConstness constnessS,
+		 Multidim::ArrayDataAccessConstness constnessT>
+using OnDemandImageFlowVolume =
+GenericOnDemandCostVolume<matchFunc, T_CV, T_S, T_T,
+constnessS, constnessT,
+SearchSpaceBase::SearchDim, SearchSpaceBase::SearchDim, SearchSpaceBase::FeatureDim>;
 
 } //namespace Correlation
 } //namespace StereoVision
