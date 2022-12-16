@@ -26,8 +26,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace StereoVision {
 namespace Correlation {
 
-template<typename T_I>
-Multidim::Array<census_data_t, 3> censusFeatures(Multidim::Array<T_I, 3> const& baseFeatures) {
+template<typename T_I, Multidim::ArrayDataAccessConstness C>
+Multidim::Array<census_data_t, 3> censusFeatures(Multidim::Array<T_I, 3, C> const& baseFeatures) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 

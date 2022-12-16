@@ -48,6 +48,237 @@ typedef int32_t disp_t;
 static_assert (std::is_integral<disp_t>::value, "The typedef for disp_t should be an integer type !");
 static_assert (std::is_signed<disp_t>::value, "The typedef for disp_t should be a signed integer !");
 
+class SearchSpaceBase {
+public:
+    enum DimType {
+        Feature,
+        Search,
+        Ignored
+    };
+
+protected:
+
+	class DimInfo {
+	public:
+    };
+
+public:
+	class FeatureDim : public DimInfo {
+	public:
+		inline constexpr static DimType getDimType() {
+			return Feature;
+		}
+
+        FeatureDim () {
+
+        }
+        FeatureDim (int min, int max) {
+            (void) min;
+            (void) max;
+            //do nothing, but is usefull to build a feature dim just like a search dim.
+        }
+    };
+
+	class SearchDim : public DimInfo {
+    public:
+		inline constexpr static DimType getDimType() {
+			return Search;
+		}
+
+        SearchDim(int min, int max) :
+            rangeMin(min),
+            rangeMax(max)
+        {
+
+        }
+
+        int rangeMin;
+        int rangeMax;
+    };
+
+	class IgnoredDim : public DimInfo {
+	public:
+		inline constexpr static DimType getDimType() {
+			return Ignored;
+		}
+
+        IgnoredDim () {
+
+        }
+        IgnoredDim (int min, int max) {
+            (void) min;
+            (void) max;
+            //do nothing, but is usefull to build an ignored dim just like a search dim.
+        }
+    };
+};
+
+template <int nDim>
+/*!
+ * \brief The searchSpace class define a generic search space for cross correlation
+ *
+ * some dimensions can be searched along, some are feature dimension, some are just ignored.
+ */
+class SearchSpace : public SearchSpaceBase {
+
+public:
+
+    inline bool isValid() const {
+        return _isValid;
+    }
+
+    inline DimType getDimType(int dim) const {
+        return _dimType[dim];
+    }
+
+	inline  int getDimMinSearchRange(int dim) const {
+        return _search_range_min[dim];
+    }
+
+	inline  int getDimMaxSearchRange(int dim) const {
+        return _search_range_max[dim];
+    }
+
+    template<int dim>
+	inline  int getDimMinSearchRange() const {
+        return _search_range_min[dim];
+    }
+
+    template<int dim>
+	inline  int getDimMaxSearchRange() const {
+        return _search_range_max[dim];
+    }
+
+
+    template<int dim>
+    int dimRange() const {
+            return _search_range_max[dim] - _search_range_min[dim] + 1;
+    }
+
+    int dimRange(int dim) const {
+            return _search_range_max[dim] - _search_range_min[dim] + 1;
+    }
+
+    template<int dim>
+    inline bool valueInRange(int val) const {
+            return val >= _search_range_min[dim] and val <= _search_range_max[dim];
+    }
+
+    inline bool valueInRange(int val, int dim) const {
+            return val >= _search_range_min[dim] and val <= _search_range_max[dim];
+    }
+
+    template<int dim>
+    inline int setValueInRange(int val) const {
+            return std::abs(val%dimRange<dim>())+getDimMinSearchRange<dim>();
+    }
+
+    inline int setValueInRange(int val, int dim) const {
+            return std::abs(val%dimRange(dim))+getDimMinSearchRange(dim);
+    }
+
+    template<int dim>
+    int idx2disp(int idx) const{
+            return _search_range_min[dim] + idx;
+    }
+
+    int idx2disp(int dim, int idx) const{
+            return _search_range_min[dim] + idx;
+    }
+
+    template<int dim>
+    int disp2idx(int disp) const{
+            return disp - _search_range_min[dim];
+    }
+
+    int disp2idx(int dim, int disp) const{
+            return disp - _search_range_min[dim];
+    }
+
+protected:
+
+    bool _isValid;
+    std::array<DimType, nDim> _dimType;
+    std::array<int, nDim> _search_range_min;
+    std::array<int, nDim> _search_range_max;
+
+};
+
+template<typename... Ds>
+class FixedSearchSpace : public SearchSpace<sizeof... (Ds)> {
+public:
+    constexpr static int nDim = sizeof... (Ds);
+
+	FixedSearchSpace()
+    {
+		SearchSpace<nDim>::_isValid = false;
+    }
+
+	FixedSearchSpace(Ds... dimsInfos, void* = nullptr)
+    {
+
+        std::array<SearchSpaceBase::DimType, nDim> dim_types = {Ds::getDimType()...};
+		std::array<SearchSpaceBase::DimInfo*, nDim> dim_infos = {(&dimsInfos)...};
+
+		SearchSpace<nDim>::_dimType = dim_types;
+
+		SearchSpace<nDim>::_isValid = true;
+
+        for (int i = 0; i < nDim; i++) {
+            switch (dim_types[i]) {
+            case SearchSpaceBase::Search:
+				SearchSpaceBase::SearchDim* info = static_cast<SearchSpaceBase::SearchDim*>(dim_infos[i]);
+                SearchSpace<nDim>::_search_range_min[i] = info->rangeMin;
+                SearchSpace<nDim>::_search_range_max[i] = info->rangeMax;
+
+                if (info->rangeMin > info->rangeMax) {
+                    SearchSpace<nDim>::_search_range_min[i] = info->rangeMax;
+                    SearchSpace<nDim>::_search_range_max[i] = info->rangeMin;
+                }
+            }
+        }
+    }
+
+    template<int dim>
+    static constexpr SearchSpaceBase::DimType dimDimType() {
+        std::array<SearchSpaceBase::DimType, nDim> dim_infos = {Ds::getDimType()...};
+        return dim_infos[dim];
+    }
+
+
+    static constexpr int nDimsOfType(SearchSpaceBase::DimType type) {
+        std::array<int, nDim> dim_infos = {((Ds::getDimType() == type) ? 1 : 0)...};
+
+        int sum = 0;
+
+        for (int i = 0; i < nDim; i++) {
+            sum += dim_infos[i];
+        }
+        return sum;
+    }
+
+    static_assert (nDimsOfType(SearchSpaceBase::Feature) == 1, "One, and only one feature dimension is required");
+
+
+    static constexpr int featuresDim() {
+        std::array<bool, nDim> dim_infos = {(Ds::getDimType() == SearchSpaceBase::Feature)...};
+
+        for (int i = 0; i < nDim; i++) {
+            if (dim_infos[i]) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+protected:
+
+    template<typename T>
+    static constexpr SearchSpaceBase::DimType extractDimInfoType(T const& dimInfo) {
+        return dimInfo.getDimType();
+    }
+};
+
 template<int nDim>
 class searchOffset{
 public:
@@ -839,8 +1070,8 @@ Multidim::Array<float, 2> sigmaFilter(uint8_t h_radius,
 	return sigma;
 }
 
-template<class T_I, class T_O = float>
-inline Multidim::Array<T_O, 2> channelsMean (Multidim::Array<T_I, 3> const& in_data) {
+template<class T_I, class T_O = float, Multidim::ArrayDataAccessConstness C>
+inline Multidim::Array<T_O, 2> channelsMean (Multidim::Array<T_I, 3, C> const& in_data) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -878,7 +1109,35 @@ inline Multidim::Array<T_O, 2> channelsMean (Multidim::Array<T_I, 3> const& in_d
 }
 
 template<>
-inline Multidim::Array<uint8_t, 2> channelsMean<uint8_t, uint8_t> (Multidim::Array<uint8_t, 3> const& in_data) {
+inline Multidim::Array<uint8_t, 2> channelsMean<uint8_t, uint8_t> (Multidim::Array<uint8_t, 3, Multidim::NonConstView> const& in_data) {
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	int h = in_data.shape()[0];
+	int w = in_data.shape()[1];
+	int f = in_data.shape()[2];
+
+	Multidim::Array<uint8_t, 2> mean(h, w);
+
+	#pragma omp parallel for
+	for(int i = 0; i < h; i++) {
+		#pragma omp simd
+		for(int j = 0; j < w; j++) {
+
+			uint16_t acc = 0;
+
+			for (int c = 0; c < f; c++) {
+				acc += in_data.value<Nc>(i,j,c);
+			}
+
+			mean.at<Nc>(i,j) = acc/f;
+		}
+	}
+
+	return mean;
+}
+
+template<>
+inline Multidim::Array<uint8_t, 2> channelsMean<uint8_t, uint8_t> (Multidim::Array<uint8_t, 3, Multidim::ConstView> const& in_data) {
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
 	int h = in_data.shape()[0];

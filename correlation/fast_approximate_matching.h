@@ -89,8 +89,8 @@ Multidim::Array<disp_t, 3> fastmatch(Multidim::Array<T_FV, 3> const& feature_vol
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
-	Multidim::Array<T_FVE, 3> feature_vol_s = getFeatureVolumeForMatchFunc<matchFunc>(feature_vol_s_p);
-	Multidim::Array<T_FVE, 3> feature_vol_t = getFeatureVolumeForMatchFunc<matchFunc>(feature_vol_t_p);
+	Multidim::Array<T_FVE, 3> feature_vol_s = getFeatureVolumeForMatchFunc<matchFunc, T_FV, Multidim::NonConstView, T_FVE>(feature_vol_s_p);
+	Multidim::Array<T_FVE, 3> feature_vol_t = getFeatureVolumeForMatchFunc<matchFunc, T_FV, Multidim::NonConstView, T_FVE>(feature_vol_t_p);
 
 	static_assert (searchSpaceDim == 1 or searchSpaceDim == 2, "patchMatch function can only be used to search in 1 or two dimension !");
 

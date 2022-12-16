@@ -558,10 +558,8 @@ inline std::pair<T_Disp const&,T_CV const&> optimalDispAndCost(T_Disp const& cur
 template<matchingFunctions func, typename ImType>
 struct MatchingFuncComputeTypeInfos {
 
-	typedef float FeatureType;
+	typedef TypesManipulations::accumulation_extended_t<ImType> FeatureType;
 
-	static constexpr bool SupportFloatCV = true;
-	static constexpr bool SupportIntCV = false;
 };
 
 template<matchingFunctions func>
@@ -572,8 +570,6 @@ struct MatchingFuncComputeTypeInfos<func, uint8_t> {
 						int16_t,
 						typename std::conditional<MatchingFunctionTraits<func>::ZeroMean, int16_t, uint8_t>::type>::type FeatureType;
 
-	static constexpr bool SupportFloatCV = true;
-	static constexpr bool SupportIntCV = true;
 };
 
 template<typename ImType>
@@ -581,8 +577,6 @@ struct MatchingFuncComputeTypeInfos<matchingFunctions::HAMMING, ImType> {
 
 	typedef uint32_t FeatureType;
 
-	static constexpr bool SupportFloatCV = false;
-	static constexpr bool SupportIntCV = true;
 };
 
 template<>
@@ -590,8 +584,6 @@ struct MatchingFuncComputeTypeInfos<matchingFunctions::HAMMING, uint8_t> {
 
 	typedef uint32_t FeatureType;
 
-	static constexpr bool SupportFloatCV = false;
-	static constexpr bool SupportIntCV = true;
 };
 
 typedef typename MatchingFuncComputeTypeInfos<matchingFunctions::HAMMING, uint8_t>::FeatureType census_data_t;

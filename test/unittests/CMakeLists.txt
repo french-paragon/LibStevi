@@ -99,4 +99,9 @@ add_executable(testConnectedComponents testConnectedComponents.cpp)
 target_link_libraries(testConnectedComponents ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestConnectedComponents testConnectedComponents)
 
+add_executable(testOnDemandCostVolume testOnDemandCostVolume.cpp)
+target_link_libraries(testOnDemandCostVolume ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestOnDemandCostVolume testOnDemandCostVolume)
+
+
 

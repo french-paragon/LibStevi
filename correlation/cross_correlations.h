@@ -31,9 +31,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace StereoVision {
 namespace Correlation {
 
-template<class T_I, class T_M, class T_O = float>
-Multidim::Array<T_O, 2> channelsZeroMeanNorm (Multidim::Array<T_I, 3> const& in_data,
-									   Multidim::Array<T_M, 2> const& mean) {
+template<class T_I, class T_M, class T_O = float, Multidim::ArrayDataAccessConstness C>
+Multidim::Array<T_O, 2> channelsZeroMeanNorm (Multidim::Array<T_I, 3, C> const& in_data,
+									   Multidim::Array<T_M, 2, C> const& mean) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -76,8 +76,8 @@ Multidim::Array<T_O, 2> channelsZeroMeanNorm (Multidim::Array<T_I, 3> const& in_
 	return norm;
 }
 
-template<class T_I, class T_M = float, class T_O = float>
-Multidim::Array<T_O, 2> channelsZeroMeanNorm (Multidim::Array<T_I, 3> const& in_data) {
+template<class T_I, class T_M = float, class T_O = float, Multidim::ArrayDataAccessConstness C>
+Multidim::Array<T_O, 2> channelsZeroMeanNorm (Multidim::Array<T_I, 3, C> const& in_data) {
 
 	Multidim::Array<T_M, 2> mean = channelsMean<T_I, T_M>(in_data);
 
@@ -86,8 +86,8 @@ Multidim::Array<T_O, 2> channelsZeroMeanNorm (Multidim::Array<T_I, 3> const& in_
 }
 
 
-template<class T_I, class T_O = float>
-Multidim::Array<T_O, 2> channelsNorm (Multidim::Array<T_I, 3> const& in_data) {
+template<class T_I, class T_O = float, Multidim::ArrayDataAccessConstness C>
+Multidim::Array<T_O, 2> channelsNorm (Multidim::Array<T_I, 3, C> const& in_data) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -254,10 +254,10 @@ inline Multidim::Array<TCV, 4> aggregateCost(Multidim::Array<T_L, 3> const& feat
 
 }
 
-template<class T_I, class T_M, class T_N, class T_O = float>
-inline Multidim::Array<T_O, 3> zeromeanNormalizedFeatureVolume(Multidim::Array<T_I, 3> const& feature_vol,
-															   Multidim::Array<T_M, 2> const& mean,
-															   Multidim::Array<T_N, 2> const& norm) {
+template<class T_I, class T_M, class T_N, class T_O = float, Multidim::ArrayDataAccessConstness C>
+inline Multidim::Array<T_O, 3> zeromeanNormalizedFeatureVolume(Multidim::Array<T_I, 3, C> const& feature_vol,
+															   Multidim::Array<T_M, 2, C> const& mean,
+															   Multidim::Array<T_N, 2, C> const& norm) {
 	using T_E = TypesManipulations::accumulation_extended_t<T_I>;
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -284,7 +284,7 @@ inline Multidim::Array<T_O, 3> zeromeanNormalizedFeatureVolume(Multidim::Array<T
 					constexpr int diff = static_cast<int>(sizeof (T_E)) - static_cast<int>(sizeof (T_O));
 
 					if (diff > 0) {
-						v /= (1 << diff*8); //fit back into T_O
+						v /= (uint64_t(1) << diff*8); //fit back into T_O
 					}
 
 					val = static_cast<T_O>(v);
@@ -302,9 +302,9 @@ inline Multidim::Array<T_O, 3> zeromeanNormalizedFeatureVolume(Multidim::Array<T
 
 }
 
-template<class T_I, class T_N, class T_O = float>
-inline Multidim::Array<T_O, 3> normalizedFeatureVolume(Multidim::Array<T_I, 3> const& feature_vol,
-													   Multidim::Array<T_N, 2> const& norm) {
+template<class T_I, class T_N, class T_O = float, Multidim::ArrayDataAccessConstness C>
+inline Multidim::Array<T_O, 3> normalizedFeatureVolume(Multidim::Array<T_I, 3, C> const& feature_vol,
+													   Multidim::Array<T_N, 2, C> const& norm) {
 
 	using T_E = TypesManipulations::accumulation_extended_t<T_I>;
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
@@ -332,7 +332,7 @@ inline Multidim::Array<T_O, 3> normalizedFeatureVolume(Multidim::Array<T_I, 3> c
 					constexpr int diff = static_cast<int>(sizeof (T_E)) - static_cast<int>(sizeof (T_O));
 
 					if (diff > 0) {
-						v /= (2 << diff*8); //fit back into T_O
+						v /= (uint64_t(2) << diff*8); //fit back into T_O
 					}
 
 					val = static_cast<T_O>(v);
@@ -350,9 +350,9 @@ inline Multidim::Array<T_O, 3> normalizedFeatureVolume(Multidim::Array<T_I, 3> c
 
 }
 
-template<class T_I, class T_M, class T_O = float>
-inline Multidim::Array<T_O, 3> zeromeanFeatureVolume(Multidim::Array<T_I, 3> const& feature_vol,
-													   Multidim::Array<T_M, 2> const& mean) {
+template<class T_I, class T_M, class T_O = float, Multidim::ArrayDataAccessConstness C>
+inline Multidim::Array<T_O, 3> zeromeanFeatureVolume(Multidim::Array<T_I, 3, C> const& feature_vol,
+													   Multidim::Array<T_M, 2, C> const& mean) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -376,14 +376,12 @@ inline Multidim::Array<T_O, 3> zeromeanFeatureVolume(Multidim::Array<T_I, 3> con
 
 }
 
-template<matchingFunctions matchFunc, class T_I>
-Multidim::Array<FeatureTypeForMatchFunc<matchFunc, T_I>,3> getFeatureVolumeForMatchFunc(Multidim::Array<T_I, 3> const& feature_vol) {
+template<matchingFunctions matchFunc, class T_I, Multidim::ArrayDataAccessConstness C, class FType = typename MatchingFuncComputeTypeInfos<matchFunc,T_I>::FeatureType>
+Multidim::Array<FType,3> getFeatureVolumeForMatchFunc(Multidim::Array<T_I, 3, C> const& feature_vol) {
 
 	using T_E = typename TypesManipulations::accumulation_extended_t<T_I>;
 
 	constexpr bool CensusFeatures = MatchingFunctionTraits<matchFunc>::isCensusBased;
-
-	using FType = FeatureTypeForMatchFunc<matchFunc, T_I>;
 
 	if (MatchingFunctionTraits<matchFunc>::ZeroMean and MatchingFunctionTraits<matchFunc>::Normalized) {
 
@@ -431,8 +429,8 @@ featureVolume2CostVolume(Multidim::Array<T_L, 3> const& feature_vol_l,
 						 Multidim::Array<T_R, 3> const& feature_vol_r,
 						 SearchRangeType searchRange) {
 
-	using FTypeL = FeatureTypeForMatchFunc<matchFunc, T_L>;
-	using FTypeR = FeatureTypeForMatchFunc<matchFunc, T_R>;
+	using FTypeL = typename MatchingFuncComputeTypeInfos<matchFunc,T_L>::FeatureType;
+	using FTypeR = typename MatchingFuncComputeTypeInfos<matchFunc,T_R>::FeatureType;
 
 	return aggregateCost<matchFunc, FTypeL, FTypeR, dDir, TCV>
 			(getFeatureVolumeForMatchFunc<matchFunc>(feature_vol_l),
