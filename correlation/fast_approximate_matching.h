@@ -26,15 +26,23 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace StereoVision {
 namespace Correlation {
 
-template<matchingFunctions matchFunc, class T_FV>
+template<matchingFunctions matchFunc, class T_FV, int searchSpaceDim>
 struct FastMatchTraits {
 	typedef typename std::conditional<std::is_integral_v<T_FV>, int32_t, float>::type TCV;
 	typedef typename MatchingFuncComputeTypeInfos<matchFunc, T_FV>::FeatureType T_FVE;
+
+	template<Multidim::ArrayDataAccessConstness constnessS,
+			 Multidim::ArrayDataAccessConstness constnessT>
+	using FastMatchOnDemandCV = std::conditional_t<searchSpaceDim == 1,
+	OnDemandStereoCostVolume<matchFunc, TCV, T_FV, T_FV, constnessS, constnessT>,
+	OnDemandImageFlowVolume<matchFunc, TCV, T_FV, T_FV, constnessS, constnessT>> ;
 };
 
-template<matchingFunctions matchFunc, int searchSpaceDim, class T_FV, class T_CV>
+template<matchingFunctions matchFunc, int searchSpaceDim, class T_FV, class T_CV,
+		 Multidim::ArrayDataAccessConstness constnessS,
+		 Multidim::ArrayDataAccessConstness constnessT>
 inline std::array<disp_t, searchSpaceDim> fullDispAtIdx(Multidim::Array<disp_t, 3> & disp,
-														OnDemandCostVolume<matchFunc, T_FV, T_FV, T_CV, searchSpaceDim> const& cost,
+														typename FastMatchTraits<matchFunc, T_FV, searchSpaceDim>::template FastMatchOnDemandCV<constnessS, constnessT> const& cost,
 														searchOffset<searchSpaceDim> searchOffset,
 														int i,
 														int j) {
@@ -49,7 +57,13 @@ inline std::array<disp_t, searchSpaceDim> fullDispAtIdx(Multidim::Array<disp_t, 
 
 		for (disp_t d = searchOffset.template lowerOffset<0>(); d < searchOffset.template upperOffset<0>(); d++) {
 			dispCoord[0] = d;
-			T_CV c = cost.costValue(i,j, dispCoord);
+			auto opt_c = cost.costValue({i,j}, dispCoord);
+
+			if (!opt_c.has_value()) {
+				continue;
+			}
+
+			T_CV c = opt_c.value();
 
 			std::tie(currentD, currentCost) = optimalDispAndCost<matchFunc>(currentD, currentCost, d, c);
 		}
@@ -67,7 +81,13 @@ inline std::array<disp_t, searchSpaceDim> fullDispAtIdx(Multidim::Array<disp_t, 
 				dispCoord[0] = d1;
 				dispCoord[1] = d2;
 
-				T_CV c = cost.costValue(i,j, dispCoord);
+				auto opt_c = cost.costValue({i,j}, dispCoord);
+
+				if (!opt_c.has_value()) {
+					continue;
+				}
+
+				T_CV c = opt_c.value();
 
 				std::tie(currentD, currentCost) = optimalDispAndCost<matchFunc>(currentD, currentCost, d, c);
 			}
@@ -79,18 +99,27 @@ inline std::array<disp_t, searchSpaceDim> fullDispAtIdx(Multidim::Array<disp_t, 
 
 }
 
-template<matchingFunctions matchFunc, int searchSpaceDim, class T_FV>
-Multidim::Array<disp_t, 3> fastmatch(Multidim::Array<T_FV, 3> const& feature_vol_s_p,
-									 Multidim::Array<T_FV, 3> const& feature_vol_t_p,
+template<matchingFunctions matchFunc, int searchSpaceDim, class T_FV,
+		 Multidim::ArrayDataAccessConstness constnessS,
+		 Multidim::ArrayDataAccessConstness constnessT>
+Multidim::Array<disp_t, 3> fastmatch(Multidim::Array<T_FV, 3, constnessS> const& feature_vol_s,
+									 Multidim::Array<T_FV, 3, constnessT> const& feature_vol_t,
 									 searchOffset<searchSpaceDim> searchOffset) {
 
-	using TCV = typename FastMatchTraits<matchFunc, T_FV>::TCV;
-	using T_FVE = typename FastMatchTraits<matchFunc, T_FV>::T_FVE;
+	using TCV = typename FastMatchTraits<matchFunc, T_FV, searchSpaceDim>::TCV;
+	using T_FVE = typename FastMatchTraits<matchFunc, T_FV, searchSpaceDim>::T_FVE;
+
+	using CostVolT = typename FastMatchTraits<matchFunc, T_FV, searchSpaceDim>::template FastMatchOnDemandCV<constnessS, constnessT>;
+	using SearchSpaceT = typename CostVolT::SearchSpaceType;
+
+	static_assert (CostVolT::nSearchDim == searchSpaceDim, "Error in cv type");
+
+	constexpr int dim0Idx = 0;
+	constexpr int dim1Idx = (searchSpaceDim == 2) ? 1 : 0;
+
+	using Dim0TypeT = std::conditional_t<searchSpaceDim == 2, SearchSpaceBase::SearchDim, SearchSpaceBase::IgnoredDim>;
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
-
-	Multidim::Array<T_FVE, 3> feature_vol_s = getFeatureVolumeForMatchFunc<matchFunc, T_FV, Multidim::NonConstView, T_FVE>(feature_vol_s_p);
-	Multidim::Array<T_FVE, 3> feature_vol_t = getFeatureVolumeForMatchFunc<matchFunc, T_FV, Multidim::NonConstView, T_FVE>(feature_vol_t_p);
 
 	static_assert (searchSpaceDim == 1 or searchSpaceDim == 2, "patchMatch function can only be used to search in 1 or two dimension !");
 
@@ -106,7 +135,12 @@ Multidim::Array<disp_t, 3> fastmatch(Multidim::Array<T_FV, 3> const& feature_vol
 
 	Multidim::Array<disp_t, 3> disp(feature_vol_s.shape()[0], feature_vol_s.shape()[1], searchSpaceDim);
 
-	OnDemandCostVolume<matchFunc, T_FVE, T_FVE, TCV, searchSpaceDim> cost(feature_vol_s, feature_vol_t, searchOffset);
+
+	SearchSpaceT searchSpace (Dim0TypeT(searchOffset.template lowerOffset<dim0Idx>(), searchOffset.template upperOffset<dim0Idx>()),
+							  SearchSpaceBase::SearchDim(searchOffset.template lowerOffset<dim1Idx>(), searchOffset.template upperOffset<dim1Idx>()),
+							  SearchSpaceBase::FeatureDim());
+
+	CostVolT cost(feature_vol_s, feature_vol_t, searchOffset);
 
 
 	for (int i = 0; i < feature_vol_s.shape()[0]; i++) {
