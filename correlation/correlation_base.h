@@ -840,6 +840,27 @@ Multidim::Array<float, 2> sigmaFilter(uint8_t h_radius,
 }
 
 template<class T_I, class T_O = float>
+inline T_O channelsMean (Multidim::Array<T_I, 1> const& in_data) {
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	int f = in_data.shape()[0];
+
+	T_O mean = 0;
+
+	for (int c = 0; c < f; c++) {
+		mean += static_cast<T_O>(in_data.template value<Nc>(c));
+	}
+
+	float scale = 1./static_cast<float>(f);
+
+	mean *= scale;
+
+	return mean;
+
+}
+
+template<class T_I, class T_O = float>
 inline Multidim::Array<T_O, 2> channelsMean (Multidim::Array<T_I, 3> const& in_data) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
@@ -855,10 +876,10 @@ inline Multidim::Array<T_O, 2> channelsMean (Multidim::Array<T_I, 3> const& in_d
 		#pragma omp simd
 		for(int j = 0; j < w; j++) {
 
-                        mean.template at<Nc>(i,j) = 0;
+			mean.template at<Nc>(i,j) = 0;
 
 			for (int c = 0; c < f; c++) {
-                                mean.template at<Nc>(i,j) += static_cast<T_O>(in_data.template value<Nc>(i,j,c));
+				mean.template at<Nc>(i,j) += static_cast<T_O>(in_data.template value<Nc>(i,j,c));
 			}
 		}
 	}
@@ -872,6 +893,28 @@ inline Multidim::Array<T_O, 2> channelsMean (Multidim::Array<T_I, 3> const& in_d
                         mean.template at<Nc>(i,j) *= scale;
 		}
 	}
+
+	return mean;
+
+}
+
+
+template<>
+inline uint8_t channelsMean<uint8_t, uint8_t> (Multidim::Array<uint8_t, 1> const& in_data) {
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	int f = in_data.shape()[0];
+
+	uint16_t mean = 0;
+
+	for (int c = 0; c < f; c++) {
+		mean += in_data.template value<Nc>(c);
+	}
+
+	float scale = 1./static_cast<float>(f);
+
+	mean *= scale;
 
 	return mean;
 

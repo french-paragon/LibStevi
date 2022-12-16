@@ -26,6 +26,47 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace StereoVision {
 namespace Correlation {
 
+
+template<typename T_I>
+Multidim::Array<census_data_t, 1> censusFeatures(Multidim::Array<T_I, 1> const& baseFeatures) {
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	auto shape = baseFeatures.shape();
+
+	if (shape[0] <= 1) {
+		return Multidim::Array<census_data_t, 1>(); //impossible to compute the census when only a single feature channel is present
+	}
+
+	int size_census_features = (shape[0] - 1)/(sizeof (census_data_t) * 8) + 1;
+
+	Multidim::Array<census_data_t, 1> census(size_census_features);
+
+	T_I ref = baseFeatures.template value<Nc>(0);
+
+	census_data_t d = 0;
+	size_t b = 0;
+	int census_channel = 0;
+
+	for (int c = 1; c < shape[2]; c++) {
+		T_I val = baseFeatures.template value<Nc>(c);
+
+		census_data_t g = (ref > val) ? 1 : 0;
+
+		d |= g << b;
+		b++;
+
+		if (b >= sizeof (census_data_t)*8) {
+			census.at<Nc>(census_channel) = d;
+			census_channel++;
+			d = 0;
+			b = 0;
+		}
+	}
+
+	return census;
+}
+
 template<typename T_I>
 Multidim::Array<census_data_t, 3> censusFeatures(Multidim::Array<T_I, 3> const& baseFeatures) {
 

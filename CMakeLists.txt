@@ -88,6 +88,7 @@ set(LIB_SRC
         correlation/patchmatch.h
         correlation/on_demand_cost_volume.h
         correlation/fast_approximate_matching.h
+		correlation/template_matching.h
         optimization/l0optimization.h
         optimization/l1optimization.h
         optimization/l2optimization.h
