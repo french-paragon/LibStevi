@@ -5,6 +5,9 @@
 #include "cross_correlations.h"
 #include "on_demand_cost_volume.h"
 
+#include <set>
+#include <queue>
+
 namespace StereoVision {
 namespace Correlation {
 
@@ -102,25 +105,55 @@ class DisparityEstimatorWithBackgroundRemoval {
 
 		StereoDispWithBgMask ret(shape[0], shape[1]);
 
+		std::set<std::tuple<int, int>> checkedPixels;
+
 		#pragma omp parallel for
 		for (int i = 0; i < shape[0]; i++) {
 			for (int j = 0; j < shape[1]; j++) {
 
-				disp_t idx_bg = _bg_disp_idx.valueUnchecked(i,j);
-				T_CV cost_bg = _bg_cost_volume.valueUnchecked(i,j,idx_bg);
+				std::queue<std::tuple<int, int>> pixels2check;
 
-				auto opt_fg_cost = on_demand_cv.costValue(i,j,idx_bg);
+				pixels2check.push({i,j});
+				bool first = true;
 
-				if (!opt_fg_cost.has_value()) {
-					ret.disp.atUnchecked(i,j) = _searchOffset.idx2disp<0>(idx_bg);
-					ret.fg_mask.atUnchecked(i,j) = StereoDispWithBgMask::Background;
-					continue;
-				}
+				while (!pixels2check.empty()) {
 
-				T_CV cost_fg = opt_fg_cost.value();
-				disp_t idx_fg = idx_bg;
+					bool is_first = first;
+					first = false;
 
-				if (std::min(cost_bg, cost_fg)/std::max(cost_bg, cost_fg) < _rel_tol) {
+					int ti;
+					int tj;
+
+					std::tie(ti, tj) = pixels2check.front();
+					pixels2check.pop();
+
+					#pragma omp critical
+					{
+						if (checkedPixels.count({ti,tj}) > 0) {
+							continue;
+						}
+
+						checkedPixels.insert({ti,tj});
+					}
+
+					disp_t idx_bg = _bg_disp_idx.valueUnchecked(ti,tj);
+					T_CV cost_bg = _bg_cost_volume.valueUnchecked(ti,tj,idx_bg);
+
+					auto opt_fg_cost = on_demand_cv.costValue(ti,tj,idx_bg);
+
+					if (!opt_fg_cost.has_value()) {
+						ret.disp.atUnchecked(ti,tj) = _searchOffset.idx2disp<0>(idx_bg);
+						ret.fg_mask.atUnchecked(ti,tj) = StereoDispWithBgMask::Background;
+						continue;
+					}
+
+					T_CV cost_fg = opt_fg_cost.value();
+					disp_t idx_fg = idx_bg;
+
+					if (is_first and std::min(cost_bg, cost_fg)/std::max(cost_bg, cost_fg) >= _rel_tol) {
+						continue; //ignore pixels which have the same disp cost as the background, but only in front of a chain.
+					}
+
 					for (int d = 0; d < shape[2]; d++) {
 						auto opt_fg_cost = on_demand_cv.costValue(i,j,d);
 						if (!opt_fg_cost.has_value()) {
@@ -129,15 +162,44 @@ class DisparityEstimatorWithBackgroundRemoval {
 
 						T_CV cost_fg_cand = opt_fg_cost.value();
 						std::tie(idx_fg, cost_fg) = optimalDispAndCost<matchFunc>(idx_fg,
-																   cost_fg,
-																   d,
-																   cost_fg_cand);
+																	   cost_fg,
+																	   d,
+																	   cost_fg_cand);
+
 					}
+
+					if ((std::abs(idx_fg - idx_bg) >= _disp_tol)) {
+						//do not extend the search space if a pixel has been found close to the background
+
+						for (int di : std::array<int, 3>{-1,0,1}) {
+
+							if (ti+di < 0 or ti+di >= shape[0]) {
+								continue;
+							}
+
+							for (int dj : std::array<int, 3>{-1,0,1}) {
+
+								if (di == 0 and dj == 0) {
+									continue;
+								}
+
+								if (tj+dj < 0 or tj+dj >= shape[1]) {
+									continue;
+								}
+
+								#pragma omp critical
+								{
+									if (checkedPixels.count({ti,tj}) == 0) {
+										pixels2check.push({ti+di, tj+dj});
+									}
+								}
+							}
+						}
+					}
+
+					ret.disp.atUnchecked(ti,tj) = _searchOffset.idx2disp<0>(idx_fg);
+					ret.fg_mask.atUnchecked(ti,tj) = (std::abs(idx_fg - idx_bg) >= _disp_tol) ? StereoDispWithBgMask::Foreground : StereoDispWithBgMask::Background;
 				}
-
-				ret.disp.atUnchecked(i,j) = _searchOffset.idx2disp<0>(idx_fg);
-				ret.fg_mask.atUnchecked(i,j) = (std::abs(idx_fg - idx_bg) >= _disp_tol) ? StereoDispWithBgMask::Foreground : StereoDispWithBgMask::Background;
-
 			}
 		}
 
