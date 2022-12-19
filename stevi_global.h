@@ -23,7 +23,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 namespace StereoVision {
 
-typedef Multidim::Array<float, 3> ImageArray;
+typedef Multidim::Array<float, 3, Multidim::NonConstView> ImageArray;
+typedef Multidim::Array<float, 3, Multidim::ConstView> ConstImageArray;
 
 }
 

@@ -21,8 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace StereoVision {
 namespace Interpolation {
 
-Multidim::Array<float, 3> interpolateImage(Multidim::Array<float, 3> const& imInput,
-										   Multidim::Array<float, 3> const& coordinates) {
+ImageArray interpolateImage(ImageArray const& imInput,
+							ImageArray const& coordinates) {
 
 	auto s = imInput.shape();
 
