@@ -26,6 +26,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "./correlation_base.h"
 #include "./matching_costs.h"
 
+#include "../geometry/core.h"
+#include "../geometry/imagecoordinates.h"
+
 #include <functional>
 
 namespace StereoVision {
@@ -63,6 +66,8 @@ private:
 		if (strategy == dispExtractionStartegy::Cost) {
 			return v1 < v2.value();
 		}
+
+		return false;
 	}
 
 public:
@@ -80,6 +85,35 @@ public:
 		T_CV operator()(Index2d pos, JumpType currentJump, JumpType previousJump, int previousCount) {
 
 			(void) pos;
+
+			if (currentJump == NoSkip) {
+				return 0;
+			}
+
+			if (previousCount > 2) {
+				return 0;
+			}
+
+			return (currentJump == previousJump) ? _next_jumps_cost : _first_jump_cost;
+		}
+	private:
+		T_CV _first_jump_cost;
+		T_CV _next_jumps_cost;
+	};
+
+	template<dispExtractionStartegy strategy, class T_G, class T_CV, class T_T = float>
+	class SGMLikeWithImageGuideJumpCostPolicy {
+	public:
+
+		SGMLikeWithImageGuideJumpCostPolicy(T_CV costJumpBase, T_CV costNextJumps) :
+			_first_jump_cost((strategy == dispExtractionStartegy::Cost) ? costJumpBase : -costJumpBase),
+			_next_jumps_cost((strategy == dispExtractionStartegy::Cost) ? costNextJumps : -costNextJumps) {
+
+		}
+
+		T_CV operator()(Index2d pos, JumpType currentJump, JumpType previousJump, int previousCount) {
+
+			(void) pos;
 			(void) previousCount;
 
 			if (currentJump == NoSkip) {
@@ -88,6 +122,10 @@ public:
 			return (currentJump == previousJump) ? _next_jumps_cost : _first_jump_cost;
 		}
 	private:
+
+		Geometry::AffineTransform<T_T>& _refToGuide;
+		Multidim::Array<T_G,3>& _guide;
+
 		T_CV _first_jump_cost;
 		T_CV _next_jumps_cost;
 	};
@@ -114,12 +152,13 @@ public:
 		Multidim::Array<int, 2> jumpTypeCountGrid(searchWidth, imWidth+1);
 		Multidim::Array<Index2d, 2> path(searchWidth, imWidth);
 
+		#pragma omp parallel for
 		for (int i = 0; i < imHeight; i++) { //for each scanline
 
 			for (int d = 0; d < searchWidth; d++) {
-				costGrid.at<Nc>(d,0) = jumpCostPolicy({-1,-1}, SkippedSource, (d == 0) ? NoSkip : SkippedSource, std::max(0,d-1));
-				jumpTypeGrid.at<Nc>(d,0) = SkippedTarget;
-				jumpTypeCountGrid.at<Nc>(d,0) = d;
+				costGrid.template at<Nc>(d,0) = jumpCostPolicy({-1,-1}, SkippedSource, (d == 0) ? NoSkip : SkippedSource, std::max(0,d-1));
+				jumpTypeGrid.template at<Nc>(d,0) = SkippedTarget;
+				jumpTypeCountGrid.template at<Nc>(d,0) = d;
 			}
 
 			//fill in the grid
@@ -127,20 +166,20 @@ public:
 
 				for (int d = 0; d < searchWidth and d+j < imWidth; d++) {
 
-					T_CV noJumpCost = costGrid.value<Nc>(d,j); //cost of substitution in levenshtein distance
-					noJumpCost += costVolume.value<Nc>(i,j,d); //do a match
+					T_CV noJumpCost = costGrid.template value<Nc>(d,j); //cost of substitution in levenshtein distance
+					noJumpCost += costVolume.template value<Nc>(i,j,d); //do a match
 
 					std::optional<T_CV> skipTargetCost; //cost of insertion in levenshtein distance
 					if (d > 0) {
-						skipTargetCost = costGrid.value<Nc>(d-1,j+1);
-						skipTargetCost += jumpCostPolicy(i,j, SkippedSource, jumpTypeGrid.value<Nc>(d-1,j), jumpTypeCountGrid.value<Nc>(d-1,j));
+						skipTargetCost = costGrid.template value<Nc>(d-1,j+1);
+						skipTargetCost.value() += jumpCostPolicy({i,j}, SkippedSource, jumpTypeGrid.value<Nc>(d-1,j), jumpTypeCountGrid.value<Nc>(d-1,j));
 					}
 
 
 					std::optional<T_CV> skipSourceCost;
 					if (d < searchWidth-1) { //cost of deletion in levenshtein distance
-						skipSourceCost = costGrid.value<Nc>(d+1,j);
-						skipSourceCost += jumpCostPolicy(i,j, SkippedTarget, jumpTypeGrid.value<Nc>(d+1,j-1), jumpTypeCountGrid.value<Nc>(d+1,j-1));
+						skipSourceCost = costGrid.template value<Nc>(d+1,j);
+						skipSourceCost.value() += jumpCostPolicy({i,j}, SkippedTarget, jumpTypeGrid.value<Nc>(d+1,j-1), jumpTypeCountGrid.value<Nc>(d+1,j-1));
 					}
 
 					//select optimal subpath
@@ -148,9 +187,9 @@ public:
 					if (optionalCompare<T_CV,strategy>(noJumpCost, skipTargetCost) and
 							optionalCompare<T_CV,strategy>(noJumpCost, skipSourceCost)) {
 
-						costGrid.value<Nc>(d,j+1) = noJumpCost;
+						costGrid.template at<Nc>(d,j+1) = noJumpCost;
 						jumpTypeGrid.at<Nc>(d,j+1) = NoSkip;
-						jumpTypeCountGrid.at<Nc>(d,j+1) = (costGrid.value<Nc>(d,j) == NoSkip) ? jumpTypeCountGrid.at<Nc>(d,j)+1 : 0 ;
+						jumpTypeCountGrid.at<Nc>(d,j+1) = (costGrid.template value<Nc>(d,j) == NoSkip) ? jumpTypeCountGrid.at<Nc>(d,j)+1 : 0 ;
 						path.at<Nc>(d,j) = {d,j};
 
 						continue;
@@ -160,18 +199,20 @@ public:
 					if (skipTargetCost.has_value()) {
 						if (optionalCompare<T_CV,strategy>(skipTargetCost.value(), skipSourceCost)) {
 
-							costGrid.value<Nc>(d,j+1) = skipTargetCost;
+							costGrid.template at<Nc>(d,j+1) = skipTargetCost.value();
 							jumpTypeGrid.at<Nc>(d,j+1) = SkippedSource;
-							jumpTypeCountGrid.at<Nc>(d,j+1) = (costGrid.value<Nc>(d-1,j+1) == SkippedSource) ? jumpTypeCountGrid.at<Nc>(d-1,j+1)+1 : 0 ;
+							jumpTypeCountGrid.at<Nc>(d,j+1) = (costGrid.template value<Nc>(d-1,j+1) == SkippedSource) ? jumpTypeCountGrid.at<Nc>(d-1,j+1)+1 : 0 ;
 							path.at<Nc>(d,j) = {d-1,j+1};
 
 							continue;
 						}
 					}
 
-					costGrid.value<Nc>(d,j+1) = skipTargetCost;
+					assert(skipSourceCost.has_value());
+
+					costGrid.template at<Nc>(d,j+1) = skipSourceCost.value();
 					jumpTypeGrid.at<Nc>(d,j+1) = SkippedTarget;
-					jumpTypeCountGrid.at<Nc>(d,j+1) = (costGrid.value<Nc>(d+1,j) == SkippedTarget) ? jumpTypeCountGrid.at<Nc>(d+1,j)+1 : 0 ;
+					jumpTypeCountGrid.at<Nc>(d,j+1) = (costGrid.template value<Nc>(d+1,j) == SkippedTarget) ? jumpTypeCountGrid.at<Nc>(d+1,j)+1 : 0 ;
 					path.at<Nc>(d,j) = {d+1,j};
 
 				}
@@ -181,7 +222,7 @@ public:
 			Index2d pathPos = {0,imWidth};
 
 			while (pathPos[1] > 0) {
-				Index2d previous_pos = path.at<Nc>(pathPos);
+				Index2d previous_pos = path.at<Nc>(pathPos[0], pathPos[1]-1);
 
 				if (previous_pos == Index2d({pathPos[0], pathPos[1]-1})) {//no jumps, constant disparity
 					disp.at<Nc>(i,pathPos[1]-1) = pathPos[0];
@@ -207,7 +248,7 @@ public:
 
 	}
 
-}
+};
 
 } //namespace Correlation
 } //namespace StereoVision
