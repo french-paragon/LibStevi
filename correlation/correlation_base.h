@@ -414,7 +414,7 @@ struct searchRangeTypeInfos<disp_t> {
 
 template<int nDim>
 struct searchRangeTypeInfos<searchOffset<nDim> > {
-	static const int CostVolumeDims = 2*nDim;
+	static const int CostVolumeDims = 2+nDim;
 };
 
 

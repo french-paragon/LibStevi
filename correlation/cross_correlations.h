@@ -248,6 +248,65 @@ inline Multidim::Array<TCV, 3> aggregateCost(Multidim::Array<T_L, 3> const& feat
 }
 
 template<matchingFunctions matchFunc, class T_L, class T_R, dispDirection dDir = dispDirection::RightToLeft, typename TCV = float>
+inline Multidim::Array<TCV, 3> aggregateCost(Multidim::Array<T_L, 3> const& feature_vol_l,
+											 Multidim::Array<T_R, 3> const& feature_vol_r,
+											 searchOffset<1> searchRange) {
+
+	disp_t disp_width = searchRange.dimRange(0);
+	condImgRef<T_L, T_R, dDir, 3> dirInfos(feature_vol_l, feature_vol_r);
+	using T_S = typename condImgRef<T_L, T_R, dDir>::T_S;
+	using T_T = typename condImgRef<T_L, T_R, dDir>::T_T;
+
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+	constexpr disp_t deltaSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
+
+	auto l_shape = feature_vol_l.shape();
+	auto r_shape = feature_vol_r.shape();
+
+	if (l_shape[0] != r_shape[0]) {
+		return Multidim::Array<TCV, 3>(0,0,0);
+	}
+
+	Multidim::Array<T_S, 3> & source_feature_volume = const_cast<Multidim::Array<T_S, 3> &>(dirInfos.source());
+	Multidim::Array<T_T, 3> & target_feature_volume = const_cast<Multidim::Array<T_T, 3> &>(dirInfos.target());
+
+	int h = source_feature_volume.shape()[0];
+	int w = source_feature_volume.shape()[1];
+	int f = source_feature_volume.shape()[2];
+
+	Multidim::Array<TCV, 3> costVolume({h,w,disp_width}, {w*disp_width, 1, w});
+
+	#pragma omp parallel for
+	for (int i = 0; i < h; i++) {
+		#pragma omp simd
+		for (int j = 0; j < w; j++) {
+
+			Multidim::Array<T_S, 1> source_feature_vector =
+					source_feature_volume.subView(Multidim::DimIndex(i), Multidim::DimIndex(j), Multidim::DimSlice());
+
+			for (int d = 0; d < disp_width; d++) {
+
+				disp_t disp = searchRange.idx2disp(0,d);
+				Multidim::Array<T_T, 1> target_feature_vector(f);
+
+				for (int c = 0; c < f; c++) {
+					float t = target_feature_volume.valueOrAlt({i,j+deltaSign*disp,c}, 0);
+					target_feature_vector.template at<Nc>(c) = t;
+				}
+
+				costVolume.template at<Nc>(i,j,d) =
+						MatchingFunctionTraits<matchFunc>::template featureComparison<T_S, T_T, TCV>(source_feature_vector, target_feature_vector);
+
+			}
+		}
+	}
+
+	return costVolume;
+
+
+}
+
+template<matchingFunctions matchFunc, class T_L, class T_R, dispDirection dDir = dispDirection::RightToLeft, typename TCV = float>
 inline Multidim::Array<TCV, 4> aggregateCost(Multidim::Array<T_L, 3> const& feature_vol_l,
 											 Multidim::Array<T_R, 3> const& feature_vol_r,
 											 searchOffset<2> searchRange) {

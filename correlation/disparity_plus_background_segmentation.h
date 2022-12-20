@@ -32,7 +32,7 @@ struct StereoDispWithBgMask {
 
 	}
 
-	StereoDispWithBgMask(DispWithBgMask && other) :
+	StereoDispWithBgMask(StereoDispWithBgMask && other) :
 		fg_mask(other.fg_mask),
 		disp(other.disp)
 	{
@@ -45,14 +45,16 @@ struct StereoDispWithBgMask {
 
 template<matchingFunctions matchFunc, class T_CV, class T_FV>
 class DisparityEstimatorWithBackgroundRemoval {
+
+public:
 	using T_F = typename MatchingFuncComputeTypeInfos<matchFunc, T_FV>::FeatureType;
 
 	template<Multidim::ArrayDataAccessConstness constnessS,
 			 Multidim::ArrayDataAccessConstness constnessT>
 	using OnDemandCVT = OnDemandStereoCostVolume<matchFunc, T_CV, T_FV, T_FV, constnessS, constnessT>;
 
-	DisparityEstimatorWithBackgroundRemoval(float relative_tolerance = 0.8, disp_t disp_tol = 2) :
-		_rel_tol(relative_tolerance),
+	DisparityEstimatorWithBackgroundRemoval(float relative_threshold = 0.8, disp_t disp_tol = 2) :
+		_rel_threshold(relative_threshold),
 		_disp_tol(disp_tol)
 	{
 
@@ -74,12 +76,14 @@ class DisparityEstimatorWithBackgroundRemoval {
 		_source_bg_features = getFeatureVolumeForMatchFunc<matchFunc, T_FV, constnessT, T_F>(source_f);
 		_target_bg_features = getFeatureVolumeForMatchFunc<matchFunc, T_FV, constnessT, T_F>(target_f);
 
-		_bg_cost_volume = featureVolume2CostVolume<matchFunc, float, float, disp_t, dispDirection::RightToLeft, float>
+		_bg_cost_volume = featureVolume2CostVolume<matchFunc, float, float, searchOffset<1>, dispDirection::RightToLeft, float>
 				(_target_bg_features, _source_bg_features, _searchOffset);
 
-		auto bg_index = extractSelectedIndex(_bg_cost_volume);
+		auto bg_index = extractSelectedIndex<MatchingFunctionTraits<matchFunc>::extractionStrategy>(_bg_cost_volume);
 
 		_bg_disp_idx = selectedIndexToDisp(bg_index, _searchOffset.lowerOffset<0>());
+
+		return true;
 	}
 
 	template<Multidim::ArrayDataAccessConstness constnessS,
@@ -139,7 +143,7 @@ class DisparityEstimatorWithBackgroundRemoval {
 					disp_t idx_bg = _bg_disp_idx.valueUnchecked(ti,tj);
 					T_CV cost_bg = _bg_cost_volume.valueUnchecked(ti,tj,idx_bg);
 
-					auto opt_fg_cost = on_demand_cv.costValue(ti,tj,idx_bg);
+					auto opt_fg_cost = on_demand_cv.costValue({ti,tj},{idx_bg});
 
 					if (!opt_fg_cost.has_value()) {
 						ret.disp.atUnchecked(ti,tj) = _searchOffset.idx2disp<0>(idx_bg);
@@ -150,12 +154,12 @@ class DisparityEstimatorWithBackgroundRemoval {
 					T_CV cost_fg = opt_fg_cost.value();
 					disp_t idx_fg = idx_bg;
 
-					if (is_first and std::min(cost_bg, cost_fg)/std::max(cost_bg, cost_fg) >= _rel_tol) {
+					if (is_first and std::min(cost_bg, cost_fg)/std::max(cost_bg, cost_fg) > _rel_threshold) {
 						continue; //ignore pixels which have the same disp cost as the background, but only in front of a chain.
 					}
 
 					for (int d = 0; d < shape[2]; d++) {
-						auto opt_fg_cost = on_demand_cv.costValue(i,j,d);
+						auto opt_fg_cost = on_demand_cv.costValue({ti,tj},{d});
 						if (!opt_fg_cost.has_value()) {
 							continue;
 						}
@@ -189,7 +193,7 @@ class DisparityEstimatorWithBackgroundRemoval {
 
 								#pragma omp critical
 								{
-									if (checkedPixels.count({ti,tj}) == 0) {
+									if (checkedPixels.count({ti+di,tj+dj}) == 0) {
 										pixels2check.push({ti+di, tj+dj});
 									}
 								}
@@ -209,7 +213,7 @@ class DisparityEstimatorWithBackgroundRemoval {
 
 protected:
 
-	float _rel_tol;
+	float _rel_threshold;
 	disp_t _disp_tol;
 
 	searchOffset<1> _searchOffset;

@@ -24,6 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "./cross_correlations.h"
 
 #include <MultidimArrays/MultidimArrays.h>
+#include <MultidimArrays/MultidimIndexManipulators.h>
 
 namespace StereoVision {
 namespace Correlation {
@@ -177,6 +178,132 @@ public:
 
 	inline SearchSpace<sizeof... (Ds)> const& searchSpace() const {
 		return _search_space;
+	}
+
+	template<Multidim::ArrayDataAccessConstness viewConstness>
+	Multidim::Array<T_CV, nCostVolDim> truncatedCostVolume(Multidim::Array<disp_t, nDim, viewConstness> const& disp,
+														   int radius = 1,
+														   T_CV defaultVal = defaultCvValForMatchFunc<matchFunc, T_CV>()) const {
+
+		if (disp.shape()[nDim-1] != nSearchDim) {
+			return Multidim::Array<T_CV, nCostVolDim>();
+		}
+
+		std::array<int, nCostVolDim> tcv_shape;
+
+		for (int i = 0; i < nDim-1; i++) {
+			tcv_shape[i] = _cost_volume.shape()[i];
+		}
+
+		for (int i = 0; i < nSearchDim; i++) {
+			tcv_shape[nDim - 1 + i] = 2*radius+1;
+		}
+
+		Multidim::Array<T_CV, nCostVolDim> tcv(tcv_shape);
+
+		Multidim::IndexConverter idxConv(tcv_shape);
+
+		#pragma omp parallel for
+		for (int i = 0; i < idxConv.numberOfPossibleIndices(); i++) {
+
+			std::array<int, nCostVolDim> tcvid = idxConv.getIndexFromPseudoFlatId(i);
+			std::array<int, nCostVolDim> cvid = tcvid;
+
+			std::array<int, nDim> dispId;
+
+			for (int j = 0; j < nDim-1; j++) {
+				dispId[j] = cvid[j];
+			}
+
+			for (int j = 0; j < nSearchDim; j++) {
+				dispId[nDim-1] = j;
+				disp_t delta = _search_space.disp2idx(_searchDims[j], disp.valueUnchecked(dispId));
+				cvid[nDim - 1 + j] = tcvid[nDim - 1 + j]-radius + delta;
+			}
+
+			std::array<int, nDim-1> pos;
+			std::array<int, nSearchDim> disp;
+
+			for (int j = 0; j < nDim-1; j++) {
+				pos[j] = cvid[j];
+			}
+
+			for (int j = 0; j < nSearchDim; j++) {
+				disp[j] = cvid[nDim-1+j];
+			}
+
+			std::optional<T_CV> cand_cost = costValue(pos, disp);
+
+			if (cand_cost.has_value()) {
+				tcv.atUnchecked(tcvid) = cand_cost.value();
+			} else {
+				tcv.atUnchecked(tcvid) = defaultVal;
+			}
+
+		}
+
+		return tcv;
+
+	}
+
+	template<Multidim::ArrayDataAccessConstness viewConstness, int nSrchDims = nSearchDim>
+	std::enable_if_t<nSrchDims == 1, Multidim::Array<T_CV, nCostVolDim>>
+	truncatedCostVolume(Multidim::Array<disp_t, nDim-1, viewConstness> const& disp,
+						int radius = 1,
+						T_CV defaultVal = defaultCvValForMatchFunc<matchFunc, T_CV>()) const {
+
+		std::array<int, nCostVolDim> tcv_shape;
+
+		for (int i = 0; i < nDim-1; i++) {
+			tcv_shape[i] = _cost_volume.shape()[i];
+		}
+
+		for (int i = 0; i < nSearchDim; i++) {
+			tcv_shape[nDim - 1 + i] = 2*radius+1;
+		}
+
+		Multidim::Array<T_CV, nCostVolDim> tcv(tcv_shape);
+
+		Multidim::IndexConverter<nCostVolDim> idxConv(tcv_shape);
+
+		#pragma omp parallel for
+		for (int i = 0; i < idxConv.numberOfPossibleIndices(); i++) {
+
+			std::array<int, nCostVolDim> tcvid = idxConv.getIndexFromPseudoFlatId(i);
+			std::array<int, nCostVolDim> cvid = tcvid;
+
+			std::array<int, nDim-1> dispId;
+
+			for (int j = 0; j < nDim-1; j++) {
+				dispId[j] = cvid[j];
+			}
+
+			disp_t delta = _search_space.disp2idx(_searchDims[0], disp.valueUnchecked(dispId));
+			cvid[nDim - 1] = tcvid[nDim - 1]-radius + delta;
+
+			std::array<int, nDim-1> pos;
+			std::array<int, nSearchDim> disp;
+
+			for (int j = 0; j < nDim-1; j++) {
+				pos[j] = cvid[j];
+			}
+
+			for (int j = 0; j < nSearchDim; j++) {
+				disp[j] = cvid[nDim-1+j];
+			}
+
+			std::optional<T_CV> cand_cost = costValue(pos, disp);
+
+			if (cand_cost.has_value()) {
+				tcv.atUnchecked(tcvid) = cand_cost.value();
+			} else {
+				tcv.atUnchecked(tcvid) = defaultVal;
+			}
+
+		}
+
+		return tcv;
+
 	}
 
 protected:
