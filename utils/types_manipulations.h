@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <type_traits>
 #include <string>
 #include <sstream>
+#include <limits>
 
 #define DECLARE_METHOD_TEST(func, name)                                       \
 	template<typename T, typename Sign>                                       \

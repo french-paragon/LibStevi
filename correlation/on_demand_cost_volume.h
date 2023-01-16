@@ -26,6 +26,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <MultidimArrays/MultidimArrays.h>
 #include <MultidimArrays/MultidimIndexManipulators.h>
 
+#include <optional>
+
 namespace StereoVision {
 namespace Correlation {
 

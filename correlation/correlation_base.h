@@ -563,7 +563,7 @@ Multidim::Array<T_CV, 2> selectedCost(Multidim::Array<T_CV, 3> const& costVolume
 		#pragma omp simd
 		for (int j = 0; j < cv_shape[1]; j++) {
 			uint32_t p = selectedIndex.value<Nc>(i,j);
-			tcv.template at<Nc>(i,j) = costVolume.value<Nc>(i,j,p);
+			tcv.template at<Nc>(i,j) = costVolume.template value<Nc>(i,j,p);
 		}
 	}
 

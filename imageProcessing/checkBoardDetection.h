@@ -360,8 +360,6 @@ std::vector<discretCheckCornerInfos> checkBoardFilterCandidates(Multidim::Array<
 				interQuantMean +=vals[i];
 			}
 
-			interQuantMean;
-
 			meanSectionVals[s] = interQuantMean;
 
 			if (interQuantMean < meanSectionVals[minSectionid]) {
