@@ -31,6 +31,43 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace StereoVision {
 namespace ImageProcessing {
 
+
+template<typename T, typename O = float, int nDim = 3>
+Multidim::Array<O, nDim> linear2logColorSpaceImg(Multidim::Array<T, nDim> const& img) {
+
+	Multidim::Array<O, nDim> out(img.shape());
+
+	Multidim::IndexConverter<nDim> idxConverter(img.shape());
+
+	#pragma omp parallel for
+	for (int i = 0; i < idxConverter.numberOfPossibleIndices(); i++) {
+		auto idx = idxConverter.getIndexFromPseudoFlatId(i);
+
+		out.atUnchecked(idx) = std::log(static_cast<O>(img.valueUnchecked(idx)));
+	}
+
+	return out;
+
+}
+
+template<typename T, typename O = float, int nDim = 3>
+Multidim::Array<O, nDim> log2linearColorSpaceImg(Multidim::Array<T, nDim> const& logimg) {
+
+	Multidim::Array<O, nDim> out(logimg.shape(), logimg.strides());
+
+	Multidim::IndexConverter<nDim> idxConverter(logimg.shape());
+
+	#pragma omp parallel for
+	for (int i = 0; i < idxConverter.numberOfPossibleIndices(); i++) {
+		auto idx = idxConverter.getIndexFromPseudoFlatId(i);
+
+		out.atUnchecked(idx) = std::exp(static_cast<O>(logimg.valueUnchecked(idx)));
+	}
+
+	return out;
+
+}
+
 template<typename T, typename O = T>
 Multidim::Array<O, 3> normalizedIntensityRGBImage(Multidim::Array<T, 3> const& rgbImg, O scale = 1) {
 
@@ -77,6 +114,52 @@ Multidim::Array<O, 3> normalizedIntensityRGBImage(Multidim::Array<T, 3> const& r
 			ctypeO alpha = whiteTout*rgbImg.valueUnchecked(idx)/whiteTin;
 			normalizedImg.atUnchecked(idx) = alpha;
 		}
+	}
+
+	return normalizedImg;
+
+}
+
+template<typename T, typename O = T>
+Multidim::Array<O, 3> normalizedIntensityRedGreenImage(Multidim::Array<T, 3> const& rgbImg, O scale = 1) {
+
+	using ctypeI = TypesManipulations::accumulation_extended_t<T>;
+	using ctypeO = TypesManipulations::accumulation_extended_t<O>;
+	constexpr T whiteTin = (std::is_integral_v<T>) ? std::numeric_limits<T>::max() : 1.0;
+	constexpr T whiteTout = (std::is_integral_v<T>) ? std::numeric_limits<T>::max() : 1.0;
+
+	if (rgbImg.shape()[2] != 3 and rgbImg.shape()[2] != 4) {
+		return Multidim::Array<O, 3>();
+	}
+
+	auto shape = rgbImg.shape();
+	shape[2] = 2;
+
+	Multidim::Array<O, 3> normalizedImg(shape);
+
+	Multidim::DimsExclusionSet<3> exlusionSet(2);
+	Multidim::IndexConverter<3> idxConverter(rgbImg.shape(), exlusionSet);
+
+	#pragma omp parallel for
+	for (int i = 0; i < idxConverter.numberOfPossibleIndices(); i++) {
+		auto idx = idxConverter.getIndexFromPseudoFlatId(i);
+
+		idx[2] = 0;
+		T red = rgbImg.valueUnchecked(idx);
+		idx[2] = 1;
+		T green = rgbImg.valueUnchecked(idx);
+		idx[2] = 2;
+		T blue = rgbImg.valueUnchecked(idx);
+
+		ctypeI It = ((red + green + blue)/3);
+
+		ctypeO nR = (whiteTout*red)/It;
+		ctypeO nG = (whiteTout*green)/It;
+
+		idx[2] = 0;
+		normalizedImg.atUnchecked(idx) = scale*nR;
+		idx[2] = 1;
+		normalizedImg.atUnchecked(idx) = scale*nG;
 	}
 
 	return normalizedImg;
