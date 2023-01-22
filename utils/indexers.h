@@ -126,6 +126,41 @@ public:
 		return sourceGroup;
 	}
 
+	inline std::vector<int> getGroups() {
+
+		std::vector<int> groups;
+		groups.reserve(_elements.size());
+
+		for (int i = 0; i < _elements.size(); i++) {
+			int groupId = getGroup(i);
+
+			if (groupId == i) {
+				groups.push_back(groupId);
+			}
+		}
+
+		return groups;
+	}
+
+	inline std::vector<std::vector<int>> getGroupsElements() {
+
+		std::vector<std::vector<int>> groupsElements(_elements.size());
+		std::fill(groupsElements.begin(), groupsElements.end(), std::vector<int>());
+
+		for (int i = 0; i < _elements.size(); i++) {
+			int groupId = getGroup(i);
+
+			if (groupsElements[groupId].empty()) {
+				groupsElements[groupId].reserve(getGroupSize(groupId));
+			}
+
+			groupsElements[groupId].push_back(i);
+
+		}
+
+		return groupsElements;
+	}
+
 private:
 	std::vector<int> _elements;
 	std::vector<int> _groupSize;
