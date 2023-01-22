@@ -136,8 +136,57 @@ protected:
 	std::vector<pixelIndex> _indices;
 };
 
-inline int channelFromCord(int vertical, int horizontal, int channel, int hSize, int channels) {
-	return channels*hSize*vertical + channels*horizontal + channel;
+enum UnfoldPatchOrientation{
+	Rotate0,
+	Rotate90,
+	Rotate180,
+	Rotate270
+};
+
+/*!
+ * \brief rotatedOffsetsFromOrientation return rotated offsets for a given orientation assuming offset 0 is the center of the patch
+ * \param vOffset the vertical offset
+ * \param hOffset the horizontal offset
+ * \param orientation the orientation
+ * \return rotated offsets for a given orientation assuming offset 0 is the center of the patch
+ */
+inline std::tuple<int, int> rotatedOffsetsFromOrientation(int vOffset,
+														  int hOffset,
+														  UnfoldPatchOrientation orientation) {
+
+	switch (orientation) {
+	case Rotate0:
+		return {vOffset, hOffset};
+	case Rotate90:
+		return {-hOffset, vOffset};
+	case Rotate180:
+		return {-vOffset, -hOffset};
+	case Rotate270:
+		return {hOffset, -vOffset};
+	}
+
+}
+
+inline int channelFromCord(int vertical,
+						   int horizontal,
+						   int channel,
+						   int hSize,
+						   int vSize,
+						   int channels,
+						   UnfoldPatchOrientation orientation = Rotate0) {
+
+	if (orientation == Rotate0) {
+		return channels*hSize*vertical + channels*horizontal + channel;
+	} else if (orientation == Rotate90) {
+		return channels*vSize*(hSize - horizontal - 1) + channels*vertical + channel;
+	} else if (orientation == Rotate180) {
+		return channels*hSize*(vSize - vertical - 1) + channels*(hSize - horizontal - 1) + channel;
+	} else if (orientation == Rotate270) {
+		return channels*vSize*horizontal + channels*(vSize - vertical - 1) + channel;
+	}
+
+	return -1;
+
 }
 
 /*!
@@ -179,9 +228,9 @@ getUnfoldFeatureSlidingSubwindowIdxs(uint8_t h_radius_base,
 				for (int l = 0; l < sub_h_size; l++) {
 					for (int c = 0; c < nChannels; c++) {
 
-						int channel = channelFromCord(i+k, j+l, c, h_orig, nChannels);
-						int outRow = channelFromCord(k, l, c, sub_h_size, nChannels);
-						int outCol = channelFromCord(i, j, 0, h_orig-sub_h_size+1, 1);
+						int channel = channelFromCord(i+k, j+l, c, h_orig, v_orig, nChannels, Rotate0);
+						int outRow = channelFromCord(k, l, c, sub_h_size, sub_v_size, nChannels, Rotate0);
+						int outCol = channelFromCord(i, j, 0, h_orig-sub_h_size+1, v_orig-sub_v_size+1, 1, Rotate0);
 
 						out(outRow,outCol) = channel;
 					}
@@ -198,7 +247,8 @@ template<class T_I, class T_O = float>
 Multidim::Array<T_O, 3> unfold(uint8_t h_radius,
 							   uint8_t v_radius,
 							   Multidim::Array<T_I, 2> const& in_data,
-							   PaddingMargins const& padding = PaddingMargins()) {
+							   PaddingMargins const& padding = PaddingMargins(),
+							   UnfoldPatchOrientation orientation = Rotate0) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -229,7 +279,7 @@ Multidim::Array<T_O, 3> unfold(uint8_t h_radius,
 
 			for (int k = 0; k < v; k++) {
 				for (int l = 0; l < h; l++) {
-					int c = channelFromCord(k, l, 0, h, 1);
+					int c = channelFromCord(k, l, 0, h, v, 1, orientation);
 					out.template at<Nc>(i,j,c) = static_cast<T_O>( in_data.valueOrAlt({in_i+k, in_j+l}, 0) );
 				}
 			}
@@ -242,7 +292,8 @@ template<class T_I, class T_O = float>
 Multidim::Array<T_O, 3> unfold(uint8_t h_radius,
 							   uint8_t v_radius,
 							   Multidim::Array<T_I, 3> const& in_data,
-							   PaddingMargins const& padding = PaddingMargins()) {
+							   PaddingMargins const& padding = PaddingMargins(),
+							   UnfoldPatchOrientation orientation = Rotate0) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -269,7 +320,7 @@ Multidim::Array<T_O, 3> unfold(uint8_t h_radius,
 		for (int l = 0; l < h; l++) {
 			for (int in_c = 0; in_c < f; in_c++) {
 
-				int c = channelFromCord(k, l, in_c, h, f);
+				int c = channelFromCord(k, l, in_c, h, v, f, orientation);
 
 				#pragma omp parallel for
 				for (int i = 0; i < outHeight; i++) {
