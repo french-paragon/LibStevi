@@ -141,7 +141,7 @@ inline int channelFromCord(int vertical, int horizontal, int channel, int hSize,
 }
 
 /*!
- * \brief getFeatureSlidingSubwindowIdxs return a matrix of indices allowing to identify the features corresponding to a sliding windows in image space
+ * \brief getFeatureSlidingSubwindowIdxs return a matrix of indices allowing to identify the features corresponding to a sliding subwindows inside a feature vector obtained with a larger sliding window
  * \param h_radius_base The horizontal radius used for the unfold operator leading to the cost volume.
  * \param v_radius_base The vertical radius used for the unfold operator leading to the cost volume.
  * \param sub_h_radius The horizontal size of the inner sliding window.

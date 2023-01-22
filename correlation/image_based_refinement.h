@@ -1376,6 +1376,17 @@ Multidim::Array<float, 2> refinedBarycentricSymmetricDispFeatureVol(Multidim::Ar
 }
 
 template<matchingFunctions matchFunc, dispDirection dDir = dispDirection::RightToLeft, int refineRadius = 1>
+/*!
+ * \brief refinedSubpartBarycentricSymmetricDispFeatureVol refine the disparity using Barycentric symmetric predictive interpolation
+ * \param feature_vol_l the left feature volumne
+ * \param feature_vol_r the right feature volume
+ * \param searchRange the size of the search range
+ * \param subFeaturesIdxs the index matrix of the feature vector (usefull to extract subwindows from the feature vector)
+ * \param preNormalize if the feature vector needs to be prenormalized.
+ * \return the refined disparity
+ *
+ * The function is usefull for matching cost that employ a sampling strategy within the matching window (e.g. meds).
+ */
 Multidim::Array<float, 2> refinedSubpartBarycentricSymmetricDispFeatureVol(Multidim::Array<float, 3> const& feature_vol_l,
 																	Multidim::Array<float, 3> const& feature_vol_r,
 																	disp_t searchRange,
@@ -1527,6 +1538,17 @@ Multidim::Array<float, 2> refinedBarycentricDispFeatureVol(Multidim::Array<float
 }
 
 template<matchingFunctions matchFunc, dispDirection dDir = dispDirection::RightToLeft>
+/*!
+ * \brief refinedSubpartBarycentricDispFeatureVol refine the disparity using Barycentric predictive interpolation
+ * \param feature_vol_l the left feature volumne
+ * \param feature_vol_r the right feature volume
+ * \param searchRange the size of the search range
+ * \param subFeaturesIdxs the index matrix of the feature vector (usefull to extract subwindows from the feature vector)
+ * \param preNormalize if the feature vector needs to be prenormalized.
+ * \return the refined disparity
+ *
+ * The function is usefull for matching cost that employ a sampling strategy within the matching window (e.g. meds).
+ */
 Multidim::Array<float, 2> refinedSubpartBarycentricDispFeatureVol(Multidim::Array<float, 3> const& feature_vol_l,
 																  Multidim::Array<float, 3> const& feature_vol_r,
 																  disp_t searchRange,
@@ -1683,6 +1705,17 @@ Multidim::Array<float, 3> refinedBarycentric2dDispFeatureVol(Multidim::Array<flo
 template<matchingFunctions matchFunc,
 		 Contiguity::bidimensionalContiguity contiguity = Contiguity::Queen,
 		 dispDirection dDir = dispDirection::RightToLeft>
+/*!
+ * \brief refinedSubpartBarycentric2dDispFeatureVol refine the disparity using Barycentric predictive interpolation
+ * \param feature_vol_l the left feature volumne
+ * \param feature_vol_r the right feature volume
+ * \param searchWindows the search range
+ * \param subFeaturesIdxs the index matrix of the feature vector (usefull to extract subwindows from the feature vector)
+ * \param preNormalize if the feature vector needs to be prenormalized.
+ * \return the refined disparity
+ *
+ * The function is usefull for matching cost that employ a sampling strategy within the matching window (e.g. meds).
+ */
 Multidim::Array<float, 3> refinedSubpartBarycentric2dDispFeatureVol(Multidim::Array<float, 3> const& feature_vol_l,
 																	Multidim::Array<float, 3> const& feature_vol_r,
 																	searchOffset<2> const& searchWindows,
@@ -1839,6 +1872,17 @@ Multidim::Array<float, 3> refinedBarycentricSymmetric2dDispFeatureVol(Multidim::
 template<matchingFunctions matchFunc,
 		 Contiguity::bidimensionalContiguity contiguity = Contiguity::Queen,
 		 dispDirection dDir = dispDirection::RightToLeft>
+/*!
+ * \brief refinedSubpartBarycentricSymmetric2dDispFeatureVol refine the disparity using Barycentric symmetric predictive interpolation
+ * \param feature_vol_l the left feature volumne
+ * \param feature_vol_r the right feature volume
+ * \param searchWindows the search range
+ * \param subFeaturesIdxs the index matrix of the feature vector (usefull to extract subwindows from the feature vector)
+ * \param preNormalize if the feature vector needs to be prenormalized.
+ * \return the refined disparity
+ *
+ * The function is usefull for matching cost that employ a sampling strategy within the matching window (e.g. meds).
+ */
 Multidim::Array<float, 3> refinedSubpartBarycentricSymmetric2dDispFeatureVol(Multidim::Array<float, 3> const& feature_vol_l,
 																			 Multidim::Array<float, 3> const& feature_vol_r,
 																			 searchOffset<2> const& searchWindows,
