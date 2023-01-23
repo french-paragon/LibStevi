@@ -83,10 +83,10 @@ set(LIB_SRC
         correlation/hierarchical.h
         correlation/patchmatch.h
         correlation/on_demand_cost_volume.h
-		correlation/fast_approximate_matching.h
-		correlation/template_matching.h
+        correlation/fast_approximate_matching.h
+        correlation/template_matching.h
         correlation/dynamic_programing_stereo.h
-		correlation/disparity_plus_background_segmentation.h
+        correlation/disparity_plus_background_segmentation.h
         optimization/l0optimization.h
         optimization/l1optimization.h
         optimization/l2optimization.h
@@ -111,6 +111,7 @@ set(LIB_SRC
         imageProcessing/hexagonalRGBTargetsDetection.h
         imageProcessing/finiteDifferences.h
         imageProcessing/connectedComponents.h
+        imageProcessing/morphologicalOperators.h
         io/image_io.h
 )
 
