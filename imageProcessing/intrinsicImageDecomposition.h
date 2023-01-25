@@ -142,20 +142,18 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 
 				diffNorm = std::sqrt(diffNorm);
 
-				if (diffNorm > diffThresh) {
-					ComputeType omega = reflectanceToShadingWeight;
+				ComputeType omega = (diffNorm > diffThresh) ? 0 : reflectanceToShadingWeight;
 
-					Aretinex.coeffRef(i,i) += 2*nColors*(1+omega);
-					Aretinex.coeffRef(i,j) -= 2*nColors*(1+omega);
+				Aretinex.coeffRef(i,i) += 2*nColors*(1+omega);
+				Aretinex.coeffRef(i,j) -= 2*nColors*(1+omega);
 
-					for (int c = 0; c < nColors; c++) {
+				for (int c = 0; c < nColors; c++) {
 
-						idx[channelDim] = c;
-						dIdx[channelDim] = c;
-						ComputeType diffCol = logImg.valueUnchecked(idx) - logImg.valueUnchecked(dIdx);
+					idx[channelDim] = c;
+					dIdx[channelDim] = c;
+					ComputeType diffCol = logImg.valueUnchecked(idx) - logImg.valueUnchecked(dIdx);
 
-						b_retinex[i] -= 2*omega*diffCol;
-					}
+					b_retinex[i] -= 2*omega*diffCol;
 				}
 
 			}
