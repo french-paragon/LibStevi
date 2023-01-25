@@ -165,6 +165,7 @@ inline std::tuple<int, int> rotatedOffsetsFromOrientation(int vOffset,
 		return {hOffset, -vOffset};
 	}
 
+        return {vOffset, hOffset};
 }
 
 inline int channelFromCord(int vertical,
