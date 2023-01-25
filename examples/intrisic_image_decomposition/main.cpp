@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "io/image_io.h"
 #include "imageProcessing/meanShiftClustering.h"
 #include "imageProcessing/colorConversions.h"
+#include "imageProcessing/intrinsicImageDecomposition.h"
 
 #include <QTextStream>
 #include <QString>
@@ -26,6 +27,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <QFileInfo>
 
 #include <string>
+
+using namespace StereoVision;
+using namespace StereoVision::ImageProcessing;
 
 int main(int argc, char** argv) {
 
@@ -54,7 +58,28 @@ int main(int argc, char** argv) {
 	} else {
 		outDir = info.absoluteDir();
 	}
-	Multidim::Array<float, 3> intensityNormalized = StereoVision::ImageProcessing::normalizedIntensityRGBImage<float, float>(img, 128);
+
+	float maxVal = 0;
+
+	for (int i = 0; i < img.shape()[0]; i++) {
+		for (int j = 0; j < img.shape()[1]; j++) {
+			for (int c = 0; c < img.shape()[2]; c++) {
+				float val = img.valueUnchecked(i,j,c);
+
+				if (val > maxVal) {
+					maxVal = val;
+				}
+
+				if (val < 1.0) {
+					img.atUnchecked(i,j,c) = 1.0;
+				}
+			}
+		}
+	}
+
+	out << "Image max val = " << maxVal << Qt::endl;
+
+	/*Multidim::Array<float, 3> intensityNormalized = StereoVision::ImageProcessing::normalizedIntensityRGBImage<float, float>(img, 128);
 
 	bool ok = StereoVision::IO::writeImage<uint8_t>((outDir.filePath(info.baseName() + "_int_norm") + ".bmp" ).toStdString(), intensityNormalized);
 
@@ -76,6 +101,26 @@ int main(int argc, char** argv) {
 		out << "\t" << "mean shift clustered file succesfully written to disk" << Qt::endl;
 	} else {
 		out << "\t" << "Failed to write mean shift clustered file to disk" << Qt::endl;
+		return 1;
+	}*/
+
+	IntrinsicImageDecomposition<float, 3> decomposition = autoRetinexWithNonLocalTextureConstraint<float, float>(img);
+
+	bool ok = StereoVision::IO::writeImage<float>((outDir.filePath(info.baseName() + "_reflectance") + ".stevimg" ).toStdString(), decomposition.reflectance);
+
+	if (ok) {
+		out << "\t" << "Reflectance file succesfully written to disk" << Qt::endl;
+	} else {
+		out << "\t" << "Failed to write reflectance file to disk" << Qt::endl;
+		return 1;
+	}
+
+	ok = StereoVision::IO::writeImage<float>((outDir.filePath(info.baseName() + "_shading") + ".stevimg" ).toStdString(), decomposition.shading);
+
+	if (ok) {
+		out << "\t" << "Shading file succesfully written to disk" << Qt::endl;
+	} else {
+		out << "\t" << "Failed to write shading file to disk" << Qt::endl;
 		return 1;
 	}
 

@@ -104,6 +104,7 @@ set(LIB_SRC
         utils/stevimath.h
         statistics/stereo_covering.h
         imageProcessing/colorConversions.h
+        imageProcessing/histogram.h
         imageProcessing/meanShiftClustering.h
         imageProcessing/intrinsicImageDecomposition.h
         imageProcessing/checkBoardDetection.h

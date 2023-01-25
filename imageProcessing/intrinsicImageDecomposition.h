@@ -29,8 +29,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <assert.h>
 #include <forward_list>
 #include <iterator>
+#include <limits>
+#include <iostream>
 
 #include "./colorConversions.h"
+#include "./histogram.h"
 
 #include "../correlation/matching_costs.h"
 #include "../correlation/unfold.h"
@@ -46,7 +49,6 @@ struct IntrinsicImageDecomposition {
 	Multidim::Array<T, nDim> shading;
 };
 
-
 template<typename T, typename ComputeType=float>
 /*!
  * \brief retinexWithNonLocalTextureConstraint solve the intrisic image decomposition problem with a non local constraint on the texture
@@ -61,10 +63,12 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 																				 ComputeType reflectanceToShadingWeight = 100.,
 																				 float groupingThreshold = 0.01) {
 
+	static_assert (std::is_floating_point_v<ComputeType>, "Compute type must be a floating point type");
+
 	using MatrixAType = Eigen::SparseMatrix<ComputeType>;
 	using VectorBType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
 	using VectorSolType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
-	using SolverType = Eigen::BiCGSTAB<MatrixAType, Eigen::IncompleteLUT<ComputeType>>;
+	using SolverType = Eigen::ConjugateGradient<MatrixAType, Eigen::Lower|Eigen::Upper, Eigen::DiagonalPreconditioner<ComputeType>>; //using SolverType = Eigen::BiCGSTAB<MatrixAType, Eigen::IncompleteLUT<ComputeType>>;
 
 	using fVecT = Multidim::Array<ComputeType, 1, Multidim::ConstView>;
 
@@ -141,8 +145,8 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 				if (diffNorm > diffThresh) {
 					ComputeType omega = reflectanceToShadingWeight;
 
-					Aretinex(i,i) += 2*nColors*(1+omega);
-					Aretinex(i,j) -= 2*nColors*(1+omega);
+					Aretinex.coeffRef(i,i) += 2*nColors*(1+omega);
+					Aretinex.coeffRef(i,j) -= 2*nColors*(1+omega);
 
 					for (int c = 0; c < nColors; c++) {
 
@@ -187,7 +191,7 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 			continue;
 		}
 
-		if (idx[1] < searchRadius or idx[0] >= rgbImage.shape()[1]-searchRadius) {
+		if (idx[1] < searchRadius or idx[1] >= rgbImage.shape()[1]-searchRadius) {
 			continue;
 		}
 
@@ -204,7 +208,7 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 																				 Correlation::UnfoldPatchOrientation::Rotate180,
 																				 Correlation::UnfoldPatchOrientation::Rotate270};
 
-	std::array<Multidim::Array<ComputeType, 3>&, 4> featureVolumeRefForOrientation = {&featureVolumeR0,
+	std::array<Multidim::Array<ComputeType, 3>*, 4> featureVolumeRefForOrientation = {&featureVolumeR0,
 																					  &featureVolumeR90,
 																					  &featureVolumeR180,
 																					  &featureVolumeR270};
@@ -233,7 +237,11 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 		std::forward_list<int>::iterator previous = toTreat.before_begin();
 		std::forward_list<int>::iterator current = std::next(previous);
 
+		int nToTreat = std::distance(toTreat.begin(), toTreat.end());
+		int counter = 0;
 		while (std::next(previous) != toTreat.end()) {
+
+			counter++;
 
 			current = std::next(previous);
 
@@ -249,7 +257,7 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 			auto targetIdx = idxConverter.getIndexFromPseudoFlatId(*current);
 			std::array<int,2> fTargetVecPos = {targetIdx[0], targetIdx[1]};
 
-			auto fVecTarget = featureVolumeR0.indexDimView(2,fTargetVecPos);
+			fVecT fVecTarget = featureVolumeR0.indexDimView(2,fTargetVecPos);
 			std::array<float, 4> costs;
 
 			for (int o = 0; o < 4; o++) {
@@ -275,6 +283,10 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 			}
 
 			previous = std::next(previous);
+
+			if (previous == toTreat.end()) {
+				break;
+			}
 
 		}
 
@@ -338,7 +350,7 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 						}
 
 						idx[2] = c;
-						values->push_back(rgChromaticity.valueUnchecked(idx));
+						values.push_back(rgChromaticity.valueUnchecked(idx));
 					}
 
 					int medianId = values.size()/2;
@@ -373,9 +385,8 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 		Multidim::Array<ComputeType, 3> featureVolP0 = Correlation::unfold(searchRadius, searchRadius, rgChromaticity, PaddingMargins());
 
 
-		std::array<Multidim::Array<ComputeType, 3>*, 2> fVols = {&featureVolP0, &featureVolP1, &featureVolP2};
-		std::array<std::array<fVecT, 4>*, 2> fVecsMediansPs = {&vFecsMedianP0, &vFecsMedianP1, &vFecsMedianP2};
-
+		std::array<Multidim::Array<ComputeType, 3>*, 3> fVols = {&featureVolP0, &featureVolP1, &featureVolP2};
+		std::array<std::array<fVecT, 4>*, 3> fVecsMediansPs = {&vFecsMedianP0, &vFecsMedianP1, &vFecsMedianP2};
 
 		int p;
 
@@ -403,8 +414,8 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 			std::array<int, 3> Ks = {3,5,7};
 
 			for (int k = 0; k < 3; k++) {
-				fVecT fvec = fVols.indexDimView(2,fTargetVecPos);
-				float cost = Correlation::MatchingFunctionTraits<Correlation::matchingFunctions::SSD>::featureComparison(fvec, fVecsMediansPs[k][rotationId])/(fvec.shape()[0]);
+				fVecT fvec = fVols[k]->indexDimView(2,fTargetVecPos);
+				float cost = Correlation::MatchingFunctionTraits<Correlation::matchingFunctions::SSD>::featureComparison(fvec, (*fVecsMediansPs[k])[rotationId])/(fvec.shape()[0]);
 
 				if (cost < groupingThreshold) {
 					K = Ks[k];
@@ -495,7 +506,9 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 	}
 
 	//compute the total matrix and vector
-	A = lambdaRetinex*Aretinex + lambdaTexture*Atexture + lambdaScaling*Ascale;
+	A = lambdaRetinex*Aretinex;
+	A += lambdaTexture*Atexture;
+	A += lambdaScaling*Ascale;
 	b = lambdaRetinex*b_retinex + lambdaTexture*b_texture + lambdaScaling*b_scale;
 
 	SolverType solver;
@@ -507,10 +520,8 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 		return IntrinsicImageDecomposition<ComputeType, 3>{ Multidim::Array<ComputeType, 3>(), Multidim::Array<ComputeType, 3>() };
 	}
 
-
-
-	Multidim::Array<ComputeType, 3> logR = linear2logColorSpaceImg(rgbImage);
-	Multidim::Array<ComputeType, 3> logS = linear2logColorSpaceImg(rgbImage);
+	Multidim::Array<ComputeType, 3> logR(rgbImage.shape());
+	Multidim::Array<ComputeType, 3> logS(rgbImage.shape());
 
 	#pragma omp parallel for
 	for (int i = 0; i < idxConverter.numberOfPossibleIndices(); i++) {
@@ -531,6 +542,71 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 	Multidim::Array<ComputeType, 3> S = linear2logColorSpaceImg(logS);
 
 	return IntrinsicImageDecomposition<ComputeType, 3>{ R, S };
+
+}
+
+template<typename T, typename ComputeType=float>
+IntrinsicImageDecomposition<ComputeType, 3> autoRetinexWithNonLocalTextureConstraint(Multidim::Array<T, 3> const& rgbImage,
+																					 ComputeType lambdaRetinex = 1.0,
+																					 ComputeType lambdaTexture = 1.0,
+																					 ComputeType lambdaScaling = 1000.,
+																					 ComputeType reflectanceToShadingWeight = 100.,
+																					 float groupingThreshold = 0.01,
+																					 ComputeType histBinSize = 1.,
+																					 ComputeType minVal = 0.,
+																					 ComputeType maxVal = 255.) {
+
+	static_assert (std::is_floating_point_v<ComputeType>, "Compute type must be a floating point type");
+
+	constexpr int nDiffThresh = 12;
+
+	std::array<ComputeType, nDiffThresh> test;
+
+	constexpr ComputeType minDiffThresh = 0.00001;
+	constexpr ComputeType maxDiffThresh = 0.005;
+	constexpr ComputeType expandDiffThresh = maxDiffThresh - minDiffThresh;
+	constexpr ComputeType binDiffThresh = expandDiffThresh/nDiffThresh;
+
+
+	for (int i = 0; i < nDiffThresh; i++) {
+		test[i] = i*binDiffThresh;
+	}
+
+	double minEntropy = std::numeric_limits<double>::infinity();
+
+	IntrinsicImageDecomposition<ComputeType, 3> ret;
+
+	for (ComputeType diffThresh : test) {
+
+		IntrinsicImageDecomposition<ComputeType, 3> cand =  retinexWithNonLocalTextureConstraint(rgbImage,
+																								 diffThresh,
+																								 lambdaRetinex,
+																								 lambdaTexture,
+																								 lambdaScaling,
+																								 reflectanceToShadingWeight,
+																								 groupingThreshold);
+
+		if (cand.shading.empty() or cand.reflectance.empty()) {
+			std::cerr << "intrisic image decomposition failed!" << std::endl;
+			continue;
+		}
+
+		Multidim::Array<ComputeType, 2> view = cand.shading.sliceView(2,0);
+
+
+		Histogram<ComputeType> hist(view, histBinSize, minVal, maxVal);
+
+		double cand_entropy = hist.entropy();
+
+		if (cand_entropy < minEntropy) {
+			minEntropy = cand_entropy;
+			ret.shading = std::move(cand.shading);
+			ret.reflectance = std::move(cand.reflectance);
+		}
+
+	}
+
+	return ret;
 
 }
 
