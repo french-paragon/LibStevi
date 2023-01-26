@@ -161,6 +161,27 @@ public:
 				jumpTypeCountGrid.template at<Nc>(d,0) = d;
 			}
 
+			std::vector<T_CV> minCost(imWidth);
+
+			//compute the minimal cost;
+			for (int j = 0; j < imWidth; j++) {
+				minCost[j] = costVolume.template value<Nc>(i,j,0);
+
+				for (int d = 1; d < searchWidth; d++) {
+					T_CV val = costVolume.template value<Nc>(i,j,0);
+
+					if (strategy == dispExtractionStartegy::Cost) {
+						if (val < minCost[j]) {
+							minCost[j] = val;
+						}
+					} else {
+						if (val > minCost[j]) {
+							minCost[j] = val;
+						}
+					}
+				}
+			}
+
 			//fill in the grid
 			for (int j = 0; j < imWidth; j++) {
 
@@ -173,6 +194,13 @@ public:
 					if (d > 0) {
 						skipTargetCost = costGrid.template value<Nc>(d-1,j+1);
 						skipTargetCost.value() += jumpCostPolicy({i,j}, SkippedSource, jumpTypeGrid.value<Nc>(d-1,j), jumpTypeCountGrid.value<Nc>(d-1,j));
+
+						if (jumpTypeGrid.value<Nc>(d-1,j) == SkippedTarget) {
+							skipTargetCost += noJumpCost;
+						} else {
+							skipTargetCost += minCost[j]; //This garantee that the total cost of a path cannot be under selecting all minimal cost disparity.
+						}
+
 					}
 
 
@@ -180,6 +208,10 @@ public:
 					if (d < searchWidth-1) { //cost of deletion in levenshtein distance
 						skipSourceCost = costGrid.template value<Nc>(d+1,j);
 						skipSourceCost.value() += jumpCostPolicy({i,j}, SkippedTarget, jumpTypeGrid.value<Nc>(d+1,j-1), jumpTypeCountGrid.value<Nc>(d+1,j-1));
+
+						if (jumpTypeGrid.value<Nc>(d-1,j) == SkippedSource) {
+							skipSourceCost += noJumpCost;
+						}
 					}
 
 					//select optimal subpath
