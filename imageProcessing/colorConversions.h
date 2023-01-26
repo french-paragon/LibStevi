@@ -98,9 +98,23 @@ Multidim::Array<O, 3> normalizedIntensityRGBImage(Multidim::Array<T, 3> const& r
 
 		ctypeI It = ((red + green + blue)/3);
 
-		ctypeO nR = (whiteTout*red)/It;
-		ctypeO nG = (whiteTout*green)/It;
-		ctypeO nB = (whiteTout*blue)/It;
+		ctypeO nR;
+		ctypeO nG;
+		ctypeO nB;
+
+		if (std::isinf(red/It) or std::isinf(green/It) or std::isinf(blue/It) or
+				std::isnan(red/It) or std::isnan(green/It) or std::isnan(blue/It)) {
+
+			nR = whiteTout;
+			nG = whiteTout;
+			nB = whiteTout;
+
+		} else {
+
+			nR = (whiteTout*red)/It;
+			nG = (whiteTout*green)/It;
+			nG = (whiteTout*blue)/It;
+		}
 
 		idx[2] = 0;
 		normalizedImg.atUnchecked(idx) = scale*nR;
@@ -126,7 +140,7 @@ Multidim::Array<O, 3> normalizedIntensityRedGreenImage(Multidim::Array<T, 3> con
 	using ctypeI = TypesManipulations::accumulation_extended_t<T>;
 	using ctypeO = TypesManipulations::accumulation_extended_t<O>;
 	constexpr T whiteTin = (std::is_integral_v<T>) ? std::numeric_limits<T>::max() : 1.0;
-	constexpr T whiteTout = (std::is_integral_v<T>) ? std::numeric_limits<T>::max() : 1.0;
+	constexpr O whiteTout = (std::is_integral_v<O>) ? std::numeric_limits<O>::max() : 1.0;
 
 	if (rgbImg.shape()[2] != 3 and rgbImg.shape()[2] != 4) {
 		return Multidim::Array<O, 3>();
@@ -153,8 +167,20 @@ Multidim::Array<O, 3> normalizedIntensityRedGreenImage(Multidim::Array<T, 3> con
 
 		ctypeI It = ((red + green + blue)/3);
 
-		ctypeO nR = (whiteTout*red)/It;
-		ctypeO nG = (whiteTout*green)/It;
+		ctypeO nR;
+		ctypeO nG;
+
+		if (std::isinf(red/It) or std::isinf(green/It) or std::isinf(blue/It) or
+				std::isnan(red/It) or std::isnan(green/It) or std::isnan(blue/It)) {
+
+			nR = whiteTout;
+			nG = whiteTout;
+
+		} else {
+
+			nR = (whiteTout*red)/It;
+			nG = (whiteTout*green)/It;
+		}
 
 		idx[2] = 0;
 		normalizedImg.atUnchecked(idx) = scale*nR;

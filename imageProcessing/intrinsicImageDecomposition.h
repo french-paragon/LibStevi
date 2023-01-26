@@ -40,6 +40,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../utils/indexers.h"
 
+#include "../io/image_io.h"
+
 namespace StereoVision {
 namespace ImageProcessing {
 
@@ -68,7 +70,7 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 	using MatrixAType = Eigen::SparseMatrix<ComputeType>;
 	using VectorBType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
 	using VectorSolType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
-	using SolverType = Eigen::ConjugateGradient<MatrixAType, Eigen::Lower|Eigen::Upper, Eigen::DiagonalPreconditioner<ComputeType>>; //using SolverType = Eigen::BiCGSTAB<MatrixAType, Eigen::IncompleteLUT<ComputeType>>;
+	using SolverType = Eigen::ConjugateGradient<MatrixAType, Eigen::Lower|Eigen::Upper, Eigen::DiagonalPreconditioner<ComputeType>>; //using SolverType = Eigen::BiCGSTAB<MatrixAType, Eigen::DiagonalPreconditioner<ComputeType>>;
 
 	using fVecT = Multidim::Array<ComputeType, 1, Multidim::ConstView>;
 
@@ -131,18 +133,18 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 
 				int j = idxConverter.getPseudoFlatIdFromIndex(dIdx);
 
-				ComputeType diffNorm = 0;
+				ComputeType diffNormSquared = 0;
 
 				for (int k = 0; k < rgChromaticity.shape()[channelDim]; k++) {
 					idx[channelDim] = k;
 					dIdx[channelDim] = k;
 					ComputeType diff = rgChromaticity.valueUnchecked(idx) - rgChromaticity.valueUnchecked(dIdx);
-					diffNorm += diff*diff;
+					diffNormSquared += diff*diff;
 				}
 
-				diffNorm = std::sqrt(diffNorm);
+				ComputeType diffThreshSquared = diffThresh*diffThresh;
 
-				ComputeType omega = (diffNorm > diffThresh) ? 0 : reflectanceToShadingWeight;
+				ComputeType omega = (diffNormSquared > diffThreshSquared) ? 0 : reflectanceToShadingWeight;
 
 				Aretinex.coeffRef(i,i) += 2*nColors*(1+omega);
 				Aretinex.coeffRef(i,j) -= 2*nColors*(1+omega);
@@ -153,7 +155,7 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 					dIdx[channelDim] = c;
 					ComputeType diffCol = logImg.valueUnchecked(idx) - logImg.valueUnchecked(dIdx);
 
-					b_retinex[i] -= 2*omega*diffCol;
+					b_retinex[i] += 2*omega*diffCol;
 				}
 
 			}
@@ -438,8 +440,8 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 					ComputeType coeff = 2*cp*cq;
 
 					ComputeType bVal = coeff*(logImg.valueUnchecked(idx) - logImg.valueUnchecked(idxP));
-					b_texture[p] += bVal;
-					b_texture[i] += -bVal;
+					b_texture[p] += -bVal;
+					b_texture[i] += bVal;
 
 					Atexture.coeffRef(p, i) -= coeff;
 					Atexture.coeffRef(i, p) -= coeff;
@@ -499,7 +501,7 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 
 		if (val >= 0.95*bright) {
 			Ascale.coeffRef(i, i) += 2;
-			b_scale[i] -= 2;
+			b_scale[i] += 2*exp(1);
 		}
 	}
 
