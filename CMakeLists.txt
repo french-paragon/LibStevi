@@ -113,6 +113,7 @@ set(LIB_SRC
         imageProcessing/finiteDifferences.h
         imageProcessing/connectedComponents.h
         imageProcessing/morphologicalOperators.h
+        imageProcessing/shapeFromShading.h
         io/image_io.h
 )
 
