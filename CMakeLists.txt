@@ -118,6 +118,7 @@ set(LIB_SRC
         imageProcessing/connectedComponents.h
         imageProcessing/morphologicalOperators.h
         imageProcessing/foregroundSegmentation.h
+        imageProcessing/shapeFromShading.h
         io/image_io.h
 )
 
