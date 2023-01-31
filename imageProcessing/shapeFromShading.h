@@ -14,7 +14,7 @@ namespace ImageProcessing {
 template<typename ComputeType>
 Multidim::Array<ComputeType, 3> normalMapFromSingleShadingImage(Multidim::Array<ComputeType, 2> const& shading,
 																Eigen::Matrix<ComputeType, 3, 1> const& lightDirection,
-																ComputeType lambdaId = 1.0,
+																ComputeType lambdaNorm = 1.0,
 																ComputeType lambdaDiff = 0.25,
 																int nIter = 50,
 																ComputeType incrTol = 1e-6) {
@@ -34,13 +34,29 @@ Multidim::Array<ComputeType, 3> normalMapFromSingleShadingImage(Multidim::Array<
 	}
 
 	Eigen::Matrix<ComputeType, 3, 1> normalizedLightDirection = lightDirection;
-	normalizedLightDirection.normalize();
+	ComputeType lightDirNorm = normalizedLightDirection.norm();
+
+	ComputeType maxShadingVal = shading.valueUnchecked(0,0);
 
 	std::array<int,2> inSize = shading.shape();
 	std::array<int,3> outSize;
 	outSize[0] = inSize[0];
 	outSize[1] = inSize[1];
 	outSize[2] = 2;
+
+	for (int i = 0; i < inSize[0]; i++) {
+		for (int j = 0; j < inSize[1]; j++) {
+
+			ComputeType val = shading.valueUnchecked(i,j);
+
+			if (val > maxShadingVal) {
+				maxShadingVal = val;
+			}
+
+		}
+	}
+
+	lightDirNorm *= maxShadingVal/lightDirNorm;
 
 	std::array<int,3> fullOutSize = outSize;
 	fullOutSize[2] = 3;
@@ -122,24 +138,54 @@ Multidim::Array<ComputeType, 3> normalMapFromSingleShadingImage(Multidim::Array<
 		}
 	}
 
-	VectorSolType solution = VectorSolType::Zero(VectorPlen);
-
-	MatrixAType I;
-	I.resize(VectorNlen, VectorNlen);
-	I.setIdentity();
-
 	MatrixAType Abase = P.transpose()*P;
 	Abase += lambdaDiff*(Dx.transpose()*Dx);
 	Abase += lambdaDiff*(Dy.transpose()*Dy);
 
+	VectorSolType solution = VectorSolType::Zero(VectorNlen);
+
+	MatrixAType N;
+	N.resize(VectorNlen, VectorNlen);
+	N.reserve(Eigen::VectorXi::Constant(VectorNlen, 3));
+
+	VectorBType normDiffs = VectorSolType::Zero(VectorNlen);
+
 	for (int iter = 0; iter < nIter; iter++) {
+
+		for (int i = 0; i < VectorPlen; i++) {
+			int i1 = 3*i;
+			int i2 = 3*i+1;
+			int i3 = 3*i+2;
+
+			ComputeType x1 = solution[i1];
+			ComputeType x2 = solution[i2];
+			ComputeType x3 = solution[i3];
+
+			ComputeType quadr = (x1*x1 + x2*x2 + x3*x3 - 1);
+
+			normDiffs[i1] = 4*quadr*x1;
+			normDiffs[i2] = 4*quadr*x2;
+			normDiffs[i3] = 4*quadr*x3;
+
+			N.coeffRef(i1,i1) = 4*quadr + 8*x1;
+			N.coeffRef(i1,i2) = 8*x1*x2;
+			N.coeffRef(i1,i3) = 8*x1*x3;
+
+			N.coeffRef(i2,i2) = 4*quadr + 8*x2;
+			N.coeffRef(i2,i1) = 8*x2*x1;
+			N.coeffRef(i2,i3) = 8*x2*x3;
+
+			N.coeffRef(i3,i3) = 4*quadr + 8*x3;
+			N.coeffRef(i3,i1) = 8*x3*x1;
+			N.coeffRef(i3,i2) = 8*x3*x2;
+		}
+
 		MatrixAType A = Abase;
-		A += lambdaId*(solution.squaredNorm()-VectorNlen)*I;
+		VectorBType b = P.transpose()*p - A*solution - lambdaNorm*normDiffs; //rhs = c - (A*x_0 + g(x_0))
+		A += lambdaNorm*N; //Diff = A + Diff(g)
 
 		SolverType solver;
 		solver.compute(A);
-
-		VectorBType b = P.transpose()*p - A*solution;
 
 		VectorSolType delta = solver.solve(b);
 
