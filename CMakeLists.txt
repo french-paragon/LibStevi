@@ -65,6 +65,9 @@ set(LIB_SRC
         geometry/rotations.h
         geometry/stereorigrectifier.cpp
         geometry/stereorigrectifier.h
+        graphs/graphs.h
+        graphs/graph_flow.h
+        graphs/graph_cut.h
         interpolation/interpolation.cpp
         interpolation/interpolation.h
         interpolation/lensdistortionsmap.cpp
@@ -102,6 +105,7 @@ set(LIB_SRC
         utils/colors.h
         utils/array_utils.h
         utils/stevimath.h
+        utils/hash_utils.h
         statistics/stereo_covering.h
         imageProcessing/colorConversions.h
         imageProcessing/histogram.h
@@ -113,6 +117,7 @@ set(LIB_SRC
         imageProcessing/finiteDifferences.h
         imageProcessing/connectedComponents.h
         imageProcessing/morphologicalOperators.h
+        imageProcessing/foregroundSegmentation.h
         io/image_io.h
 )
 

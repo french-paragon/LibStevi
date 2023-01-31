@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <vector>
 
 #include "../utils/margins.h"
+
 #include "../correlation/unfold.h"
 
 namespace StereoVision {

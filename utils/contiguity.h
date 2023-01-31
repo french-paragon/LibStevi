@@ -50,6 +50,10 @@ public:
 		return (contiguity == bidimensionalContiguity::Queen) ? 3 : ((contiguity == bidimensionalContiguity::Rook) ? 2 : 1);
 	}
 
+	constexpr static int nTilingDirections(bidimensionalContiguity contiguity) {
+		return (contiguity == bidimensionalContiguity::Queen) ? 4 : 2;
+	}
+
 	template<bidimensionalContiguity contiguity>
 	constexpr static std::array<std::array<int, 2>, BidimensionalContiguityTraits<contiguity>::nDir> getDirections() {
 		return std::array<std::array<int, 2>, BidimensionalContiguityTraits<contiguity>::nDir>();
@@ -60,6 +64,11 @@ public:
 		return std::array<std::array<int, 2>, nCornerDirections(contiguity)>();
 	}
 
+	template<bidimensionalContiguity contiguity>
+	constexpr static std::array<std::array<int, 2>, nTilingDirections(contiguity)> getTilingDirections() {
+		return std::array<std::array<int, 2>, nTilingDirections(contiguity)>();
+	}
+
 };
 
 template<>
@@ -67,6 +76,7 @@ class Contiguity::BidimensionalContiguityTraits<Contiguity::Queen> {
 public:
 	static constexpr int nDir = 8;
 	static constexpr int nCornerDir = 3;
+	static constexpr int nTilingDir = 4;
 };
 
 template<>
@@ -74,6 +84,7 @@ class Contiguity::BidimensionalContiguityTraits<Contiguity::Rook> {
 public:
 	static constexpr int nDir = 4;
 	static constexpr int nCornerDir = 2;
+	static constexpr int nTilingDir = 2;
 };
 
 template<>
@@ -81,6 +92,7 @@ class Contiguity::BidimensionalContiguityTraits<Contiguity::Bishop> {
 public:
 	static constexpr int nDir = 4;
 	static constexpr int nCornerDir = 1;
+	static constexpr int nTilingDir = 2;
 };
 
 template<>
@@ -149,6 +161,35 @@ constexpr std::array<std::array<int, 2>, Contiguity::BidimensionalContiguityTrai
 	typedef std::array<deltasArrayType, Contiguity::BidimensionalContiguityTraits<Contiguity::Bishop>::nCornerDir> returnArrayType;
 
 	return returnArrayType({deltasArrayType({1,1})});
+}
+
+
+
+template<>
+constexpr std::array<std::array<int, 2>, Contiguity::BidimensionalContiguityTraits<Contiguity::Queen>::nTilingDir> Contiguity::getTilingDirections<Contiguity::Queen>() {
+
+	typedef std::array<int, 2> deltasArrayType;
+	typedef std::array<deltasArrayType, Contiguity::BidimensionalContiguityTraits<Contiguity::Queen>::nTilingDir> returnArrayType;
+
+	return returnArrayType({deltasArrayType({1,1}), deltasArrayType({1,0}), deltasArrayType({0,1}), deltasArrayType({1,-1})});
+}
+
+template<>
+constexpr std::array<std::array<int, 2>, Contiguity::BidimensionalContiguityTraits<Contiguity::Rook>::nTilingDir> Contiguity::getTilingDirections<Contiguity::Rook>() {
+
+	typedef std::array<int, 2> deltasArrayType;
+	typedef std::array<deltasArrayType, Contiguity::BidimensionalContiguityTraits<Contiguity::Rook>::nTilingDir> returnArrayType;
+
+	return returnArrayType({deltasArrayType({1,0}), deltasArrayType({0,1})});
+}
+
+template<>
+constexpr std::array<std::array<int, 2>, Contiguity::BidimensionalContiguityTraits<Contiguity::Bishop>::nTilingDir> Contiguity::getTilingDirections<Contiguity::Bishop>() {
+
+	typedef std::array<int, 2> deltasArrayType;
+	typedef std::array<deltasArrayType, Contiguity::BidimensionalContiguityTraits<Contiguity::Bishop>::nTilingDir> returnArrayType;
+
+	return returnArrayType({deltasArrayType({1,1}), deltasArrayType({1,-1})});
 }
 
 } // namespace StereoVision
