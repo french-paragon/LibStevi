@@ -29,7 +29,7 @@ namespace StereoVision {
 namespace GraphProcessing {
 
 
-template<typename GraphType, GraphMovingDirection movingDirection = Forward>
+template<typename GraphType, GraphMovingDirection movingDirection = Both>
 std::vector<int> reachableVerticesInCut(GraphType const& graph, std::vector<int> const& cutEdgesId, int startVertex) {
 
 	constexpr EdgeDirectedType edgeType = GraphType::edgeType;
@@ -64,11 +64,10 @@ std::vector<int> reachableVerticesInCut(GraphType const& graph, std::vector<int>
 
 		int nEdges = vertexIndex.nEdges(vId);
 
-		//forward flow
 		for (int i = 0; i < nEdges; i++) {
 			int edgeId = vertexIndex.nthEdge(vId, i);
 
-			if (cutEdgesIdxIndex.contains(edgeId)) {
+			if (cutEdgesIdxIndex.count(edgeId) > 0) {
 				continue; //ignore cutted edges
 			}
 
@@ -80,7 +79,7 @@ std::vector<int> reachableVerticesInCut(GraphType const& graph, std::vector<int>
 
 			int target = edge.vertex(ActualTargetVertex);
 
-			if (target == vId and edgeType == EdgeDirectedType::UndirectedEdges) {
+			if (target == vId and (edgeType == EdgeDirectedType::UndirectedEdges or movingDirection == Both)) {
 				target = edge.vertex(ActualSourceVertex);
 			}
 
@@ -102,7 +101,7 @@ std::vector<int> reachableVerticesInCut(GraphType const& graph, std::vector<int>
 	reachedIdxs.reserve(count);
 
 	for (int i = 0; i < graph.nVertices(); i++) {
-		if (reached[i]) {
+		if (reached[i] and i != startVertex) {
 			reachedIdxs.push_back(i);
 		}
 	}

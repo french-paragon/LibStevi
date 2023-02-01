@@ -146,7 +146,7 @@ maxFlowMinCutResults<typename GraphType::EdgeWeightType> maxFlowMinCut(GraphType
 			break;
 		}
 
-		WeightType deltaFlow = std::numeric_limits<WeightType>::max;
+		WeightType deltaFlow = std::numeric_limits<WeightType>::max();
 		int minFlowEdgeId = -1;
 
 		int vId = targetVertexId;
@@ -207,8 +207,6 @@ maxFlowMinCutResults<typename GraphType::EdgeWeightType> maxFlowMinCut(GraphType
 					flowUsed[edgeId] = edge.weight();
 				}
 			}
-
-			deltaFlow = std::min(deltaFlow, edge.weight() - flowUsed[edgeId]);
 
 			vId = nextVid;
 		}

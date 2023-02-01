@@ -107,4 +107,9 @@ add_executable(testOnDemandCostVolume testOnDemandCostVolume.cpp)
 target_link_libraries(testOnDemandCostVolume ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestOnDemandCostVolume testOnDemandCostVolume)
 
+add_executable(testGraphs testGraphs.cpp)
+target_link_libraries(testGraphs ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestGraphs testGraphs)
+
+
 

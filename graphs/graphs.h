@@ -45,10 +45,11 @@ enum VertexEdgePosition {
 
 enum GraphMovingDirection {
 	Forward,
-	Backward
+	Backward,
+	Both
 };
 
-inline VertexEdgePosition invertVertexEdgePosition(VertexEdgePosition vType) {
+inline constexpr VertexEdgePosition invertVertexEdgePosition(VertexEdgePosition vType) {
 	return (vType == SourceVertex) ? TargetVertex: SourceVertex;
 }
 
@@ -160,7 +161,7 @@ public:
 		return _vertex2_id;
 	}
 
-	inline int vertex(EdgeVertexType vType) const {
+	inline int vertex(VertexEdgePosition vType) const {
 		return (vType == SourceVertex) ? _vertex1_id : _vertex2_id;
 	}
 
@@ -210,7 +211,7 @@ public:
 		return _vertex2_id;
 	}
 
-	inline int vertex(EdgeVertexType vType) const {
+	inline int vertex(VertexEdgePosition vType) const {
 		return (vType == SourceVertex) ? _vertex1_id : _vertex2_id;
 	}
 
@@ -247,7 +248,7 @@ public:
 	Graph(int nVertex) {
 		_vertices.reserve(nVertex);
 
-		for (int i = 0; i < _vertices.size(); i++) {
+		for (int i = 0; i < nVertex; i++) {
 			_vertices.emplace_back(i);
 		}
 	}
@@ -281,14 +282,14 @@ public:
 
 
 	inline int nEdges() const {
-		return _vertices.size();
+		return _edges.size();
 	}
 
 	inline VertexT const& vertex(int i) const {
 		return _vertices[i];
 	}
 
-	inline std::conditional_t<std::is_void_v<VD_T>, void, VD_T&> vertexData(int i) {
+	inline std::conditional_t<std::is_void_v<VD_T>, void, std::conditional_t<std::is_void_v<VD_T>, int, VD_T>&> vertexData(int i) {
 		return _vertices[i].data();
 	}
 
@@ -296,7 +297,7 @@ public:
 		return _edges[i];
 	}
 
-	inline typename EdgeT::WeightType edgeWeight(int i) {
+	inline typename EdgeT::WeightType edgeWeight(int i) const {
 		return _edges[i].weight();
 	}
 
@@ -327,12 +328,12 @@ public:
 				continue;
 			}
 
-			if (_edges[i].vertex1 == idv1 and _edges[i].vertex2 == idv2) {
+			if (_edges[i].vertex1() == idv1 and _edges[i].vertex2() == idv2) {
 				return i;
 			}
 
 			if (edgeType == EdgeDirectedType::UndirectedEdges) {
-				if (_edges[i].vertex2 == idv1 and _edges[i].vertex1 == idv2) {
+				if (_edges[i].vertex2() == idv1 and _edges[i].vertex1() == idv2) {
 					return i;
 				}
 			}
