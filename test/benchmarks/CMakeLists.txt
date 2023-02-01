@@ -46,3 +46,6 @@ if (TARGET TIFF)
     target_link_libraries(benchmarkImageSaving TIFF)
     target_compile_definitions(benchmarkImageSaving PUBLIC TIFFAVAILABLE)
 endif()
+
+add_executable(benchmarkForegroundSegmentation benchmarkForegroundSegmentation.cpp)
+target_link_libraries(benchmarkForegroundSegmentation ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
