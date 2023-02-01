@@ -167,12 +167,13 @@ public:
 		_max_abs_diff = 0;
 		_min_abs_diff = std::numeric_limits<float>::infinity();
 
-		auto shape = guideRef.shape();
+		std::array<int,3> shape = guideRef.shape();
+		std::array<int,2> imShape = {shape[0], shape[1]};
 
-		auto pairs = coordinatePairs4Consideration(shape);
+		auto pairs = this->coordinatePairs4Consideration(imShape);
 
 		for (std::pair<std::array<int,2>, std::array<int,2>> const& pair : pairs) {
-			float val = computeGuideAbsDiff(pair.first, pair.second);
+			float val = this->computeGuideAbsDiff(pair.first, pair.second);
 
 			if (val < _min_abs_diff) {
 				_min_abs_diff = val;
@@ -189,7 +190,7 @@ public:
 							   std::array<int,2> coord2,
 							   FgBgSegmentation::MaskInfo mask_value2) const override {
 
-		float delta = computeGuideAbsDiff(coord1, coord2);
+		float delta = this->computeGuideAbsDiff(coord1, coord2);
 		float weight = (_max_abs_diff - delta)/(_max_abs_diff - _min_abs_diff);
 
 		return SmoothingMaskCostPolicy<T_Cost>::costComputationImpl(coord1, mask_value1, coord2, mask_value2)*weight;
@@ -197,7 +198,7 @@ public:
 
 protected :
 
-	float computeGuideAbsDiff(std::array<int,2> coord1, std::array<int,2> coord2) {
+	inline float computeGuideAbsDiff(std::array<int,2> coord1, std::array<int,2> coord2) const {
 		float absDiff = 0;
 
 		int nChannels = _guide_ref.shape()[2];
@@ -205,6 +206,8 @@ protected :
 			absDiff += std::abs(_guide_ref.valueUnchecked(coord1[0], coord1[1], c) -
 								_guide_ref.valueUnchecked(coord2[0], coord2[1], c));
 		}
+
+		return absDiff;
 	}
 
 	float _max_abs_diff;
@@ -278,11 +281,13 @@ OptimizableGraph<T_Cost> buildGraph(Multidim::Array<T_Cost, 3> const& cost,
 		T_Cost w_01 = global_cost_policy.globalCost(pos1, Background, pos2, Foreground);
 		T_Cost w_11 = global_cost_policy.globalCost(pos1, Foreground, pos2, Foreground);
 
-		assert(w_10 + w_01 > w_11 + w_00); //important !
+		assert(w_10 + w_01 >= w_11 + w_00); //important !
 
 		//quadratic part
-		int edgeId = graph.linkVertices(vertexId1, vertexId2, w_10 + w_01 - w_11 - w_00);
-		edgeIndex[std::array<int, 2>({vertexId1, vertexId2})] = edgeId;
+		if (w_10 + w_01 - w_11 - w_00 > 0) {
+			int edgeId = graph.linkVertices(vertexId1, vertexId2, w_10 + w_01 - w_11 - w_00);
+			edgeIndex[std::array<int, 2>({vertexId1, vertexId2})] = edgeId;
+		}
 
 		//linear part vertex1
 

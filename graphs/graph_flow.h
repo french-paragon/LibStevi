@@ -80,6 +80,8 @@ maxFlowMinCutResults<typename GraphType::EdgeWeightType> maxFlowMinCut(GraphType
 			accessEdge[i] = -1;
 		}
 
+		accessEdge[sourceVertexId] = 0; //not true, but speed up some processes later.
+
 		bool targetReached = false;
 
 		while (!targetReached and verticesToTreat.size() > 0) {
@@ -104,7 +106,7 @@ maxFlowMinCutResults<typename GraphType::EdgeWeightType> maxFlowMinCut(GraphType
 				assert(target != vId);
 				assert(target < nVerts);
 
-				if (accessEdge[target] < 0 and target != sourceVertexId and flowUsed[edgeId] < edge.weight()) {
+				if (accessEdge[target] < 0 and flowUsed[edgeId] < edge.weight()) {
 					accessEdge[target] = edgeId;
 					verticesToTreat.push(target);
 
@@ -129,7 +131,7 @@ maxFlowMinCutResults<typename GraphType::EdgeWeightType> maxFlowMinCut(GraphType
 				assert(target != vId);
 				assert(target < nVerts);
 
-				if (accessEdge[target] < 0 and target != sourceVertexId and flowUsed[edgeId] > 0) {
+				if (accessEdge[target] < 0 and flowUsed[edgeId] > 0) {
 					accessEdge[target] = edgeId;
 					verticesToTreat.push(target);
 

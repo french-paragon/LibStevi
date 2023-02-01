@@ -111,5 +111,9 @@ add_executable(testGraphs testGraphs.cpp)
 target_link_libraries(testGraphs ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestGraphs testGraphs)
 
+add_executable(testSegmentation testSegmentation.cpp)
+target_link_libraries(testSegmentation ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestSegmentation testSegmentation)
+
 
 
