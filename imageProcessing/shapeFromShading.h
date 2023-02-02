@@ -228,6 +228,114 @@ Multidim::Array<ComputeType, 3> normalMapFromSingleShadingImage(Multidim::Array<
 	return ret;
 }
 
+template<typename ComputeType>
+Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType, 3> const& normalmap, int maxDiff = 50.) {
+
+
+	using MatrixAType = Eigen::SparseMatrix<ComputeType>;
+	using VectorBType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
+	using VectorSolType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
+
+	using SolverType = Eigen::LeastSquaresConjugateGradient<MatrixAType, Eigen::LeastSquareDiagonalPreconditioner<ComputeType>>;
+
+	if (normalmap.shape()[2] != 3) {
+		return Multidim::Array<ComputeType, 2>();
+	}
+
+	std::array<int,2> shape = (normalmap.shape()[0], normalmap.shape()[1]);
+
+	Multidim::Array<ComputeType, 3> diffMap(normalmap.shape()[0], normalmap.shape()[1], 2);
+
+	for (int i = 0; i < normalmap.shape()[0]; i++) {
+		for (int j = 0; j < normalmap.shape()[1]; j++) {
+			ComputeType nx = normalmap.valueUnchecked(i,j,0);
+			ComputeType ny = normalmap.valueUnchecked(i,j,1);
+			ComputeType nz = normalmap.valueUnchecked(i,j,2);
+
+			ComputeType sx = (nx > 0) ? 1 : (sx < 0) ? -1 : 0;
+			ComputeType sy = (ny > 0) ? 1 : (sx < 0) ? -1 : 0;
+
+			ComputeType dx = nx/nz;
+
+			if (std::isnan(dx) or std::isinf(dx) or std::abs(dx) > maxDiff) {
+				dx = sx*maxDiff;
+			}
+
+			ComputeType dy = ny/nz;
+
+			if (std::isnan(dy) or std::isinf(dy) or std::abs(dy) > maxDiff) {
+				dy = sy*maxDiff;
+			}
+		}
+	}
+
+	Multidim::IndexConverter<2> outIdxs(shape);
+	Multidim::IndexConverter<3> inIdxs(diffMap.shape());
+
+	int nObs = inIdxs.numberOfPossibleIndices() + 1;
+	int nVars = outIdxs.numberOfPossibleIndices();
+
+	MatrixAType A;
+
+	A.resize(nObs, nVars);
+	A.reserve(Eigen::VectorXi::Constant(nVars, 5));
+
+	VectorBType b;
+	b.resize(nObs);
+
+	for (int i = 0; i < inIdxs.numberOfPossibleIndices(); i++) {
+
+		std::array<int,3> idxIn = inIdxs.getIndexFromPseudoFlatId(i);
+		std::array<int,2> outCenterIdx = {idxIn[0], idxIn[1]};
+
+		if (idxIn[2] == 0) { //xDiff
+			int xPosM1 = (outCenterIdx[1] > 0) ? outCenterIdx[1]-1 : 0;
+			int xPosP1 = (outCenterIdx[1] < shape[1]-1) ? outCenterIdx[1]+1 : shape[1]-1;
+
+			int jM1 = outIdxs.getPseudoFlatIdFromIndex({outCenterIdx[0], xPosM1});
+			int jP1 = outIdxs.getPseudoFlatIdFromIndex({outCenterIdx[0], xPosP1});
+
+			A.coeffRef(i,jM1) = -1;
+			A.coeffRef(i,jP1) = 1;
+		} else if (idxIn[2] == 1) { //yDiff
+			int yPosM1 = (outCenterIdx[0] < shape[0]-1) ? outCenterIdx[0]+1 : shape[1]-1;
+			int yPosP1 = (outCenterIdx[0] > 0) ? outCenterIdx[0]-1 : 0;
+
+			int jM1 = outIdxs.getPseudoFlatIdFromIndex({yPosM1, outCenterIdx[1]});
+			int jP1 = outIdxs.getPseudoFlatIdFromIndex({yPosP1, outCenterIdx[1]});
+
+			A.coeffRef(i,jM1) = -1;
+			A.coeffRef(i,jP1) = 1;
+		}
+
+		b[i] = diffMap.valueUnchecked(idxIn);
+
+	}
+
+	int zeroPosIdx = outIdxs.getPseudoFlatIdFromIndex({0,0});
+
+	A.coeffRef(nObs-1,zeroPosIdx) = 1;
+	b[nObs-1] = 0;
+
+	A.makeCompressed();
+
+	SolverType solver;
+	solver.compute(A);
+
+	VectorSolType solution = solver.solve(b);
+
+
+	Multidim::Array<ComputeType, 2> ret(shape);
+
+	for (int i = 0; i < outIdxs.numberOfPossibleIndices(); i++) {
+		auto idxOut = outIdxs.getIndexFromPseudoFlatId(i);
+
+		ret.atUnchecked(idxOut) = solution[i];
+	}
+
+	return ret;
+}
+
 } // namespace ImageProcessing
 } // namespace StereoVision
 
