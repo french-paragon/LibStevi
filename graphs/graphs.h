@@ -64,7 +64,7 @@ public:
 
 	}
 
-	GraphVertex(int id, VD_T data) :
+	GraphVertex(int id, VD_T data = VD_T()) :
 		_id(id),
 		_data(data)
 	{
@@ -291,6 +291,16 @@ public:
 
 	inline std::conditional_t<std::is_void_v<VD_T>, void, std::conditional_t<std::is_void_v<VD_T>, int, VD_T>&> vertexData(int i) {
 		return _vertices[i].data();
+	}
+
+	template<typename T>
+	void setVertexData(int vId, std::enable_if_t<!std::is_void_v<T> and !std::is_void_v<VD_T>,T> const& data) {
+		_vertices[vId].data() = data;
+	}
+
+	template<typename T>
+	void setVertexData(int vId, std::enable_if_t<!std::is_void_v<T> and !std::is_void_v<VD_T>,T> && data) {
+		_vertices[vId].data() = data;
 	}
 
 	inline EdgeT const& edge(int i) const {
