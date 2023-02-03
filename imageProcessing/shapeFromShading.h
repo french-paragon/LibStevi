@@ -229,7 +229,7 @@ Multidim::Array<ComputeType, 3> normalMapFromSingleShadingImage(Multidim::Array<
 }
 
 template<typename ComputeType>
-Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType, 3> const& normalmap, int maxDiff = 50.) {
+Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType, 3> const& normalmap, ComputeType maxDiff = 50.) {
 
 
 	using MatrixAType = Eigen::SparseMatrix<ComputeType>;
@@ -242,7 +242,7 @@ Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType,
 		return Multidim::Array<ComputeType, 2>();
 	}
 
-	std::array<int,2> shape = (normalmap.shape()[0], normalmap.shape()[1]);
+	std::array<int,2> shape{normalmap.shape()[0], normalmap.shape()[1]};
 
 	Multidim::Array<ComputeType, 3> diffMap(normalmap.shape()[0], normalmap.shape()[1], 2);
 
