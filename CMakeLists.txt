@@ -129,6 +129,20 @@ add_library(
 
 target_link_libraries(stevi PRIVATE ${PNP_LIBS})
 
+if (JPEG_FOUND)
+    target_link_libraries(stevi PRIVATE JPEG::JPEG)
+    target_compile_definitions(stevi PRIVATE STEVI_IO_USE_JPEG)
+endif (JPEG_FOUND)
+
+if (PNG_FOUND)
+    target_link_libraries(stevi PRIVATE PNG::PNG)
+    target_compile_definitions(stevi PRIVATE STEVI_IO_USE_PNG)
+endif (PNG_FOUND)
+
+if (TIFF_FOUND)
+    target_link_libraries(stevi PRIVATE TIFF::TIFF)
+    target_compile_definitions(stevi PRIVATE STEVI_IO_USE_TIFF)
+endif (TIFF_FOUND)
 
 if (buildTests)
 

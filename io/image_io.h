@@ -2,6 +2,19 @@
 #define IMAGE_IO_H
 
 #define cimg_display 0 //no display from Cimg
+
+#ifdef STEVI_IO_USE_JPEG
+	#define cimg_use_jpeg //use jpg image format
+#endif //STEVI_IO_USE_JPEG
+
+#ifdef STEVI_IO_USE_PNG
+#define cimg_use_png //use jpg image format
+#endif //STEVI_IO_USE_PNG
+
+#ifdef STEVI_IO_USE_TIFF
+#define cimg_use_tiff //use jpg image format
+#endif //STEVI_IO_USE_TIFF
+
 #include <CImg.h>
 
 #include "../utils/types_manipulations.h"
