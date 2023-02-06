@@ -736,6 +736,71 @@ Multidim::Array<FgBgSegmentation::MaskInfo, 2> hierarchicalGlobalRefinedMask(std
 
 }
 
+template<typename T_Cost>
+Multidim::Array<FgBgSegmentation::MaskInfo, 2> hierarchicalGlobalRefinedMask(std::vector<Multidim::Array<T_Cost, 3> const*> const& costs,
+																			 std::vector<MaskCostPolicy<T_Cost> const*> const& cost_policies) {
+
+	if (costs.size() != cost_policies.size()) {
+		return Multidim::Array<FgBgSegmentation::MaskInfo, 2>();
+	}
+
+	int depth = costs.size();
+	std::vector<std::array<int,2>> shapes(depth);
+
+	for (int d = 0; d < depth; d++) {
+
+		shapes[d] = {costs[d]->shape()[0], costs[d]->shape()[1]};
+	}
+
+	//check the sizes are indeed decreasing with depth
+	for (int d = 0; d < depth-1; d++) {
+		if (shapes[d][0] < shapes[d+1][0] or shapes[d][1] < shapes[d+1][1]) {
+			return Multidim::Array<FgBgSegmentation::MaskInfo, 2>();
+		}
+	}
+
+	int currentDepth = depth-1;
+
+	FgBgSegmentation::UpscaledMaskInfos maskInfos;
+
+	maskInfos.upscaled_mask = getGlobalRefinedMask(*costs[currentDepth], *cost_policies[currentDepth]);
+
+	for (int p = 1; p < depth; p++) {
+		currentDepth = depth-p-1;
+		maskInfos = FgBgSegmentation::upscaleMask(maskInfos.upscaled_mask, shapes[currentDepth]);
+
+		FgBgSegmentation::OptimizableIndexedGraph<T_Cost> graph = FgBgSegmentation::buildMaskedGraph(*costs[currentDepth],
+																									 *cost_policies[currentDepth],
+																									 maskInfos.valueNeedsCheck,
+																									 maskInfos.upscaled_mask);
+
+
+		int nVertices = graph.nVertices();
+
+		int sourceVertexId = nVertices-2;
+		int targetVertexId = nVertices-1;
+
+		auto maxFlowMinCut = GraphProcessing::maxFlowMinCut(graph,
+															sourceVertexId,
+															targetVertexId);
+
+		std::vector<int> reachableVertices = GraphProcessing::reachableVerticesInCut(graph, maxFlowMinCut.minCutEdgesIdxs, targetVertexId);
+
+		for (int vId = 0; vId < nVertices-2; vId++) {
+			std::array<int,2> imgPos = graph.vertexData(vId);
+			maskInfos.upscaled_mask.atUnchecked(imgPos[0],imgPos[1]) = FgBgSegmentation::Background;
+		}
+
+		for (int vId : reachableVertices) {
+			std::array<int,2> imgPos = graph.vertexData(vId);
+			maskInfos.upscaled_mask.atUnchecked(imgPos[0],imgPos[1]) = FgBgSegmentation::Foreground;
+		}
+	}
+
+	return maskInfos.upscaled_mask;
+
+}
+
 } // namespace ImageProcessing
 } // namespace StereoVision
 
