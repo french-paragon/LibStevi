@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <set>
 #include <iostream>
+#include <vector>
 
 namespace StereoVision {
 namespace Correlation {
@@ -34,6 +35,40 @@ struct OffsetedCostVolume {
 	Multidim::Array<TCV,3> truncated_cost_volume;
 	Multidim::Array<disp_t,2> disp_estimate;
 };
+
+template<typename F_T>
+/*!
+ * FeatureVolumePyramid represent a feature volume pyramid (i.e. feature volumes of the same image at different resolution).
+ */
+using FeatureVolumePyramid = std::vector<F_T>;
+
+template<typename F_T, int nImDim = 2>
+FeatureVolumePyramid<F_T> buildFeaturePyramid(Multidim::Array<F_T,nImDim> const& img,
+											  uint8_t h_radius,
+											  uint8_t v_radius,
+											  int nLevels,
+											  PaddingMargins const& padding = PaddingMargins(),
+											  UnfoldPatchOrientation orientation = Rotate0) {
+
+	if (nLevels <= 0) {
+		return FeatureVolumePyramid<F_T>();
+	}
+
+	FeatureVolumePyramid<F_T> ret;
+	ret.reserve(nLevels);
+
+	ret.emplace_back(unfold(h_radius, v_radius, img, padding, orientation)); //level 0
+
+	Multidim::Array<F_T, nImDim> downscaled = Interpolation::averagePoolingDownsample<F_T, F_T>(img, Interpolation::DownSampleWindows(2));
+
+	for (int i = 1; i < nLevels; i++) {
+		ret.emplace_back(unfold(h_radius, v_radius, downscaled, padding, orientation));
+		downscaled = Interpolation::averagePoolingDownsample<F_T, F_T>(downscaled, Interpolation::DownSampleWindows(2));
+	}
+
+	return ret;
+
+}
 
 template<matchingFunctions matchFunc, typename T_L, typename T_R, dispDirection dDir = dispDirection::RightToLeft, typename TCV = float>
 OffsetedCostVolume<TCV> computeGuidedCV(Multidim::Array<T_L,3> const& feature_vol_l,
