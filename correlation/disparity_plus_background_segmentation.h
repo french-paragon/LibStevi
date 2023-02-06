@@ -5,6 +5,8 @@
 #include "cross_correlations.h"
 #include "on_demand_cost_volume.h"
 
+#include "../imageProcessing/foregroundSegmentation.h"
+
 #include <set>
 #include <queue>
 
@@ -13,10 +15,7 @@ namespace Correlation {
 
 struct StereoDispWithBgMask {
 
-	enum MaskInfo {
-		Foreground = 1,
-		Background = 0
-	};
+	using MaskInfo = ImageProcessing::FgBgSegmentation::MaskInfo;
 
 	StereoDispWithBgMask() :
 		fg_mask(),
