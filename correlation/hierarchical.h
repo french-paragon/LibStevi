@@ -40,7 +40,7 @@ template<typename F_T>
 /*!
  * FeatureVolumePyramid represent a feature volume pyramid (i.e. feature volumes of the same image at different resolution).
  */
-using FeatureVolumePyramid = std::vector<F_T>;
+using FeatureVolumePyramid = std::vector<Multidim::Array<F_T,3>>;
 
 template<typename F_T, int nImDim = 2>
 FeatureVolumePyramid<F_T> buildFeaturePyramid(Multidim::Array<F_T,nImDim> const& img,
