@@ -90,6 +90,7 @@ set(LIB_SRC
         correlation/template_matching.h
         correlation/dynamic_programing_stereo.h
         correlation/disparity_plus_background_segmentation.h
+        correlation/guided_cost_filtering.h
         optimization/l0optimization.h
         optimization/l1optimization.h
         optimization/l2optimization.h
