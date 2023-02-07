@@ -130,13 +130,19 @@ public:
 					std::tie(ti, tj) = pixels2check.front();
 					pixels2check.pop();
 
+					bool skip = false;
+
 					#pragma omp critical
 					{
 						if (checkedPixels.count({ti,tj}) > 0) {
-							continue;
+							skip = true;
+						} else {
+							checkedPixels.insert({ti,tj});
 						}
+					}
 
-						checkedPixels.insert({ti,tj});
+					if (skip) {
+						continue;
 					}
 
 					disp_t idx_bg = _bg_disp_idx.valueUnchecked(ti,tj);
