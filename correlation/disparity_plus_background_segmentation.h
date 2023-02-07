@@ -152,7 +152,7 @@ public:
 
 					if (!opt_fg_cost.has_value()) {
 						ret.disp.atUnchecked(ti,tj) = _searchOffset.idx2disp<0>(idx_bg);
-						ret.fg_mask.atUnchecked(ti,tj) = StereoDispWithBgMask::Background;
+						ret.fg_mask.atUnchecked(ti,tj) = ImageProcessing::FgBgSegmentation::Background;
 						continue;
 					}
 
@@ -207,7 +207,9 @@ public:
 					}
 
 					ret.disp.atUnchecked(ti,tj) = _searchOffset.idx2disp<0>(idx_fg);
-					ret.fg_mask.atUnchecked(ti,tj) = (std::abs(idx_fg - idx_bg) >= _disp_tol) ? StereoDispWithBgMask::Foreground : StereoDispWithBgMask::Background;
+					ret.fg_mask.atUnchecked(ti,tj) = (std::abs(idx_fg - idx_bg) >= _disp_tol) ?
+								ImageProcessing::FgBgSegmentation::Foreground :
+								ImageProcessing::FgBgSegmentation::Background;
 				}
 			}
 		}
