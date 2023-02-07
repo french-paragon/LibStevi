@@ -5,6 +5,8 @@
 #include "cross_correlations.h"
 #include "on_demand_cost_volume.h"
 
+#include "../imageProcessing/foregroundSegmentation.h"
+
 #include <set>
 #include <queue>
 
@@ -13,10 +15,7 @@ namespace Correlation {
 
 struct StereoDispWithBgMask {
 
-	enum MaskInfo {
-		Foreground = 1,
-		Background = 0
-	};
+	using MaskInfo = ImageProcessing::FgBgSegmentation::MaskInfo;
 
 	StereoDispWithBgMask() :
 		fg_mask(),
@@ -131,13 +130,19 @@ public:
 					std::tie(ti, tj) = pixels2check.front();
 					pixels2check.pop();
 
+					bool skip = false;
+
 					#pragma omp critical
 					{
 						if (checkedPixels.count({ti,tj}) > 0) {
-							continue;
+							skip = true;
+						} else {
+							checkedPixels.insert({ti,tj});
 						}
+					}
 
-						checkedPixels.insert({ti,tj});
+					if (skip) {
+						continue;
 					}
 
 					disp_t idx_bg = _bg_disp_idx.valueUnchecked(ti,tj);
@@ -147,7 +152,7 @@ public:
 
 					if (!opt_fg_cost.has_value()) {
 						ret.disp.atUnchecked(ti,tj) = _searchOffset.idx2disp<0>(idx_bg);
-						ret.fg_mask.atUnchecked(ti,tj) = StereoDispWithBgMask::Background;
+						ret.fg_mask.atUnchecked(ti,tj) = ImageProcessing::FgBgSegmentation::Background;
 						continue;
 					}
 
@@ -202,7 +207,9 @@ public:
 					}
 
 					ret.disp.atUnchecked(ti,tj) = _searchOffset.idx2disp<0>(idx_fg);
-					ret.fg_mask.atUnchecked(ti,tj) = (std::abs(idx_fg - idx_bg) >= _disp_tol) ? StereoDispWithBgMask::Foreground : StereoDispWithBgMask::Background;
+					ret.fg_mask.atUnchecked(ti,tj) = (std::abs(idx_fg - idx_bg) >= _disp_tol) ?
+								ImageProcessing::FgBgSegmentation::Foreground :
+								ImageProcessing::FgBgSegmentation::Background;
 				}
 			}
 		}
