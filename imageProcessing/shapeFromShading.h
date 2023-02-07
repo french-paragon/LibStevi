@@ -7,6 +7,7 @@
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 #include <Eigen/IterativeLinearSolvers>
+#include <Eigen/SparseLU>
 
 namespace StereoVision {
 namespace ImageProcessing {
@@ -23,8 +24,9 @@ Multidim::Array<ComputeType, 3> normalMapFromSingleShadingImage(Multidim::Array<
 	using VectorBType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
 	using VectorSolType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
 
-	using SolverType = Eigen::ConjugateGradient<MatrixAType, Eigen::Lower|Eigen::Upper, Eigen::DiagonalPreconditioner<ComputeType>>;
+	//using SolverType = Eigen::ConjugateGradient<MatrixAType, Eigen::Lower|Eigen::Upper, Eigen::DiagonalPreconditioner<ComputeType>>;
 	//using SolverType = Eigen::BiCGSTAB<MatrixAType, Eigen::IncompleteLUT<ComputeType>>;
+	using SolverType = Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int> >;
 
 	int VectorPlen = shading.flatLenght();
 	int VectorNlen = 3*VectorPlen;
