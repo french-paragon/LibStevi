@@ -196,9 +196,9 @@ public:
 						skipTargetCost.value() += jumpCostPolicy({i,j}, SkippedSource, jumpTypeGrid.value<Nc>(d-1,j), jumpTypeCountGrid.value<Nc>(d-1,j));
 
 						if (jumpTypeGrid.value<Nc>(d-1,j) == SkippedTarget) {
-							skipTargetCost += noJumpCost;
+							skipTargetCost.value() += noJumpCost;
 						} else {
-							skipTargetCost += minCost[j]; //This garantee that the total cost of a path cannot be under selecting all minimal cost disparity.
+							skipTargetCost.value() += minCost[j]; //This garantee that the total cost of a path cannot be under selecting all minimal cost disparity.
 						}
 
 					}
@@ -210,7 +210,7 @@ public:
 						skipSourceCost.value() += jumpCostPolicy({i,j}, SkippedTarget, jumpTypeGrid.value<Nc>(d+1,j-1), jumpTypeCountGrid.value<Nc>(d+1,j-1));
 
 						if (jumpTypeGrid.value<Nc>(d-1,j) == SkippedSource) {
-							skipSourceCost += noJumpCost;
+							skipSourceCost.value() += noJumpCost;
 						}
 					}
 
