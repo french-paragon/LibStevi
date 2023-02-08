@@ -80,8 +80,8 @@ Multidim::Array<ComputeT, 4> computeAggregationWindows(Multidim::Array<GuideT, g
 								targetIdx[2] = c;
 							}
 
-							refVec.atUnchecked(c) = guide.atUnchecked(refIdx);
-							targetVec.atUnchecked(c) = guide.atUnchecked(targetIdx);
+							refVec.atUnchecked(c) = guide.valueUnchecked(refIdx);
+							targetVec.atUnchecked(c) = guide.valueUnchecked(targetIdx);
 						}
 
 						ComputeT wMatch = matchWeightFunc(refVec, targetVec);
@@ -158,9 +158,9 @@ Multidim::Array<T_CV, 3> variableCostVolumeAggregation(Multidim::Array<T_CV, 3> 
 
 						int window_j_idx = dj+h_radius;
 
-						ComputeT& w = ret.atUnchecked(i,j, window_i_idx, window_j_idx);
+						ComputeT w = aggregationWindows.valueUnchecked(i,j, window_i_idx, window_j_idx);
 
-						acc += w*costVolume.atUnchecked(i+di,j+dj,c);
+						acc += w*costVolume.valueUnchecked(i+di,j+dj,c);
 						weight += w;
 
 					}
