@@ -135,7 +135,7 @@ Multidim::Array<T_O, 2> medianFeature(Multidim::Array<T_I, 3> const& featureVolu
 template<class T_I, class T_O = T_I>
 Multidim::Array<T_O, 2> erosion(int h_radius, int v_radius, Multidim::Array<T_I, 2> const& image, PaddingMargins const& padding = PaddingMargins()) {
 
-	Multidim::Array<T_I, 3> featureVolume = Correlation::unfold<T_I, T_O>(h_radius, v_radius, image, padding);
+	Multidim::Array<T_O, 3> featureVolume = Correlation::unfold<T_I, T_O>(h_radius, v_radius, image, padding);
 	return minFeature(featureVolume);
 
 }
@@ -143,7 +143,7 @@ Multidim::Array<T_O, 2> erosion(int h_radius, int v_radius, Multidim::Array<T_I,
 template<class T_I, class T_O = T_I>
 Multidim::Array<T_O, 2> dilation(int h_radius, int v_radius, Multidim::Array<T_I, 2> const& image, PaddingMargins const& padding = PaddingMargins()) {
 
-	Multidim::Array<T_I, 3> featureVolume = Correlation::unfold<T_I, T_O>(h_radius, v_radius, image, padding);
+	Multidim::Array<T_O, 3> featureVolume = Correlation::unfold<T_I, T_O>(h_radius, v_radius, image, padding);
 	return maxFeature(featureVolume);
 
 }
@@ -151,7 +151,7 @@ Multidim::Array<T_O, 2> dilation(int h_radius, int v_radius, Multidim::Array<T_I
 template<class T_I, class T_O = T_I>
 Multidim::Array<T_O, 2> medianFilter(int h_radius, int v_radius, Multidim::Array<T_I, 2> const& image, PaddingMargins const& padding = PaddingMargins()) {
 
-	Multidim::Array<T_I, 3> featureVolume = Correlation::unfold<T_I, T_O>(h_radius, v_radius, image, padding);
+	Multidim::Array<T_O, 3> featureVolume = Correlation::unfold<T_I, T_O>(h_radius, v_radius, image, padding);
 	return medianFeature(featureVolume);
 
 }

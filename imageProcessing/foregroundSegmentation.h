@@ -163,9 +163,11 @@ class GuidedMaskCostPolicy : public SmoothingMaskCostPolicy<T_Cost> {
 public:
 
 	GuidedMaskCostPolicy(T_Cost switchCost,
-						 Multidim::Array<T_Guide, 3> const& guideRef) :
-		SmoothingMaskCostPolicy<T_Cost>(switchCost),
-		_guide_ref(guideRef)
+						 Multidim::Array<T_Guide, 3> const& guideRef,
+						 T_Cost minSwitchCost = 0) :
+		SmoothingMaskCostPolicy<T_Cost>(std::max(switchCost, minSwitchCost) - std::min(switchCost, minSwitchCost)),
+		_guide_ref(guideRef),
+		_minSwitchCost(std::min(switchCost, minSwitchCost))
 	{
 		_max_abs_diff = 0;
 		_min_abs_diff = std::numeric_limits<float>::infinity();
@@ -196,7 +198,8 @@ public:
 		float delta = this->computeGuideAbsDiff(coord1, coord2);
 		float weight = (_max_abs_diff - delta)/(_max_abs_diff - _min_abs_diff);
 
-		return SmoothingMaskCostPolicy<T_Cost>::costComputationImpl(coord1, mask_value1, coord2, mask_value2)*weight;
+		return ((mask_value1 != mask_value2) ? _minSwitchCost : 0) +
+				SmoothingMaskCostPolicy<T_Cost>::costComputationImpl(coord1, mask_value1, coord2, mask_value2)*weight;
 	}
 
 protected :
@@ -217,6 +220,8 @@ protected :
 	float _min_abs_diff;
 
 	Multidim::Array<T_Guide, 3> const& _guide_ref;
+
+	T_Cost _minSwitchCost;
 };
 
 
@@ -670,6 +675,50 @@ Multidim::Array<FgBgSegmentation::MaskInfo, 2> getGlobalRefinedMask(Multidim::Ar
 		std::array<int,2> pos = idxConverter.getIndexFromPseudoFlatId(vId);
 
 		ret.atUnchecked(pos) = FgBgSegmentation::Foreground;
+	}
+
+	return ret;
+
+}
+
+template<typename T_Cost>
+Multidim::Array<FgBgSegmentation::MaskInfo, 2> getPartialGlobalRefinedMask(Multidim::Array<T_Cost, 3> const& cost,
+																		   MaskCostPolicy<T_Cost> const& global_cost_policy,
+																		   Multidim::Array<bool, 2> const& optimizablePixels,
+																		   Multidim::Array<FgBgSegmentation::MaskInfo, 2> const& currentValues) {
+
+	FgBgSegmentation::OptimizableIndexedGraph<T_Cost> graph = FgBgSegmentation::buildMaskedGraph(cost, global_cost_policy, optimizablePixels, currentValues);
+
+	int nVertices = graph.nVertices();
+
+	std::array<int, 2> shape = {cost.shape()[0], cost.shape()[1]};
+
+	int sourceVertexId = nVertices-2;
+	int targetVertexId = nVertices-1;
+
+	auto maxFlowMinCut = GraphProcessing::maxFlowMinCut(graph,
+														sourceVertexId,
+														targetVertexId);
+
+	std::vector<int> reachableVertices = GraphProcessing::reachableVerticesInCut(graph, maxFlowMinCut.minCutEdgesIdxs, targetVertexId);
+
+	Multidim::Array<FgBgSegmentation::MaskInfo, 2> ret(shape);
+
+	for (int i = 0; i < shape[0]; i++) {
+		for (int j = 0; j < shape[1]; j++) {
+			if (optimizablePixels.valueUnchecked(i,j)) {
+				ret.atUnchecked(i,j) = FgBgSegmentation::Background;
+			} else {
+				ret.atUnchecked(i,j) = currentValues.valueUnchecked(i,j);
+			}
+		}
+	}
+
+
+
+	for (int vId : reachableVertices) {
+		std::array<int,2> imgPos = graph.vertexData(vId);
+		ret.atUnchecked(imgPos[0],imgPos[1]) = FgBgSegmentation::Foreground;
 	}
 
 	return ret;

@@ -19,7 +19,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <QtTest/QtTest>
 
 #include <MultidimArrays/MultidimArrays.h>
+
 #include "imageProcessing/foregroundSegmentation.h"
+#include "imageProcessing/morphologicalOperators.h"
 
 #include <random>
 
@@ -48,8 +50,8 @@ SegmentationProblem buildCirleProblem(int height,
 	Multidim::Array<uint8_t,3> img(height, width, 3);
 	Multidim::Array<bool,2> gt_mask(height, width);
 
-	float prob_fg_fg = 95;
-	float prob_fg_bg = 05;
+	float prob_fg_fg = 0.95;
+	float prob_fg_bg = 0.05;
 
 	std::bernoulli_distribution dist_fg_fg(prob_fg_fg);
 	std::bernoulli_distribution dist_fg_bg(prob_fg_bg);
@@ -67,11 +69,14 @@ SegmentationProblem buildCirleProblem(int height,
 				img.atUnchecked(i,j,c) = (isFg) ? colorFg[c] : colorBg[c];
 			}
 
-			bool fgIsFg = dist_fg_fg(re);
-			bool bgIsFg = dist_fg_bg(re);
+			bool roughIsFg = dist_fg_fg(re);
 
-			segmentation_cost.atUnchecked(i,j,Foreground) = (fgIsFg) ? cost_fg : cost_bg;
-			segmentation_cost.atUnchecked(i,j,Background) = (bgIsFg) ? cost_fg : cost_bg;
+			if (!isFg) {
+				roughIsFg = dist_fg_bg(re);
+			}
+
+			segmentation_cost.atUnchecked(i,j,Foreground) = (roughIsFg) ? cost_fg : cost_bg;
+			segmentation_cost.atUnchecked(i,j,Background) = (roughIsFg) ? cost_bg : cost_fg;
 
 		}
 	}
@@ -89,6 +94,9 @@ private Q_SLOTS:
 
 	void testGlobalSegmentation_data();
 	void testGlobalSegmentation();
+
+	void testPartialGlobalSegmentation_data();
+	void testPartialGlobalSegmentation();
 
 	void testHierarchicalGlobalSegmentation_data();
 	void testHierarchicalGlobalSegmentation();
@@ -187,7 +195,7 @@ void TestSegmentation::testGlobalSegmentation_data() {
 	QTest::addColumn<int>("centerJ");
 	QTest::addColumn<int>("Radius");
 
-	QTest::newRow("Small images") << 120 << 260 << 80 << 180 << 10;
+	QTest::newRow("Small images") << 120 << 260 << 60 << 180 << 50;
 
 }
 void TestSegmentation::testGlobalSegmentation() {
@@ -229,6 +237,82 @@ void TestSegmentation::testGlobalSegmentation() {
 	float propCorrect = float(nCorrectPixels)/float(nPixels);
 
 	QVERIFY2(propCorrect >= 0.98, "Proportion of correct pixels is not large enough");
+
+}
+
+
+
+void TestSegmentation::testPartialGlobalSegmentation_data() {
+	QTest::addColumn<int>("height");
+	QTest::addColumn<int>("width");
+	QTest::addColumn<int>("centerI");
+	QTest::addColumn<int>("centerJ");
+	QTest::addColumn<int>("Radius");
+	QTest::addColumn<int>("searchRadius");
+
+	QTest::newRow("Small images") << 120 << 260 << 60 << 180 << 50 << 10;
+}
+
+void TestSegmentation::testPartialGlobalSegmentation() {
+
+	using MaskInfo = StereoVision::ImageProcessing::FgBgSegmentation::MaskInfo;
+
+	QFETCH(int, height);
+	QFETCH(int, width);
+	QFETCH(int, centerI);
+	QFETCH(int, centerJ);
+	QFETCH(int, Radius);
+	QFETCH(int, searchRadius);
+
+	std::array<uint8_t, 3> colorFg = {255, 128, 0};
+	std::array<uint8_t, 3> colorBg = {120, 50, 27};
+
+	int cost_bg = 69;
+	int cost_fg = 42;
+
+	SegmentationProblem problem = buildCirleProblem(height, width, centerI, centerJ, Radius, re, colorFg, colorBg, cost_bg, cost_fg);
+
+	Multidim::Array<MaskInfo, 2> extended_mask = StereoVision::ImageProcessing::dilation<bool, MaskInfo>(searchRadius, searchRadius, problem.gt_mask);
+	Multidim::Array<MaskInfo, 2> eroded_mask = StereoVision::ImageProcessing::erosion<bool, MaskInfo>(searchRadius, searchRadius, problem.gt_mask);
+
+	Multidim::Array<bool, 2> optimizablePixels(problem.gt_mask.shape());
+
+	for (int i = 0; i < problem.gt_mask.shape()[0]; i++) {
+		for (int j = 0; j < problem.gt_mask.shape()[1]; j++) {
+
+			optimizablePixels.atUnchecked(i,j) = (extended_mask.valueUnchecked(i,j) == MaskInfo::Foreground and
+												  eroded_mask.valueUnchecked(i,j) == MaskInfo::Background);
+
+		}
+	}
+
+	StereoVision::ImageProcessing::GuidedMaskCostPolicy maskCostPolicy(4*cost_bg, problem.img);
+
+	Multidim::Array<MaskInfo, 2> mask =
+			StereoVision::ImageProcessing::getPartialGlobalRefinedMask(problem.segmentation_cost, maskCostPolicy, optimizablePixels, eroded_mask);
+
+	int nPixels = 0;
+	int nCorrectPixels = 0;
+
+	for (int i = 0; i < height; i++) {
+		for (int j = 0; j < width; j++) {
+
+			if (!optimizablePixels.valueUnchecked(i,j)) {
+				continue;
+			}
+
+			if (problem.gt_mask.valueUnchecked(i,j) == mask.valueUnchecked(i,j)) {
+				nCorrectPixels++;
+			}
+
+			nPixels++;
+
+		}
+	}
+
+	float propCorrect = float(nCorrectPixels)/float(nPixels);
+
+	QVERIFY2(propCorrect >= 0.95, "Proportion of correct pixels is not large enough");
 
 }
 
