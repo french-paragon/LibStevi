@@ -28,16 +28,70 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../utils/hash_utils.h"
 
+#include "./histogram.h"
+
 #include <array>
 #include <vector>
 #include <limits>
 #include <unordered_map>
 #include <cinttypes>
+#include <optional>
 
 #include <cassert>
 
 namespace StereoVision {
 namespace ImageProcessing {
+
+template<typename ImT>
+/*!
+ * \brief computeOtsuThreshold compute otsu's threshold
+ * \param histogram the histogram to use for computation
+ * \return the threshold, or nullopt if an error occur
+ */
+std::optional<ImT> computeOtsuThreshold(Histogram<ImT> const& histogram) {
+
+	int total = histogram.getTotalCount();
+	int nBins = histogram.nBins();
+
+	if (nBins <= 0) {
+		return std::nullopt;
+	}
+
+	if (histogram.nChannels() != 1) { // support only single channel histogram so far
+		return std::nullopt;
+	}
+
+	int meanBackground = 0;
+	int probBackground = 0;
+	int meanTotal = 0;
+
+	for (int i = 0; i < nBins; i++) {
+		meanTotal += i*histogram.getBinCount(i);
+	}
+
+	int level = 0;
+	float maxInterClassVariance = 0.0;
+
+	for (int i = 0; i < nBins; i++) {
+		int probForeground = total - probBackground;
+		if (probBackground > 0 and probForeground > 0) {
+
+			float mF = float(meanTotal - meanBackground) / probForeground;
+			float mDelta = (float(meanBackground) / probBackground) - mF;
+
+			float interClassVariance = probBackground * probForeground * mDelta*mDelta;
+
+			if ( interClassVariance > maxInterClassVariance ) {
+				level = i;
+				maxInterClassVariance = interClassVariance;
+			}
+		}
+		probBackground += histogram.getBinCount(i);
+		meanBackground = meanBackground + i * histogram.getBinCount(i);
+	}
+
+	return histogram.getBinLowerBound(level);
+}
 
 namespace FgBgSegmentation {
 

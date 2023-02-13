@@ -101,6 +101,8 @@ private Q_SLOTS:
 	void testHierarchicalGlobalSegmentation_data();
 	void testHierarchicalGlobalSegmentation();
 
+	void testOtsuThresholding();
+
 private:
 	std::default_random_engine re;
 
@@ -365,6 +367,62 @@ void TestSegmentation::testHierarchicalGlobalSegmentation() {
 		break;
 	}
 
+}
+
+
+
+void TestSegmentation::testOtsuThresholding() {
+
+	Multidim::Array<int,2> img(3,6);
+
+	Multidim::IndexConverter<2> converter(img.shape());
+
+	std::vector<std::tuple<int,int>> bins;
+
+	int nlevels = 11;
+	int midPoint = nlevels/2;
+
+	if (nlevels % 2 == 0) {
+		QSKIP("Invalid number of levels, number must be odd");
+	}
+
+	if (midPoint % 2 == 0) {
+		QSKIP("Invalid midpoint of levels, number must be odd");
+	}
+
+	bins.reserve(nlevels);
+
+	for (int i = 0; i < nlevels; i++) {
+		if (i == midPoint) {
+			bins.emplace_back(i,0);
+		}
+
+		int modulo = (i > midPoint) ? i - (midPoint+1) : i;
+		int subMidPoint = midPoint / 2;
+
+		if (modulo < subMidPoint) {
+			bins.emplace_back(i,modulo+1);
+		} else {
+			bins.emplace_back(i,midPoint-modulo);
+		}
+	}
+
+	int idx = 0;
+	for (std::tuple<int,int> const& bin : bins) {
+		for (int i = 0; i < std::get<1>(bin); i++) {
+
+			std::array<int,2> pos = converter.getIndexFromPseudoFlatId(idx);
+			img.atUnchecked(pos) = std::get<0>(bin);
+			idx++;
+		}
+	}
+
+	StereoVision::ImageProcessing::Histogram<int> histogram(img);
+
+	std::optional<int> threshold = StereoVision::ImageProcessing::computeOtsuThreshold(histogram);
+
+	QVERIFY2(threshold.has_value(), "The function did not return a value!");
+	QVERIFY2(threshold.value() == midPoint, "The function did not return the expected value!");
 }
 
 QTEST_MAIN(TestSegmentation)

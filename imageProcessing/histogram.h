@@ -221,9 +221,34 @@ public:
 		return _histogramValues.value(binId, channel);
 	}
 
+        int getTotalCount(int channel = 0) const {
+            int sum = 0;
+            for (int i = 0; i < nBins(); i++) {
+                sum += getBinCount(i, channel);
+            }
+            return sum;
+        }
+
 	inline int nChannels() const {
 		return _histogramValues.shape()[1];
 	}
+
+        inline ImT binWidth() const {
+            return (_maxVal - _minVal)/nBins();
+        }
+
+        inline ImT getBinLowerBound(int binId) const {
+
+            if (std::is_integral_v<ImT>) {
+                    return _minVal + binId;
+            }
+
+            return _minVal + binWidth()*binId;
+        }
+
+        inline ImT getBinUpperBound(int binId) const {
+            return getBinLowerBound(binId+1);
+        }
 
 	int getBinId(ImT val) {
 
