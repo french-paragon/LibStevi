@@ -141,10 +141,36 @@ Multidim::Array<T_O, 2> erosion(int h_radius, int v_radius, Multidim::Array<T_I,
 }
 
 template<class T_I, class T_O = T_I>
+Multidim::Array<T_O, 2> repErosion(int rep, int h_radius, int v_radius, Multidim::Array<T_I, 2> const& image, PaddingMargins const& padding = PaddingMargins()) {
+
+	Multidim::Array<T_O, 2> out = image.template cast<T_O>();
+
+	for (int i = 0; i < rep; i++) {
+		out = erosion(h_radius, v_radius, out, padding);
+	}
+
+	return out;
+
+}
+
+template<class T_I, class T_O = T_I>
 Multidim::Array<T_O, 2> dilation(int h_radius, int v_radius, Multidim::Array<T_I, 2> const& image, PaddingMargins const& padding = PaddingMargins()) {
 
 	Multidim::Array<T_O, 3> featureVolume = Correlation::unfold<T_I, T_O>(h_radius, v_radius, image, padding);
 	return maxFeature(featureVolume);
+
+}
+
+template<class T_I, class T_O = T_I>
+Multidim::Array<T_O, 2> repDilation(int rep, int h_radius, int v_radius, Multidim::Array<T_I, 2> const& image, PaddingMargins const& padding = PaddingMargins()) {
+
+	Multidim::Array<T_O, 2> out = image.template cast<T_O>();
+
+	for (int i = 0; i < rep; i++) {
+		out = dilation(h_radius, v_radius, out, padding);
+	}
+
+	return out;
 
 }
 
