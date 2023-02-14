@@ -281,7 +281,7 @@ Multidim::Array<T_O, 3> unfold(uint8_t h_radius,
 			for (int k = 0; k < v; k++) {
 				for (int l = 0; l < h; l++) {
 					int c = channelFromCord(k, l, 0, h, v, 1, orientation);
-					out.template at<Nc>(i,j,c) = static_cast<T_O>( in_data.valueOrAlt({in_i+k, in_j+l}, 0) );
+					out.template at<Nc>(i,j,c) = static_cast<T_O>( in_data.valueOrAlt({in_i+k, in_j+l}, static_cast<T_I>(0)) );
 				}
 			}
 		}
@@ -332,7 +332,7 @@ Multidim::Array<T_O, 3> unfold(uint8_t h_radius,
 
 						int in_j = j + l - padding_left;
 
-						out.template at<Nc>(i,j,c) = static_cast<T_O>( in_data.valueOrAlt({in_i, in_j, in_c}, 0) );
+						out.template at<Nc>(i,j,c) = static_cast<T_O>( in_data.valueOrAlt({in_i, in_j, in_c}, static_cast<T_I>(0)) );
 					}
 
 				}
@@ -396,7 +396,7 @@ Multidim::Array<T_O, 3> unfold(UnFoldCompressor const& compressor,
 
 				int in_j = j + l + left - padding_left;
 
-				out.template at<Nc>(i,j,f) += static_cast<T_O>( ind.weight*in_data.valueOrAlt({in_i, in_j}, 0) );
+				out.template at<Nc>(i,j,f) += static_cast<T_O>( ind.weight*in_data.valueOrAlt({in_i, in_j}, static_cast<T_I>(0)) );
 			}
 
 		}
@@ -459,7 +459,7 @@ Multidim::Array<T_O, 3> unfold(UnFoldCompressor const& compressor,
 
 					int in_j = j + l + left - padding_left;
 
-					out.template at<Nc>(i,j,in_c*compressor.nFeatures() + f) += static_cast<T_O>( ind.weight*in_data.valueOrAlt({in_i, in_j, in_c}, 0) );
+					out.template at<Nc>(i,j,in_c*compressor.nFeatures() + f) += static_cast<T_O>( ind.weight*in_data.valueOrAlt({in_i, in_j, in_c}, static_cast<T_I>(0)) );
 
 				}
 
