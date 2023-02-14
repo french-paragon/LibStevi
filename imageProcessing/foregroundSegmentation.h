@@ -93,6 +93,65 @@ std::optional<ImT> computeOtsuThreshold(Histogram<ImT> const& histogram) {
 	return histogram.getBinLowerBound(level);
 }
 
+template<typename ImT>
+/*!
+ * \brief computeBalancedHistogramThreshold compute the balanced histogram threshold
+ * \param histogram the histogram to use for computation
+ * \return the threshold, or nullopt if an error occur
+ */
+std::optional<ImT> computeBalancedHistogramThreshold(Histogram<ImT> const& histogram) {
+
+	int nBins = histogram.nBins();
+
+	if (nBins <= 0) {
+		return std::nullopt;
+	}
+
+	if (histogram.nChannels() != 1) { // support only single channel histogram so far
+		return std::nullopt;
+	}
+
+	int startId = 0;
+	int middleBinId = nBins/2;
+	int endId = nBins-1;
+
+	int countLeft;
+	int countRight;
+
+	for (int i = 0; i < nBins; i++) {
+		if (i < middleBinId) {
+			countLeft += histogram.getBinCount(i);
+		}
+		if (i >= middleBinId) {
+			countRight += histogram.getBinCount(i);
+		}
+	}
+
+	while (startId <= endId) {
+		if (countRight > countLeft) {
+			countRight -= histogram.getBinCount(endId);
+			endId--;
+
+			if (((startId + endId) / 2) < middleBinId) {
+				countRight += histogram.getBinCount(middleBinId);
+				countLeft -= histogram.getBinCount(middleBinId);
+				middleBinId--;
+			}
+		} else { // left side is heavier
+			countLeft -= histogram.getBinCount(startId);
+			startId++;
+
+			if (((startId + endId) / 2) >= middleBinId) {
+				countLeft += histogram.getBinCount(middleBinId+1);
+				countRight -= histogram.getBinCount(middleBinId+1);
+				middleBinId++;
+			}
+		}
+	}
+
+	return histogram.getBinLowerBound(middleBinId);
+}
+
 namespace FgBgSegmentation {
 
 enum MaskInfo {
