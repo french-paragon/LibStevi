@@ -210,6 +210,37 @@ public:
 
 	}
 
+	template<int nDim, typename T = ImT>
+	static typename std::enable_if<std::is_same_v<T, ImT> and !std::is_integral_v<ImT>, Histogram<ImT>>::type
+	getHistogramWithNBins(Multidim::Array<ImT, nDim> const& img, int nBins) {
+
+		ImT min;
+		ImT max;
+
+		Multidim::IndexConverter<nDim> converter(img.shape());
+
+		auto idx0 = converter.getIndexFromPseudoFlatId(0);
+
+		min = img.valueUnchecked(idx0);
+		max = img.valueUnchecked(idx0);
+
+		for (int i = 0; i < converter.numberOfPossibleIndices(); i++) {
+			ImT val = img.valueUnchecked(converter.getIndexFromPseudoFlatId(i));
+
+			if (val < min) {
+				min = val;
+			}
+
+			if (val > max) {
+				max = val;
+			}
+		}
+
+		ImT binWidth = (max - min)/nBins;
+
+		return Histogram<ImT>(img, binWidth, min, max);
+	}
+
 	inline bool isValid() {
 		return _isValid;
 	}
