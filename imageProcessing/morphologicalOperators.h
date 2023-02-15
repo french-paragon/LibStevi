@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <MultidimArrays/MultidimArrays.h>
 #include <MultidimArrays/MultidimIndexManipulators.h>
 
+#include <array>
 #include <vector>
 
 #include "../utils/margins.h"
@@ -30,6 +31,29 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 namespace StereoVision {
 namespace ImageProcessing {
+
+/*!
+ * Define the structural element to be a list of coordinates
+ */
+using StructuralElement = std::vector<std::array<int, 2>>;
+
+inline StructuralElement buildCircularStructuralElement(int radius) {
+
+	int diameter = 2*radius+1;
+	StructuralElement ret;
+	ret.reserve(diameter*diameter);
+
+	for (int i = -radius; i <= radius; i++) {
+		for (int j = -radius; j <= radius; j++) {
+
+			if (i*i + j*j <= radius*radius) {
+				ret.push_back({i,j});
+			}
+		}
+	}
+
+	return ret;
+}
 
 template<class T_I, class T_O = T_I>
 Multidim::Array<T_O, 2> minFeature(Multidim::Array<T_I, 3> const& featureVolume) {
@@ -133,6 +157,86 @@ Multidim::Array<T_O, 2> medianFeature(Multidim::Array<T_I, 3> const& featureVolu
 }
 
 template<class T_I, class T_O = T_I>
+T_O minFeature(std::vector<T_I> const& featureVector) {
+
+	T_I min = featureVector[0];
+
+	for (T_I v : featureVector) {
+		if (v < min) {
+			min = v;
+		}
+	}
+
+	return min;
+}
+
+template<class T_I, class T_O = T_I>
+T_O maxFeature(std::vector<T_I> const& featureVector) {
+
+	T_I max = featureVector[0];
+
+	for (T_I v : featureVector) {
+		if (v > max) {
+			max = v;
+		}
+	}
+
+	return max;
+}
+
+template<class T_I, class T_O = T_I>
+T_O medianFeature(std::vector<T_I> const& featureVector) {
+
+	int nFeatures = featureVector.size();
+	int medianPos = nFeatures/2;
+
+	std::vector<T_I> sequence = featureVector;
+	std::nth_element(sequence.begin(), sequence.begin()+medianPos, sequence.end());
+
+	return sequence[medianPos];
+}
+
+
+template<class T_I, class T_O = T_I>
+Multidim::Array<T_O, 2> erosion(StructuralElement const& structuralElement, Multidim::Array<T_I, 2> const& image) {
+
+	auto shape = image.shape();
+
+	int max_nFeatures = structuralElement.size();
+
+	Multidim::Array<T_O, 2> out(shape);
+
+	for (int i = 0; i < shape[0]; i++) {
+		for (int j = 0; j < shape[1]; j++) {
+
+			std::vector<T_I> featureVector;
+			featureVector.reserve(max_nFeatures);
+
+			for (std::array<int,2> const& delta : structuralElement) {
+				int ni = i + delta[0];
+				int nj = j + delta[1];
+
+				if (ni < 0 or ni >= shape[0]) {
+					continue;
+				}
+
+				if (nj < 0 or nj >= shape[1]) {
+					continue;
+				}
+
+				featureVector.push_back(image.valueUnchecked(ni,nj));
+			}
+
+			out.atUnchecked(i,j) = minFeature(featureVector);
+
+		}
+	}
+
+	return out;
+
+}
+
+template<class T_I, class T_O = T_I>
 Multidim::Array<T_O, 2> erosion(int h_radius, int v_radius, Multidim::Array<T_I, 2> const& image, PaddingMargins const& padding = PaddingMargins()) {
 
 	Multidim::Array<T_O, 3> featureVolume = Correlation::unfold<T_I, T_O>(h_radius, v_radius, image, padding);
@@ -147,6 +251,45 @@ Multidim::Array<T_O, 2> repErosion(int rep, int h_radius, int v_radius, Multidim
 
 	for (int i = 0; i < rep; i++) {
 		out = erosion(h_radius, v_radius, out, padding);
+	}
+
+	return out;
+
+}
+
+template<class T_I, class T_O = T_I>
+Multidim::Array<T_O, 2> dilation(StructuralElement const& structuralElement, Multidim::Array<T_I, 2> const& image) {
+
+	auto shape = image.shape();
+
+	int max_nFeatures = structuralElement.size();
+
+	Multidim::Array<T_O, 2> out(shape);
+
+	for (int i = 0; i < shape[0]; i++) {
+		for (int j = 0; j < shape[1]; j++) {
+
+			std::vector<T_I> featureVector;
+			featureVector.reserve(max_nFeatures);
+
+			for (std::array<int,2> const& delta : structuralElement) {
+				int ni = i + delta[0];
+				int nj = j + delta[1];
+
+				if (ni < 0 or ni >= shape[0]) {
+					continue;
+				}
+
+				if (nj < 0 or nj >= shape[1]) {
+					continue;
+				}
+
+				featureVector.push_back(image.valueUnchecked(ni,nj));
+			}
+
+			out.atUnchecked(i,j) = maxFeature(featureVector);
+
+		}
 	}
 
 	return out;
