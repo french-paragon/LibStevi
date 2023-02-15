@@ -95,7 +95,7 @@ std::optional<ImT> computeOtsuThreshold(Histogram<ImT> const& histogram) {
 
 template<typename ImT>
 /*!
- * \brief computeBalancedHistogramThreshold compute the balanced histogram threshold
+ * \brief computeOtsuThreshold compute otsu's threshold
  * \param histogram the histogram to use for computation
  * \return the threshold, or nullopt if an error occur
  */
@@ -151,6 +151,8 @@ std::optional<ImT> computeBalancedHistogramThreshold(Histogram<ImT> const& histo
 
 	return histogram.getBinLowerBound(middleBinId);
 }
+
+
 
 namespace FgBgSegmentation {
 
