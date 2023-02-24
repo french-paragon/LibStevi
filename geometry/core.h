@@ -83,7 +83,7 @@ public:
 
 		}
 
-		Eigen::Matrix<T,3,1> operator*(Eigen::Vector3f const& pt) const {
+		Eigen::Matrix<T,3,1> operator*(Eigen::Matrix<T,3,1> const& pt) const {
 			return R*pt + t;
 		}
 		Eigen::Matrix<T,3,Eigen::Dynamic> operator*(Eigen::Matrix<T,3,Eigen::Dynamic> const& pts) const {
