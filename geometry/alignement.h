@@ -24,6 +24,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../geometry/lensdistortion.h"
 #include "../geometry/geometricexception.h"
 
+#include <MultidimArrays/MultidimIndexManipulators.h>
+
 #include <utility>
 #include <vector>
 
@@ -557,6 +559,79 @@ public:
 
 	Eigen::Matrix<Pos_T, 2,1> operator()(Eigen::Matrix<Pos_T, 2,1> const& sourcePos, Pos_T depth) {
 		return reprojected(sourcePos, depth);
+	}
+
+	template<int inDims>
+	Multidim::Array<Pos_T, inDims+1> reprojected(Multidim::Array<Pos_T, inDims+1> const& sourcePos, Multidim::Array<Pos_T, inDims> depth) {
+
+		if (sourcePos.shape()[inDims] != 2) {
+			return Multidim::Array<Pos_T, inDims+1>();
+		}
+
+		for (int i = 0; i < inDims; i++) {
+			if (sourcePos.shape()[i] != depth.shape()[i]) {
+				return Multidim::Array<Pos_T, inDims+1>();
+			}
+		}
+
+		Multidim::Array<Pos_T, inDims+1> outPos(sourcePos.shape());
+
+		Multidim::IndexConverter<inDims> idxConverter(depth.shape());
+
+		for (int i = 0; i < idxConverter.numberOfPossibleIndices(); i++) {
+			std::array<int,inDims> idx = idxConverter.getIndexFromPseudoFlatId(i);
+
+			std::array<int,inDims+1> idxPos;
+
+			for (int j = 0; j < inDims; j++) {
+				idxPos[j] = idx[j];
+			}
+
+			Eigen::Matrix<Pos_T, 2,1> pos;
+			idxPos[inDims] = 0;
+			pos[0] = sourcePos.valueUnchecked(idxPos);
+			idxPos[inDims] = 1;
+			pos[1] = sourcePos.valueUnchecked(idxPos);
+
+			Eigen::Matrix<Pos_T, 2,1> oPos = reprojected(pos, depth.atUnchecked(idx));
+
+
+			idxPos[inDims] = 0;
+			outPos.atUnchecked(idxPos) = oPos[0];
+			idxPos[inDims] = 1;
+			outPos.atUnchecked(idxPos) = oPos[1];
+
+		}
+
+		return outPos;
+	}
+
+	Multidim::Array<Pos_T, 3> reprojectMap(Multidim::Array<Pos_T, 2> depth) {
+
+		std::array<int,2> s = depth.shape();
+		std::array<int,3> shp;
+
+		shp[0] = s[0];
+		shp[1] = s[1];
+		shp[2] = 2;
+
+		Multidim::Array<Pos_T, 3> outPos(shp);
+
+		for (int i = 0; i < s[0]; i++) {
+			for (int j = 0; j < s[1]; j++) {
+
+				Eigen::Matrix<Pos_T, 2,1> pos;
+				pos[0] = i;
+				pos[1] = j;
+
+				Eigen::Matrix<Pos_T, 2,1> oPos = reprojected(pos, depth.atUnchecked(i,j));
+
+				outPos.atUnchecked(i,j,0) = oPos[0];
+				outPos.atUnchecked(i,j,1) = oPos[1];
+			}
+		}
+
+		return outPos;
 	}
 
 private:
