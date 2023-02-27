@@ -621,8 +621,8 @@ public:
 			for (int j = 0; j < s[1]; j++) {
 
 				Eigen::Matrix<Pos_T, 2,1> pos;
-				pos[0] = i;
-				pos[1] = j;
+				pos[0] = j;
+				pos[1] = i;
 
 				Eigen::Matrix<Pos_T, 2,1> oPos = reprojected(pos, depth.atUnchecked(i,j));
 
