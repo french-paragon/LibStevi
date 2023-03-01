@@ -75,19 +75,17 @@ public:
 		_source_bg_features = getFeatureVolumeForMatchFunc<matchFunc, T_FV, constnessT, T_F>(source_f);
 		_target_bg_features = getFeatureVolumeForMatchFunc<matchFunc, T_FV, constnessT, T_F>(target_f);
 
-		_bg_cost_volume = featureVolume2CostVolume<matchFunc, float, float, searchOffset<1>, dispDirection::RightToLeft, float>
+		_bg_cost_volume = featureVolume2CostVolume<matchFunc, T_FV, T_FV, searchOffset<1>, dispDirection::RightToLeft, T_CV>
 				(_target_bg_features, _source_bg_features, _searchOffset);
 
-		auto bg_index = extractSelectedIndex<MatchingFunctionTraits<matchFunc>::extractionStrategy>(_bg_cost_volume);
-
-		_bg_disp_idx = selectedIndexToDisp(bg_index, _searchOffset.lowerOffset<0>());
+		_bg_disp_idx = extractSelectedIndex<MatchingFunctionTraits<matchFunc>::extractionStrategy>(_bg_cost_volume);
 
 		return true;
 	}
 
 	template<Multidim::ArrayDataAccessConstness constnessS,
 			 Multidim::ArrayDataAccessConstness constnessT>
-	StereoDispWithBgMask computeDispAndForegroundMask(OnDemandCVT<constnessS, constnessT> const& on_demand_cv) {
+	StereoDispWithBgMask computeDispAndForegroundMask(OnDemandCVT<constnessS, constnessT> const& on_demand_cv) const {
 
 		if (!_searchOffset.isValid()) {
 			//invalid search offset
@@ -130,21 +128,6 @@ public:
 					std::tie(ti, tj) = pixels2check.front();
 					pixels2check.pop();
 
-					bool skip = false;
-
-					#pragma omp critical
-					{
-						if (checkedPixels.count({ti,tj}) > 0) {
-							skip = true;
-						} else {
-							checkedPixels.insert({ti,tj});
-						}
-					}
-
-					if (skip) {
-						continue;
-					}
-
 					disp_t idx_bg = _bg_disp_idx.valueUnchecked(ti,tj);
 					T_CV cost_bg = _bg_cost_volume.valueUnchecked(ti,tj,idx_bg);
 
@@ -160,7 +143,24 @@ public:
 					disp_t idx_fg = idx_bg;
 
 					if (is_first and std::min(cost_bg, cost_fg)/std::max(cost_bg, cost_fg) > _rel_threshold) {
+						ret.disp.atUnchecked(ti,tj) = _searchOffset.idx2disp<0>(idx_bg);
+						ret.fg_mask.atUnchecked(ti,tj) = ImageProcessing::FgBgSegmentation::Background;
 						continue; //ignore pixels which have the same disp cost as the background, but only in front of a chain.
+					}
+
+					bool skip = false;
+
+					#pragma omp critical
+					{
+						if (checkedPixels.count({ti,tj}) > 0) {
+							skip = true;
+						} else {
+							checkedPixels.insert({ti,tj});
+						}
+					}
+
+					if (skip) {
+						continue;
 					}
 
 					for (int d = 0; d < shape[2]; d++) {
@@ -216,6 +216,14 @@ public:
 
 		return ret;
 
+	}
+
+	float getRelThreshold() const {
+		return _rel_threshold;
+	}
+
+	void setRelThreshold(float threshold) {
+		_rel_threshold = threshold;
 	}
 
 protected:
