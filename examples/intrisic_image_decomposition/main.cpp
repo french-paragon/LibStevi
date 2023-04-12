@@ -21,6 +21,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "imageProcessing/colorConversions.h"
 #include "imageProcessing/intrinsicImageDecomposition.h"
 
+#ifdef WITH_GUI
+
+#include <QApplication>
+
+#include <qImageDisplayWidget/imagewindow.h>
+#include "gui/arraydisplayadapter.h"
+
+#endif
+
 #include <QTextStream>
 #include <QString>
 #include <QDir>
@@ -32,6 +41,10 @@ using namespace StereoVision;
 using namespace StereoVision::ImageProcessing;
 
 int main(int argc, char** argv) {
+
+    #ifdef WITH_GUI
+    QApplication app(argc, argv);
+    #endif
 
 	QTextStream out(stdout);
 
@@ -45,9 +58,17 @@ int main(int argc, char** argv) {
 	if (img.empty()) {
 		out << "impossible to read image: " << argv[1] << Qt::endl;
 		return 1;
-	} else {
-		out << "Read image: " << argv[1] << Qt::endl;
+    } else {
+        out << "Read image: " << argv[1] << Qt::endl;
+        out << "Image shape: " << img.shape()[0] << "x" << img.shape()[1] << "x" <<  img.shape()[2] << Qt::endl;
 	}
+
+    #ifdef WITH_GUI
+    StereoVision::Gui::ArrayDisplayAdapter<float> imgAdapter(&img, 0, 255);
+    QImageDisplay::ImageWindow imgWindow;
+    imgWindow.setImage(&imgAdapter);
+    imgWindow.setWindowTitle("Base image");
+    #endif
 
 	QFileInfo info((QString(argv[1])));
 
@@ -123,6 +144,11 @@ int main(int argc, char** argv) {
 		out << "\t" << "Failed to write shading file to disk" << Qt::endl;
 		return 1;
 	}
+
+    #ifdef WITH_GUI
+    imgWindow.show();
+    return app.exec();
+    #endif
 
 	return 0;
 }

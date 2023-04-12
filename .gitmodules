@@ -1,3 +1,6 @@
 [submodule "submodules/pnp"]
 	path = submodules/pnp
 	url = https://github.com/midjji/pnp.git
+[submodule "submodules/qImageDisplayWidget"]
+	path = submodules/qImageDisplayWidget
+	url = https://github.com/french-paragon/qImageDisplayWidget.git

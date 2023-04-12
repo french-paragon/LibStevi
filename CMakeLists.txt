@@ -11,6 +11,7 @@ project(lib${STEREOVISION_LIB} LANGUAGES CXX)
 
 option(buildTests "Build the test suits for the library" ON)
 option(buildExamples "Build the examples for the library" ON)
+option(buildGui "Build some additional tools for building gui with Qt" OFF)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
@@ -123,6 +124,10 @@ set(LIB_SRC
         io/image_io.h
 )
 
+if (buildGui)
+    set(LIB_SRC ${LIB_SRC} gui/arraydisplayadapter.h)
+endif(buildGui)
+
 add_library(
     stevi
     ${LIB_SRC}
@@ -151,6 +156,12 @@ enable_testing()
 
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Test REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Test REQUIRED)
+
+if (buildGui)
+    find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets REQUIRED)
+    find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets REQUIRED)
+    target_link_libraries(stevi PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+endif(buildGui)
 
 set(CMAKE_AUTOMOC ON)
 add_subdirectory(test)
