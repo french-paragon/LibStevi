@@ -32,6 +32,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <QTextStream>
 #include <QString>
+#include <QSet>
 #include <QDir>
 #include <QFileInfo>
 
@@ -46,36 +47,52 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     #endif
 
+    QVector<QString> arguments;
+    QSet<QString> options;
+
+    for (int i = 1; i < argc; i++) {
+        QString input(argv[i]);
+
+        if (input.startsWith("-")) {
+            options.insert(input);
+        } else {
+            arguments.push_back(input);
+        }
+    }
+
 	QTextStream out(stdout);
 
-	if (argc < 2) { //no input image
+    if (arguments.size() < 1) { //no input image
 		out << "No input image provided" << Qt::endl;
 		return 1;
 	}
 
-	Multidim::Array<float, 3> img = StereoVision::IO::readImage<float>(std::string(argv[1]));
+    Multidim::Array<float, 3> img = StereoVision::IO::readImage<float>(arguments[0].toStdString());
 
 	if (img.empty()) {
-		out << "impossible to read image: " << argv[1] << Qt::endl;
+        out << "impossible to read image: " << arguments[0] << Qt::endl;
 		return 1;
     } else {
-        out << "Read image: " << argv[1] << Qt::endl;
+        out << "Read image: " << arguments[0] << Qt::endl;
         out << "Image shape: " << img.shape()[0] << "x" << img.shape()[1] << "x" <<  img.shape()[2] << Qt::endl;
 	}
 
     #ifdef WITH_GUI
+    QVector<QString> channelsNames = {"R", "G", "B"};
+
     StereoVision::Gui::ArrayDisplayAdapter<float> imgAdapter(&img, 0, 255);
+    imgAdapter.configureOriginalChannelDisplay(channelsNames);
     QImageDisplay::ImageWindow imgWindow;
     imgWindow.setImage(&imgAdapter);
     imgWindow.setWindowTitle("Base image");
     #endif
 
-	QFileInfo info((QString(argv[1])));
+    QFileInfo info((QString(arguments[0])));
 
 	QDir outDir;
 
-	if (argc >= 3) {
-		outDir = QDir(argv[2]);
+    if (arguments.size() >= 2) {
+        outDir = QDir(arguments[1]);
 	} else {
 		outDir = info.absoluteDir();
 	}
@@ -127,26 +144,55 @@ int main(int argc, char** argv) {
 
 	IntrinsicImageDecomposition<float, 3> decomposition = autoRetinexWithNonLocalTextureConstraint<float, float>(img);
 
-	bool ok = StereoVision::IO::writeImage<float>((outDir.filePath(info.baseName() + "_reflectance") + ".stevimg" ).toStdString(), decomposition.reflectance);
+    bool outputFiles = true;
+    bool ok = true;
 
-	if (ok) {
-		out << "\t" << "Reflectance file succesfully written to disk" << Qt::endl;
-	} else {
-		out << "\t" << "Failed to write reflectance file to disk" << Qt::endl;
-		return 1;
-	}
+    #ifdef WITH_GUI
+    outputFiles = options.contains("-o") or options.contains("--outputfiles");
+    #endif
 
-	ok = StereoVision::IO::writeImage<float>((outDir.filePath(info.baseName() + "_shading") + ".stevimg" ).toStdString(), decomposition.shading);
+    if (outputFiles) {
+        ok = StereoVision::IO::writeImage<float>((outDir.filePath(info.baseName() + "_reflectance") + ".stevimg" ).toStdString(), decomposition.reflectance);
 
-	if (ok) {
-		out << "\t" << "Shading file succesfully written to disk" << Qt::endl;
-	} else {
-		out << "\t" << "Failed to write shading file to disk" << Qt::endl;
-		return 1;
-	}
+        if (ok) {
+            out << "\t" << "Reflectance file succesfully written to disk" << Qt::endl;
+        } else {
+            out << "\t" << "Failed to write reflectance file to disk" << Qt::endl;
+            return 1;
+        }
+    }
+
+    #ifdef WITH_GUI
+    StereoVision::Gui::ArrayDisplayAdapter<float> reflectanceAdapter(&decomposition.reflectance, 0, 1);
+    reflectanceAdapter.configureOriginalChannelDisplay(channelsNames);
+    QImageDisplay::ImageWindow reflectanceWindow;
+    reflectanceWindow.setImage(&reflectanceAdapter);
+    reflectanceWindow.setWindowTitle("Reflectance image");
+    #endif
+
+    if (outputFiles) {
+        ok = StereoVision::IO::writeImage<float>((outDir.filePath(info.baseName() + "_shading") + ".stevimg" ).toStdString(), decomposition.shading);
+
+        if (ok) {
+            out << "\t" << "Shading file succesfully written to disk" << Qt::endl;
+        } else {
+            out << "\t" << "Failed to write shading file to disk" << Qt::endl;
+            return 1;
+        }
+    }
+
+    #ifdef WITH_GUI
+    StereoVision::Gui::ArrayDisplayAdapter<float> shadingAdapter(&decomposition.shading, 0, 1);
+    shadingAdapter.configureOriginalChannelDisplay(channelsNames);
+    QImageDisplay::ImageWindow shadingWindow;
+    shadingWindow.setImage(&shadingAdapter);
+    shadingWindow.setWindowTitle("shading image");
+    #endif
 
     #ifdef WITH_GUI
     imgWindow.show();
+    reflectanceWindow.show();
+    shadingWindow.show();
     return app.exec();
     #endif
 

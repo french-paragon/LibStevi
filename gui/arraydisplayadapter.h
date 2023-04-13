@@ -91,6 +91,48 @@ public:
         return ret;
     }
 
+    QVector<ChannelInfo> getOriginalChannelsInfos(QPoint const& pos) const override {
+
+        if (!_displayOriginalChannels) {
+            return QImageDisplay::ImageAdapter::getOriginalChannelsInfos(pos);
+        }
+
+        int nChannels = std::min(_channelsName.size(), _array->shape()[_channel_axis]);
+        QVector<ChannelInfo> ret(nChannels);
+
+        QString formatStr = "%1 ";
+
+        std::array<int, 3> idx;
+        idx[_x_axis] = pos.x();
+        idx[_y_axis] = pos.y();
+
+        for (int i = 0; i < nChannels; i++) {
+            idx[_channel_axis] = i;
+            ret[i].channelName = _channelsName[i];
+
+            double tmp = _array->valueOrAlt(idx, 0);
+
+            if (std::is_floating_point_v<Array_T>) {
+                ret[i].channelValue = QString(formatStr).arg(tmp, 0, 'g', 3);
+            } else {
+                ret[i].channelValue = QString(formatStr).arg(_array->valueOrAlt(idx, 0));
+            }
+        }
+
+        return ret;
+
+    }
+
+    inline void configureOriginalChannelDisplay( QVector<QString> const& channels) {
+        _displayOriginalChannels = true;
+        _channelsName = channels;
+    }
+
+    inline void clearOriginalChannelDisplay() {
+        _displayOriginalChannels = false;
+        _channelsName.clear();
+    }
+
 protected:
 
     using ComputeType = TypesManipulations::accumulation_extended_t<Array_T>;
@@ -121,6 +163,9 @@ protected:
 
     Array_T _black_level;
     Array_T _white_level;
+
+    bool _displayOriginalChannels;
+    QVector<QString> _channelsName;
 
 };
 

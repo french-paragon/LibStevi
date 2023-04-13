@@ -2,3 +2,7 @@
  add_subdirectory(intrisic_image_decomposition)
  add_subdirectory(checkboard_detection)
  add_subdirectory(bg_fg_stereo)
+
+ if (buildGui)
+     add_subdirectory(stevimg_viewer)
+ endif(buildGui)
