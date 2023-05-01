@@ -31,7 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <optional>
 
-#include "utils/types_manipulations.h"
+#include "../utils/types_manipulations.h"
 
 namespace StereoVision {
 
