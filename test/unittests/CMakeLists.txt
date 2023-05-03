@@ -115,5 +115,9 @@ add_executable(testSegmentation testSegmentation.cpp)
 target_link_libraries(testSegmentation ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestSegmentation testSegmentation)
 
+add_executable(testConvolutions testConvolution.cpp)
+target_link_libraries(testConvolutions ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestConvolutions testConvolutions)
+
 
 

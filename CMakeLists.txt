@@ -121,6 +121,7 @@ set(LIB_SRC
         imageProcessing/morphologicalOperators.h
         imageProcessing/foregroundSegmentation.h
         imageProcessing/shapeFromShading.h
+        imageProcessing/convolutions.h
         io/image_io.h
 )
 
