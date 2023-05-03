@@ -227,7 +227,8 @@ public:
         for (int i = 0; i < nDim; i++) {
             switch (dim_types[i]) {
             case SearchSpaceBase::Search:
-				SearchSpaceBase::SearchDim* info = static_cast<SearchSpaceBase::SearchDim*>(dim_infos[i]);
+            {
+                SearchSpaceBase::SearchDim* info = static_cast<SearchSpaceBase::SearchDim*>(dim_infos[i]);
                 SearchSpace<nDim>::_search_range_min[i] = info->rangeMin;
                 SearchSpace<nDim>::_search_range_max[i] = info->rangeMax;
 
@@ -235,6 +236,10 @@ public:
                     SearchSpace<nDim>::_search_range_min[i] = info->rangeMax;
                     SearchSpace<nDim>::_search_range_max[i] = info->rangeMin;
                 }
+            }
+                break;
+            default:
+                break;
             }
         }
     }

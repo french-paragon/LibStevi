@@ -442,7 +442,7 @@ inline Multidim::Array<T_O, 3> zeromeanNormalizedFeatureVolume(Multidim::Array<T
 					constexpr int diff = static_cast<int>(sizeof (T_E)) - static_cast<int>(sizeof (T_O));
 
 					if (diff > 0) {
-						v /= (uint64_t(1) << diff*8); //fit back into T_O
+                        v /= (uint64_t(1) << std::max(diff,1)*8); //fit back into T_O
 					}
 
 					val = static_cast<T_O>(v);
@@ -530,7 +530,7 @@ inline Multidim::Array<T_O, 3> normalizedFeatureVolume(Multidim::Array<T_I, 3, C
 					constexpr int diff = static_cast<int>(sizeof (T_E)) - static_cast<int>(sizeof (T_O));
 
 					if (diff > 0) {
-						v /= (uint64_t(2) << diff*8); //fit back into T_O
+                        v /= (uint64_t(2) << std::max(diff,1)*8); //fit back into T_O
 					}
 
 					val = static_cast<T_O>(v);
