@@ -50,14 +50,14 @@ find_package(TIFF)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 add_subdirectory(submodules)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/submodules)
 include_directories(${MODULES_INCLUDE_DIRECTORIES})
 
 set(LIB_SRC 
         stevi_global.h
 	geometry/core.h
 	geometry/geometricexception.cpp
-	geometry/geometricexception.h
-	geometry/alignement.cpp
+        geometry/geometricexception.h
         geometry/alignement.h
         geometry/imagecoordinates.h
 	geometry/lensdistortion.h
@@ -133,8 +133,6 @@ add_library(
     stevi
     ${LIB_SRC}
 )
-
-target_link_libraries(stevi PRIVATE ${PNP_LIBS})
 
 if (JPEG_FOUND)
     target_link_libraries(stevi PRIVATE JPEG::JPEG)

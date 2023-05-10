@@ -177,6 +177,8 @@ protected:
 	}
 };
 
+
+
 template <typename Scalar>
 Eigen::Matrix<Scalar, 3, 3> eulerRadXYZToRotation(Scalar eulerX,
 												  Scalar eulerY,

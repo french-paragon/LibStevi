@@ -193,7 +193,7 @@ AffineTransform<float> estimateQuasiShapePreservingMap(Eigen::VectorXf const& ob
 	}
 
 	if (verbose) {
-		std::cout << ((s == IterativeTermination::Converged) ? "Convverged" : "Terminated before convergence reached") << std::endl << std::endl;
+        std::cout << ((s == IterativeTermination::Converged) ? "Converged" : "Terminated before convergence reached") << std::endl << std::endl;
 	}
 
 	AffineTransform transform;

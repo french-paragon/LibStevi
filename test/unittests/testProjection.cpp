@@ -61,6 +61,9 @@ class TestReprojectionMethods: public QObject
 {
 	Q_OBJECT
 private Q_SLOTS:
+
+    void initTestCase();
+
 	void testBuildEssentialMatrix_data();
 	void testBuildEssentialMatrix();
 
@@ -71,11 +74,17 @@ private Q_SLOTS:
 	void testReprojectionLstSqr();
 
 	void testExtractTransform_data();
-	void testExtractTransform();
+    void testExtractTransform();
 
-	void testPnP_data();
-	void testPnP();
+    void testP4P();
+
+    void testPnP_data();
+    void testPnP();
 };
+
+void TestReprojectionMethods::initTestCase() {
+    srand((unsigned int) 426994);
+}
 
 void TestReprojectionMethods::testBuildEssentialMatrix_data() {
 
@@ -180,7 +189,7 @@ void TestReprojectionMethods::testReprojectionLstSqr() {
 	Eigen::Array3Xf reprojected_points = reprojectPointsLstSqr<float>(cam_delta.R.transpose(), -cam_delta.R.transpose()*cam_delta.t, pt_im1, pt_im2);
 
 	float mismatch = (points - reprojected_points).matrix().norm()/nPts;
-	QVERIFY2(mismatch < 1e-4, qPrintable(QString("Reprojected points not correct (%1)").arg(mismatch)));
+    QVERIFY2(mismatch < 1e-4, qPrintable(QString("Reprojected points not correct (%1)").arg(mismatch)));
 }
 
 void TestReprojectionMethods::testExtractTransform_data() {
@@ -235,6 +244,71 @@ void TestReprojectionMethods::testExtractTransform() {
 		missalignement = tdelta.norm();
 		QVERIFY2(missalignement < 1e-3, qPrintable(QString("Reconstructed rotation not correct (norm (tgt + Rrcxtrc) = %1)").arg(missalignement)));
 	}
+}
+
+
+void TestReprojectionMethods::testP4P() {
+
+    //test a known settings
+    Eigen::Array<float,3,4> worldPts;
+    worldPts << 1, 1, -1, -1,
+                1, -1, 1, .1,
+                0, 0, 1, 0;
+
+    Eigen::Vector3f r;
+    r << -0.0545, 0.132, 0.414;
+
+    Eigen::Vector3f t;
+    t << 1, -1, 2;
+
+    StereoVision::Geometry::ShapePreservingTransform<float> rigid(r, t, 1);
+
+    StereoVision::Geometry::AffineTransform<float> world2cam = rigid.toAffineTransform();
+
+
+    Eigen::Array<float,3,4> camPts = world2cam*worldPts;
+    Eigen::Array<float,2,4> camPtsHom = projectPoints(camPts);
+
+    StereoVision::Geometry::AffineTransform<float> est = StereoVision::Geometry::p4p(camPtsHom, worldPts);
+
+    Eigen::Matrix3f Rdelta = world2cam.R*est.R.transpose();
+    Eigen::Vector3f tdelta = world2cam.t - est.t;
+
+    float missalignement = (Rdelta - Eigen::Matrix3f::Identity()).norm();
+    QVERIFY2(missalignement < 1e-3, qPrintable(QString("Reconstructed rotation not correct (norm (RgtxRrc - I) = %1)").arg(missalignement)));
+
+    missalignement = tdelta.norm();
+    QVERIFY2(missalignement < 1e-3, qPrintable(QString("Reconstructed rotation not correct (norm (tgt + Rrcxtrc) = %1)").arg(missalignement)));
+
+    //generate random settings
+    for (int i = 0; i < 100; i++) {
+
+        Eigen::Array3Xf points = generateRandomPoints(4, 3.5f, 2.0f, 2.0f);
+        AffineTransform<float> cam_delta = generateRandomTransform(3.5f);//cam 2 world
+        AffineTransform<float> inv = AffineTransform<float>(cam_delta.R.transpose(), -cam_delta.R.transpose()*cam_delta.t); //world 2 cam
+
+        Eigen::Array3Xf pointsCam2 = inv*points;
+
+        if ((pointsCam2.row(2) < 0).any()) {
+            continue;
+        } else {
+            Eigen::Array<float,3,4> world_points = points.block<3,4>(0,0);
+
+            Eigen::Array<float,3,4> cam_points = inv*world_points;
+            Eigen::Array<float,2,4> cam_points_homogeneous = projectPoints(cam_points);
+
+            StereoVision::Geometry::AffineTransform<float> sol = StereoVision::Geometry::p4p(cam_points_homogeneous, world_points);
+
+            Eigen::Matrix3f Rdelta = inv.R*sol.R.transpose();
+            Eigen::Vector3f tdelta = inv.t - sol.t;
+
+            float missalignement = (Rdelta - Eigen::Matrix3f::Identity()).norm();
+            QVERIFY2(missalignement < 1e-3, qPrintable(QString("Reconstructed rotation not correct (norm (RgtxRrc - I) = %1) at iteration %2").arg(missalignement).arg(i)));
+
+            missalignement = tdelta.norm();
+            QVERIFY2(missalignement < 1e-3, qPrintable(QString("Reconstructed rotation not correct (norm (tgt + Rrcxtrc) = %1) at iteration %2").arg(missalignement).arg(i)));
+        }
+    }
 }
 
 void TestReprojectionMethods::testPnP_data() {

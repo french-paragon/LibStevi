@@ -81,16 +81,20 @@ public:
 			t(Eigen::Matrix<T,3,1>::Zero()),
 			R(Eigen::Matrix<T,3,3>::Identity()) {
 
+        }
+
+        Eigen::Matrix<T,3,1> operator*(Eigen::Matrix<T,3,1> const& pt) const {
+            return R*pt + t;
+        }
+
+        template <int nCols>
+        std::enable_if_t<nCols!=1, Eigen::Matrix<T,3,nCols>> operator*(Eigen::Matrix<T,3,nCols> const& pts) const {
+            return applyOnto<nCols>(pts.array()).matrix();
 		}
 
-		Eigen::Matrix<T,3,1> operator*(Eigen::Matrix<T,3,1> const& pt) const {
-			return R*pt + t;
-		}
-		Eigen::Matrix<T,3,Eigen::Dynamic> operator*(Eigen::Matrix<T,3,Eigen::Dynamic> const& pts) const {
-			return applyOnto(pts.array()).matrix();
-		}
-		Eigen::Array<T,3,Eigen::Dynamic> operator*(Eigen::Array<T,3,Eigen::Dynamic> const& pts) const {
-			return applyOnto(pts);
+        template <int nCols>
+        std::enable_if_t<nCols!=1, Eigen::Matrix<T,3,nCols>> operator*(Eigen::Array<T,3,nCols> const& pts) const {
+            return applyOnto<nCols>(pts);
 		}
 		AffineTransform<T> operator*(AffineTransform<T> const& other) const {
 			return AffineTransform<T>(R*other.R, R*other.t + t);
@@ -105,9 +109,10 @@ public:
 
 protected:
 
-		Eigen::Array<T,3,Eigen::Dynamic> applyOnto(Eigen::Array<T,3,Eigen::Dynamic> const& pts) const {
+        template <int nCols>
+        Eigen::Array<T,3,nCols> applyOnto(Eigen::Array<T,3,nCols> const& pts) const {
 
-			Eigen::Array<T,3,Eigen::Dynamic> transformedPts;
+            Eigen::Array<T,3,nCols> transformedPts;
 			transformedPts.resize(3, pts.cols());
 
 			for (int i = 0; i < transformedPts.cols(); i++) {
