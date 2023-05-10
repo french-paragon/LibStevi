@@ -7,8 +7,6 @@ The IO module depends on the Cimg Library [https://cimg.eu/], a single header li
 
 The tests and examples also require a Qt installation on the target system.
 
-Last but not least, the library depends on the pnp library [https://github.com/midjji/pnp], which is provided as a git submodule.
-
 ## Get the code
 
 You can get the code using git, pay attention to init and sync the submodules:
