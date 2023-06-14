@@ -135,16 +135,19 @@ add_library(
 )
 
 if (JPEG_FOUND)
+    message("Using native jpg library")
     target_link_libraries(stevi PRIVATE JPEG::JPEG)
     target_compile_definitions(stevi PRIVATE STEVI_IO_USE_JPEG)
 endif (JPEG_FOUND)
 
 if (PNG_FOUND)
+    message("Using native png library")
     target_link_libraries(stevi PRIVATE PNG::PNG)
     target_compile_definitions(stevi PRIVATE STEVI_IO_USE_PNG)
 endif (PNG_FOUND)
 
 if (TIFF_FOUND)
+    message("Using native tiff library")
     target_link_libraries(stevi PRIVATE TIFF::TIFF)
     target_compile_definitions(stevi PRIVATE STEVI_IO_USE_TIFF)
 endif (TIFF_FOUND)

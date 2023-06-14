@@ -5,4 +5,5 @@
 
  if (buildGui)
      add_subdirectory(stevimg_viewer)
+     add_subdirectory(data_img_viewer)
  endif(buildGui)
