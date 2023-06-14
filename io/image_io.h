@@ -8,11 +8,12 @@
 #endif //STEVI_IO_USE_JPEG
 
 #ifdef STEVI_IO_USE_PNG
-#define cimg_use_png //use jpg image format
+#define cimg_use_png //use png image format
 #endif //STEVI_IO_USE_PNG
 
 #ifdef STEVI_IO_USE_TIFF
-#define cimg_use_tiff //use jpg image format
+#define cimg_use_tiff //use tiff image format
+#define cimg_use_tif
 #endif //STEVI_IO_USE_TIFF
 
 #include <CImg.h>
@@ -80,7 +81,7 @@ bool writeStevimg(std::string const& fileName, Multidim::Array<InType, nDim> con
 		return writeStevimg<ImgType, ImgType, nDim>(fileName, converted);
 	}
 
-	if (!image.isDense()) {
+    if (!image.isDense() and !image.empty()) {
 		Multidim::Array<InType, nDim> dense = image;
 		return writeStevimg<ImgType, InType, nDim>(fileName, dense);
 	}
@@ -107,7 +108,10 @@ bool writeStevimg(std::string const& fileName, Multidim::Array<InType, nDim> con
 
 		bool ok = true;
 		ok = ok and std::fwrite(str.c_str(), sizeof (char), str.length(), outfile) == str.length();
-		ok = ok and std::fwrite(&const_cast<Multidim::Array<InType, nDim>*>(&image)->atUnchecked(0), sizeof (ImgType), image.flatLenght(), outfile) == image.flatLenght();
+
+        if (image.flatLenght() > 0) {
+            ok = ok and std::fwrite(&const_cast<Multidim::Array<InType, nDim>*>(&image)->atUnchecked(0), sizeof (ImgType), image.flatLenght(), outfile) == image.flatLenght();
+        }
 
 		ok = ok and std::fclose(outfile) == 0;
 
