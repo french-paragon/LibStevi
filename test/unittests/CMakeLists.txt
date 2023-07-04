@@ -119,5 +119,9 @@ add_executable(testConvolutions testConvolution.cpp)
 target_link_libraries(testConvolutions ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestConvolutions testConvolutions)
 
+add_executable(testPixelsLines testPixelsLines.cpp)
+target_link_libraries(testPixelsLines ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestPixelsLines testPixelsLines)
+
 
 
