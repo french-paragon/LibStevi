@@ -3,6 +3,7 @@
 #include <MultidimArrays/MultidimArrays.h>
 
 #include "imageProcessing/convolutions.h"
+#include "imageProcessing/standardConvolutionFilters.h"
 
 using namespace StereoVision;
 
@@ -24,6 +25,8 @@ private Q_SLOTS:
     void testLineConvolutionFilter();
 
     void testImageConvolutionFilter();
+
+    void testGaussianConvolutionFilter();
 
 private:
     std::default_random_engine re;
@@ -297,5 +300,61 @@ void TestConvolutions::testImageConvolutionFilter() {
         }
     }
 }
+
+void TestConvolutions::testGaussianConvolutionFilter() {
+
+    constexpr float sigma = 1;
+    constexpr int radius = 3;
+    constexpr bool normalize = true;
+
+    constexpr int size = 2*radius+1;
+
+    constexpr int imageHeight = size;
+    constexpr int imageWidth = 2*size+1;
+    constexpr int imageChannels = 3;
+
+    Multidim::Array<float, 3> img(imageHeight, imageWidth, imageChannels);
+
+    for (int i = 0; i < imageHeight; i++) {
+        for (int j = 0; j < imageWidth; j++) {
+
+            float mult = 1;
+
+            if (j == size) {
+                mult = 0;
+            }
+
+            if (j > size) {
+                mult = -1;
+            }
+
+            for (int c = 0; c < imageChannels; c++) {
+
+                img.at(i, j, c) = mult*(c+1);
+            }
+        }
+    }
+
+    ImageProcessing::Convolution::Filter<float, MovingAxis, MovingAxis, BatchedIn> gaussianFilter =
+            ImageProcessing::Convolution::uniformGaussianFilter(sigma, radius, normalize, MovingAxis(PaddingInfos()), MovingAxis(PaddingInfos()), BatchedIn());
+
+    Multidim::Array<float, 3> filtered = gaussianFilter.convolve(img);
+
+    QCOMPARE(filtered.shape()[0], 1);
+    QCOMPARE(filtered.shape()[1], size+2);
+    QCOMPARE(filtered.shape()[2], imageChannels);
+
+
+    for (int c = 0; c < imageChannels; c++) {
+
+        float val = c+1;
+
+        QCOMPARE(filtered.valueUnchecked(0,0, c), val);
+        QCOMPARE(filtered.valueUnchecked(0,radius+1, c), static_cast<float>(0));
+        QCOMPARE(filtered.valueUnchecked(0,size+1, c), -val);
+    }
+
+}
+
 QTEST_MAIN(TestConvolutions)
 #include "testConvolution.moc"

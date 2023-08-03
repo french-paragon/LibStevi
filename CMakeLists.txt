@@ -122,6 +122,7 @@ set(LIB_SRC
         imageProcessing/foregroundSegmentation.h
         imageProcessing/shapeFromShading.h
         imageProcessing/convolutions.h
+        imageProcessing/standardConvolutionFilters.h
         imageProcessing/pixelsLines.h
         io/image_io.h
 )
