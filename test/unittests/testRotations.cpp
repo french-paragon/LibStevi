@@ -26,6 +26,8 @@ private Q_SLOTS:
 
 	void testDiffRigidTransformInverse();
 
+    void testEulerRad2RMat();
+
 private:
 	std::default_random_engine re;
 };
@@ -222,6 +224,82 @@ void TestGeometryLibRotation::testDiffRigidTransformInverse() {
 			QVERIFY2(mismatch <= epsilon, qPrintable(QString("Reconstructed vector is too different from original (mismatch = %1)").arg(mismatch)));
 		}
 	}
+
+}
+
+void TestGeometryLibRotation::testEulerRad2RMat() {
+
+    Eigen::Matrix3f R0 = eulerRadXYZToRotation<float>(0,0,0);
+
+    float epsilon = 1e-5;
+
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+
+            float target = (i == j) ? 1 : 0;
+
+            float mismatch = std::abs(R0(i,j) - target);
+            QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 0 angle rotation (mismatch = %1)").arg(mismatch)));
+        }
+    }
+
+    Eigen::Matrix3f RX = eulerRadXYZToRotation<float>(M_PI_2,0,0);
+    Eigen::Matrix3f RY = eulerRadXYZToRotation<float>(0,M_PI_2,0);
+    Eigen::Matrix3f RZ = eulerRadXYZToRotation<float>(0,0,M_PI_2);
+
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+
+            float target = 0;
+
+            if ((i == 0 and j == 0) or (i == 2 and j == 1)) {
+                target = 1;
+            }
+
+            if (i == 1 and j == 2) {
+                target = -1;
+            }
+
+            float mismatch = std::abs(RX(i,j) - target);
+            QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 90 angle rotation around the X axis (mismatch = %1)").arg(mismatch)));
+        }
+    }
+
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+
+            float target = 0;
+
+            if ((i == 1 and j == 1) or (i == 0 and j == 2)) {
+                target = 1;
+            }
+
+            if (i == 2 and j == 0) {
+                target = -1;
+            }
+
+            float mismatch = std::abs(RY(i,j) - target);
+            QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 90 angle rotation around the Y axis (mismatch = %1)").arg(mismatch)));
+        }
+    }
+
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+
+            float target = 0;
+
+            if ((i == 2 and j == 2) or (i == 1 and j == 0)) {
+                target = 1;
+            }
+
+            if (i == 0 and j == 1) {
+                target = -1;
+            }
+
+            float mismatch = std::abs(RZ(i,j) - target);
+            QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 90 angle rotation around the Z axis (mismatch = %1)").arg(mismatch)));
+        }
+    }
 
 }
 
