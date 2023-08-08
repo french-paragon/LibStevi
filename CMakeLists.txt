@@ -98,6 +98,7 @@ set(LIB_SRC
         optimization/leastmedianoptimization.h
         optimization/sphericaloptimization.h
         optimization/affine_utils.h
+        optimization/principalComponentsAnalysis.h
         utils/contiguity.h
         utils/margins.h
         utils/indexers.h

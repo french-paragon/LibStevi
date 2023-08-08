@@ -123,5 +123,9 @@ add_executable(testPixelsLines testPixelsLines.cpp)
 target_link_libraries(testPixelsLines ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestPixelsLines testPixelsLines)
 
+add_executable(testPCA testPCA.cpp)
+target_link_libraries(testPCA ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestPCA testPCA)
+
 
 
