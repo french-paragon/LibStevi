@@ -126,6 +126,7 @@ set(LIB_SRC
         imageProcessing/standardConvolutionFilters.h
         imageProcessing/pixelsLines.h
         io/image_io.h
+        sparseMatching/cornerDetectors.h
 )
 
 if (buildGui)

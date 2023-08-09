@@ -28,6 +28,8 @@ private Q_SLOTS:
 
     void testGaussianConvolutionFilter();
 
+    void testSeparatedGaussianConvolutionFilter();
+
 private:
     std::default_random_engine re;
 
@@ -352,6 +354,72 @@ void TestConvolutions::testGaussianConvolutionFilter() {
         QCOMPARE(filtered.valueUnchecked(0,0, c), val);
         QCOMPARE(filtered.valueUnchecked(0,radius+1, c), static_cast<float>(0));
         QCOMPARE(filtered.valueUnchecked(0,size+1, c), -val);
+    }
+
+}
+
+void TestConvolutions::testSeparatedGaussianConvolutionFilter() {
+
+    constexpr float sigma = 1;
+    constexpr int radius = 3;
+    constexpr bool normalize = true;
+
+    constexpr int size = 2*radius+1;
+
+    constexpr int imageHeight = size;
+    constexpr int imageWidth = 2*size+1;
+    constexpr int imageChannels = 3;
+
+    std::uniform_real_distribution<float> dist(-1,1);
+
+    Multidim::Array<float, 3> img(imageHeight, imageWidth, imageChannels);
+
+    for (int i = 0; i < imageHeight; i++) {
+        for (int j = 0; j < imageWidth; j++) {
+
+            for (int c = 0; c < imageChannels; c++) {
+
+                img.at(i, j, c) = dist(re);
+            }
+        }
+    }
+
+    using FiltType = ImageProcessing::Convolution::Filter<float, MovingAxis, MovingAxis, BatchedIn>;
+
+    PaddingInfos pad1(radius-1, ImageProcessing::Convolution::PaddingType::Mirror);
+    PaddingInfos pad2(radius-2, ImageProcessing::Convolution::PaddingType::Periodic);
+
+    FiltType gaussianFilter =
+            ImageProcessing::Convolution::uniformGaussianFilter(sigma, radius, normalize, MovingAxis(pad1), MovingAxis(pad2), BatchedIn());
+
+    std::array<FiltType, FiltType::nAxesOfType(ImageProcessing::Convolution::AxisType::Moving)> separatedGaussianFilter =
+            ImageProcessing::Convolution::separatedGaussianFilters(sigma, radius, normalize, MovingAxis(pad1), MovingAxis(pad2), BatchedIn());
+
+    Multidim::Array<float, 3> filtered = gaussianFilter.convolve(img);
+
+    Multidim::Array<float, 3> sep_filtered = separatedGaussianFilter[0].convolve(img);
+
+    for (int i = 1; i < separatedGaussianFilter.size(); i++) {
+        sep_filtered = separatedGaussianFilter[i].convolve(sep_filtered);
+    }
+
+    QCOMPARE(filtered.shape()[0], sep_filtered.shape()[0]);
+    QCOMPARE(filtered.shape()[1], sep_filtered.shape()[1]);
+    QCOMPARE(filtered.shape()[2], sep_filtered.shape()[2]);
+
+    QCOMPARE(filtered.shape()[2], imageChannels);
+
+    for (int i = 0; i < filtered.shape()[0]; i++) {
+        for (int j = 0; j < filtered.shape()[1]; j++) {
+
+            for (int c = 0; c < filtered.shape()[2]; c++) {
+
+                float tol = 1e-4;
+                float delta = std::abs(filtered.value(i,j,c) - sep_filtered.value(i,j,c));
+
+                QVERIFY2(delta < tol, qPrintable(QString("Different filters results, error = %1.").arg(delta)));
+            }
+        }
     }
 
 }

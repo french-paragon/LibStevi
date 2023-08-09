@@ -169,6 +169,31 @@ class Filter {
 public:
     constexpr static int nDim = sizeof... (Ds);
     constexpr static std::array<AxisType, nDim> axisTypes = {Ds::getAxisType()...};
+
+    static constexpr int nAxesOfType(AxisType type) {
+        int count = 0;
+
+        for (int i = 0; i < nDim; i++) {
+            if (axisTypes[i] == type) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    static constexpr int nAxesNotOfType(AxisType type) {
+        int count = 0;
+
+        for (int i = 0; i < nDim; i++) {
+            if (axisTypes[i] != type) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
 protected:
 
     constexpr static std::array<int, nDim> correspondanceForExcludedAxisType(AxisType excludedType) {
@@ -225,31 +250,6 @@ protected:
     constexpr static std::array<int, nDim> correspondanceWithFilter() {
         return correspondanceForExcludedAxisType(AxisType::BatchedInput);
     }
-
-    static constexpr int nAxesOfType(AxisType type) {
-        int count = 0;
-
-        for (int i = 0; i < nDim; i++) {
-            if (axisTypes[i] == type) {
-                count++;
-            }
-        }
-
-        return count;
-    }
-
-    static constexpr int nAxesNotOfType(AxisType type) {
-        int count = 0;
-
-        for (int i = 0; i < nDim; i++) {
-            if (axisTypes[i] != type) {
-                count++;
-            }
-        }
-
-        return count;
-    }
-
 public:
 
     constexpr static int nInputAxes = countCorrespondance(correspondanceWithInput());
@@ -257,6 +257,18 @@ public:
     constexpr static int nOutputAxes = countCorrespondance(correspondanceWithOutput());
 
     constexpr static int nFilterAxes = countCorrespondance(correspondanceWithFilter());
+
+    Filter() {
+        _filter = decltype (_filter)();
+
+        for (int i = 0; i < _strides.size(); i++) {
+            _strides[i] = 0;
+        }
+
+        for (int i = 0; i < _paddinginfos.size(); i++) {
+            _paddinginfos[i] = PaddingInfos();
+        }
+    }
 
     Filter(Multidim::Array<T, nFilterAxes> coefficients, Ds ... axisDefinitions) {
         _filter = coefficients;
@@ -428,9 +440,17 @@ public:
 
                     if (_paddinginfos[dimId].padding_type == PaddingType::Mirror) {
                         int s = inputShape[inputAxis];
-                        int sp = 2*s;
+                        int sp = 2*s-2;
+
+                        if (sp == 0) {
+                            sp = 1;
+                        }
 
                         int tmp = (sp + (inputIdx[inputAxis] % sp)) % sp;
+
+                        if (sp == 0) {
+                            tmp = 0;
+                        }
 
                         inputIdx[inputAxis] = (s-1)-std::abs((s-1)-tmp);
                     }
