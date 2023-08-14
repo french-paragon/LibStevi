@@ -127,5 +127,9 @@ add_executable(testPCA testPCA.cpp)
 target_link_libraries(testPCA ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestPCA testPCA)
 
+add_executable(testSparseMatchingUtils testSparseMatchingUtils.cpp)
+target_link_libraries(testSparseMatchingUtils ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestSparseMatchingUtils testSparseMatchingUtils)
+
 
 

@@ -127,6 +127,7 @@ set(LIB_SRC
         imageProcessing/pixelsLines.h
         io/image_io.h
         sparseMatching/cornerDetectors.h
+        sparseMatching/nonLocalMaximumPointSelection.h
 )
 
 if (buildGui)
