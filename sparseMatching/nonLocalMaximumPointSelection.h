@@ -26,7 +26,7 @@ std::vector<std::array<float, 2>> nonLocalMaximumPointSelection(Multidim::Array<
     for (int i = 0; i < shape[0]; i++) {
         for (int j = 0; j < shape[1]; j++) {
             T val = score.valueUnchecked(i,j);
-            if (val == localMax.valueUnchecked(i,j) and val >= threshold) {
+            if (val == localMax.valueUnchecked(i,j) and val > threshold) {
                 tmp.push_back({static_cast<float>(i),static_cast<float>(j), val});
             }
         }
