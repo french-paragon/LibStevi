@@ -377,11 +377,6 @@ public:
         for (int out_idx = 0; out_idx < outputIdxsConverter.numberOfPossibleIndices(); out_idx++) {
 
             std::array<int, nOutputAxes> outputIdx = outputIdxsConverter.getIndexFromPseudoFlatId(out_idx);
-            std::array<int, nOutputAxes> outputIdxInternalId;
-
-            for (int i = 0; i < nOutputAxes; i++) {
-                outputIdxInternalId[i] = crspdFrmOutput[outputIdx[i]];
-            }
 
             constexpr int nBatchedOutputAxes = nAxesOfType(AxisType::BatchedOutput);
             std::array<int, nBatchedOutputAxes> jointFilterOutputAxesInternalId = axesOfType<AxisType::BatchedOutput>();
