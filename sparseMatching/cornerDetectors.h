@@ -112,7 +112,7 @@ Multidim::Array<T, 2> HarrisCornerScore(Multidim::Array<T, 3, Multidim::ConstVie
 
     for (int b = 0; b < shape[batchDim]; b++) {
 
-        Multidim::Array<T, 2> response = HarrisCornerScore(img.sliceView(b, batchDim), lowPassRadius);
+        Multidim::Array<T, 2> response = HarrisCornerScore(img.sliceView(batchDim, b), lowPassRadius);
 
         for (int i = 0; i < outshape[0]; i++) {
             for (int j = 0; j < outshape[1]; j++) {
