@@ -135,6 +135,11 @@ public:
         _channelsName.clear();
     }
 
+    void setBWLevel(Array_T blackLevel, Array_T whiteLevel) {
+        _black_level = blackLevel;
+        _white_level = whiteLevel;
+    }
+
 protected:
 
     using ComputeType = TypesManipulations::accumulation_extended_t<Array_T>;
@@ -268,6 +273,11 @@ public:
 
     inline void clearColorMap(std::function<QColor(float)> const& colorMap) {
         _colorMap = std::nullopt;
+    }
+
+    void setBWLevel(Array_T blackLevel, Array_T whiteLevel) {
+        _black_level = blackLevel;
+        _white_level = whiteLevel;
     }
 
 protected:
