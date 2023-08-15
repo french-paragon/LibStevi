@@ -57,7 +57,7 @@ Multidim::Array<T, 2> HarrisCornerScore(Multidim::Array<T, 2, Multidim::ConstVie
     Multidim::Array<T, 2> response(shape);
 
     for (int i = 0; i < shape[0]; i++) {
-        for (int j = 0; j < shape[0]; j++) {
+        for (int j = 0; j < shape[1]; j++) {
 
             T d0 = diffs[0].valueUnchecked(i,j);
             T d1 = diffs[1].valueUnchecked(i,j);
@@ -69,7 +69,13 @@ Multidim::Array<T, 2> HarrisCornerScore(Multidim::Array<T, 2, Multidim::ConstVie
             T det = d02*d12 - d0d1*d0d1;
             T tr = d02 + d12;
 
-            response.atUnchecked(i,j) = det/tr;
+            T score = det/tr;
+
+            if (std::isinf(score) or std::isnan(score)) {
+                score = 0;
+            }
+
+            response.atUnchecked(i,j) = score;
 
         }
     }
