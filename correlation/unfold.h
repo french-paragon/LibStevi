@@ -244,10 +244,10 @@ getUnfoldFeatureSlidingSubwindowIdxs(uint8_t h_radius_base,
 	return out;
 }
 
-template<class T_I, class T_O = float>
+template<class T_I, class T_O = float, Multidim::ArrayDataAccessConstness constness = Multidim::NonConstView>
 Multidim::Array<T_O, 3> unfold(uint8_t h_radius,
 							   uint8_t v_radius,
-							   Multidim::Array<T_I, 2> const& in_data,
+                               Multidim::Array<T_I, 2, constness> const& in_data,
 							   PaddingMargins const& padding = PaddingMargins(),
 							   UnfoldPatchOrientation orientation = Rotate0) {
 
@@ -289,10 +289,10 @@ Multidim::Array<T_O, 3> unfold(uint8_t h_radius,
 
 	return out;
 }
-template<class T_I, class T_O = float>
+template<class T_I, class T_O = float, Multidim::ArrayDataAccessConstness constness = Multidim::NonConstView>
 Multidim::Array<T_O, 3> unfold(uint8_t h_radius,
 							   uint8_t v_radius,
-							   Multidim::Array<T_I, 3> const& in_data,
+                               Multidim::Array<T_I, 3, constness> const& in_data,
 							   PaddingMargins const& padding = PaddingMargins(),
 							   UnfoldPatchOrientation orientation = Rotate0) {
 
@@ -343,9 +343,9 @@ Multidim::Array<T_O, 3> unfold(uint8_t h_radius,
 	return out;
 }
 
-template<class T_I, class T_O = float>
+template<class T_I, class T_O = float, Multidim::ArrayDataAccessConstness constness = Multidim::NonConstView>
 Multidim::Array<T_O, 3> unfold(UnFoldCompressor const& compressor,
-							   Multidim::Array<T_I, 2> const& in_data,
+                               Multidim::Array<T_I, 2, constness> const& in_data,
 							   PaddingMargins const& padding = PaddingMargins()) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
@@ -405,9 +405,9 @@ Multidim::Array<T_O, 3> unfold(UnFoldCompressor const& compressor,
 	return out;
 }
 
-template<class T_I, class T_O = float>
+template<class T_I, class T_O = float, Multidim::ArrayDataAccessConstness constness = Multidim::NonConstView>
 Multidim::Array<T_O, 3> unfold(UnFoldCompressor const& compressor,
-							   Multidim::Array<T_I, 3> const& in_data,
+                               Multidim::Array<T_I, 3, constness> const& in_data,
 							   PaddingMargins const& padding = PaddingMargins()) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;

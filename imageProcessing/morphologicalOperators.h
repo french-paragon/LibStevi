@@ -55,8 +55,8 @@ inline StructuralElement buildCircularStructuralElement(int radius) {
 	return ret;
 }
 
-template<class T_I, class T_O = T_I>
-Multidim::Array<T_O, 2> minFeature(Multidim::Array<T_I, 3> const& featureVolume) {
+template<class T_I, class T_O = T_I, Multidim::ArrayDataAccessConstness constness = Multidim::NonConstView>
+Multidim::Array<T_O, 2> minFeature(Multidim::Array<T_I, 3, constness> const& featureVolume) {
 
 	constexpr int channelDim = 2;
 
@@ -89,8 +89,8 @@ Multidim::Array<T_O, 2> minFeature(Multidim::Array<T_I, 3> const& featureVolume)
 	return out;
 }
 
-template<class T_I, class T_O = T_I>
-Multidim::Array<T_O, 2> maxFeature(Multidim::Array<T_I, 3> const& featureVolume) {
+template<class T_I, class T_O = T_I, Multidim::ArrayDataAccessConstness constness = Multidim::NonConstView>
+Multidim::Array<T_O, 2> maxFeature(Multidim::Array<T_I, 3, constness> const& featureVolume) {
 
 	constexpr int channelDim = 2;
 
@@ -123,8 +123,8 @@ Multidim::Array<T_O, 2> maxFeature(Multidim::Array<T_I, 3> const& featureVolume)
 	return out;
 }
 
-template<class T_I, class T_O = T_I>
-Multidim::Array<T_O, 2> medianFeature(Multidim::Array<T_I, 3> const& featureVolume) {
+template<class T_I, class T_O = T_I, Multidim::ArrayDataAccessConstness constness = Multidim::NonConstView>
+Multidim::Array<T_O, 2> medianFeature(Multidim::Array<T_I, 3, constness> const& featureVolume) {
 
 	constexpr int channelDim = 2;
 
@@ -197,8 +197,8 @@ T_O medianFeature(std::vector<T_I> const& featureVector) {
 }
 
 
-template<class T_I, class T_O = T_I>
-Multidim::Array<T_O, 2> erosion(StructuralElement const& structuralElement, Multidim::Array<T_I, 2> const& image) {
+template<class T_I, class T_O = T_I, Multidim::ArrayDataAccessConstness constness = Multidim::NonConstView>
+Multidim::Array<T_O, 2> erosion(StructuralElement const& structuralElement, Multidim::Array<T_I, 2, constness> const& image) {
 
 	auto shape = image.shape();
 
@@ -236,16 +236,16 @@ Multidim::Array<T_O, 2> erosion(StructuralElement const& structuralElement, Mult
 
 }
 
-template<class T_I, class T_O = T_I>
-Multidim::Array<T_O, 2> erosion(int h_radius, int v_radius, Multidim::Array<T_I, 2> const& image, PaddingMargins const& padding = PaddingMargins()) {
+template<class T_I, class T_O = T_I, Multidim::ArrayDataAccessConstness constness = Multidim::NonConstView>
+Multidim::Array<T_O, 2> erosion(int h_radius, int v_radius, Multidim::Array<T_I, 2, constness> const& image, PaddingMargins const& padding = PaddingMargins()) {
 
 	Multidim::Array<T_O, 3> featureVolume = Correlation::unfold<T_I, T_O>(h_radius, v_radius, image, padding);
 	return minFeature(featureVolume);
 
 }
 
-template<class T_I, class T_O = T_I>
-Multidim::Array<T_O, 2> repErosion(int rep, int h_radius, int v_radius, Multidim::Array<T_I, 2> const& image, PaddingMargins const& padding = PaddingMargins()) {
+template<class T_I, class T_O = T_I, Multidim::ArrayDataAccessConstness constness = Multidim::NonConstView>
+Multidim::Array<T_O, 2> repErosion(int rep, int h_radius, int v_radius, Multidim::Array<T_I, 2, constness> const& image, PaddingMargins const& padding = PaddingMargins()) {
 
 	Multidim::Array<T_O, 2> out = image.template cast<T_O>();
 
@@ -257,8 +257,8 @@ Multidim::Array<T_O, 2> repErosion(int rep, int h_radius, int v_radius, Multidim
 
 }
 
-template<class T_I, class T_O = T_I>
-Multidim::Array<T_O, 2> dilation(StructuralElement const& structuralElement, Multidim::Array<T_I, 2> const& image) {
+template<class T_I, class T_O = T_I, Multidim::ArrayDataAccessConstness constness = Multidim::NonConstView>
+Multidim::Array<T_O, 2> dilation(StructuralElement const& structuralElement, Multidim::Array<T_I, 2, constness> const& image) {
 
 	auto shape = image.shape();
 
@@ -296,16 +296,16 @@ Multidim::Array<T_O, 2> dilation(StructuralElement const& structuralElement, Mul
 
 }
 
-template<class T_I, class T_O = T_I>
-Multidim::Array<T_O, 2> dilation(int h_radius, int v_radius, Multidim::Array<T_I, 2> const& image, PaddingMargins const& padding = PaddingMargins()) {
+template<class T_I, class T_O = T_I, Multidim::ArrayDataAccessConstness constness = Multidim::NonConstView>
+Multidim::Array<T_O, 2> dilation(int h_radius, int v_radius, Multidim::Array<T_I, 2, constness> const& image, PaddingMargins const& padding = PaddingMargins()) {
 
 	Multidim::Array<T_O, 3> featureVolume = Correlation::unfold<T_I, T_O>(h_radius, v_radius, image, padding);
 	return maxFeature(featureVolume);
 
 }
 
-template<class T_I, class T_O = T_I>
-Multidim::Array<T_O, 2> repDilation(int rep, int h_radius, int v_radius, Multidim::Array<T_I, 2> const& image, PaddingMargins const& padding = PaddingMargins()) {
+template<class T_I, class T_O = T_I, Multidim::ArrayDataAccessConstness constness = Multidim::NonConstView>
+Multidim::Array<T_O, 2> repDilation(int rep, int h_radius, int v_radius, Multidim::Array<T_I, 2, constness> const& image, PaddingMargins const& padding = PaddingMargins()) {
 
 	Multidim::Array<T_O, 2> out = image.template cast<T_O>();
 
@@ -317,8 +317,8 @@ Multidim::Array<T_O, 2> repDilation(int rep, int h_radius, int v_radius, Multidi
 
 }
 
-template<class T_I, class T_O = T_I>
-Multidim::Array<T_O, 2> medianFilter(int h_radius, int v_radius, Multidim::Array<T_I, 2> const& image, PaddingMargins const& padding = PaddingMargins()) {
+template<class T_I, class T_O = T_I, Multidim::ArrayDataAccessConstness constness = Multidim::NonConstView>
+Multidim::Array<T_O, 2> medianFilter(int h_radius, int v_radius, Multidim::Array<T_I, 2, constness> const& image, PaddingMargins const& padding = PaddingMargins()) {
 
 	Multidim::Array<T_O, 3> featureVolume = Correlation::unfold<T_I, T_O>(h_radius, v_radius, image, padding);
 	return medianFeature(featureVolume);
