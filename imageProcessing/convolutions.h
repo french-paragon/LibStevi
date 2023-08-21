@@ -163,6 +163,8 @@ public:
 
 };
 
+//TODO: implement masked convolutions and separate filters.
+
 template<typename T, typename... Ds>
 class Filter {
 

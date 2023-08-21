@@ -356,6 +356,52 @@ void TestConvolutions::testGaussianConvolutionFilter() {
         QCOMPARE(filtered.valueUnchecked(0,size+1, c), -val);
     }
 
+
+    Multidim::Array<float, 2> dirac(size, size);
+
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
+            float val = 0;
+
+            if (i == radius and j == radius) {
+                val = 1;
+            }
+
+            dirac.atUnchecked(i,j) = val;
+        }
+    }
+
+
+    ImageProcessing::Convolution::Filter<float, MovingAxis, MovingAxis> gaussianFlatFilter =
+            ImageProcessing::Convolution::uniformGaussianFilter(sigma, radius, false,
+                                                                MovingAxis(PaddingInfos(radius, radius)),
+                                                                MovingAxis(PaddingInfos(radius, radius)));
+
+    gaussianFlatFilter.setPaddingConstant(0);
+
+    Multidim::Array<float, 2> response = gaussianFlatFilter.convolve(dirac);
+
+    QCOMPARE(response.shape()[0], size);
+    QCOMPARE(response.shape()[1], size);
+
+    float var = sigma*sigma;
+
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
+            float val = response.valueUnchecked(i,j);
+
+            int di = i-radius;
+            int dj = j-radius;
+
+            float expected = std::exp(-(di*di)/var)*std::exp(-(dj*dj)/var);
+
+            float tol = 1e-4;
+            float delta = std::abs(val - expected);
+
+            QVERIFY2(delta < tol, qPrintable(QString("Different filters results, error = %1.").arg(delta)));
+        }
+    }
+
 }
 
 void TestConvolutions::testSeparatedGaussianConvolutionFilter() {
