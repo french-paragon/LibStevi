@@ -2,6 +2,7 @@
 
 #include "sparseMatching/cornerDetectors.h"
 #include "sparseMatching/nonLocalMaximumPointSelection.h"
+#include "sparseMatching/pointsOrientation.h"
 
 #include <iostream>
 #include <random>
@@ -90,6 +91,8 @@ private Q_SLOTS:
     void testFastCornerDetector();
 
     void testNonMaximumPointSelection();
+
+    void testIntensityOrientedCoordinates();
 
 private:
     std::default_random_engine re;
@@ -272,6 +275,32 @@ void TestSparseMatchingUtils::testNonMaximumPointSelection() {
     QCOMPARE(result.size(), 1);
     QCOMPARE(result[0][0], radius);
     QCOMPARE(result[0][1], radius);
+
+}
+
+void TestSparseMatchingUtils::testIntensityOrientedCoordinates() {
+
+    constexpr int squareWidth = 30;
+    constexpr int searchRadius = 3;
+
+    auto [img, gt_points] = generateSquare(squareWidth);;
+
+    std::vector<std::array<int, 2>> points(gt_points.begin(), gt_points.end());
+
+    std::vector<orientedCoordinate<2>> orientedPoints = intensityOrientedCoordinates<false>(points, img, searchRadius);
+
+    QCOMPARE(orientedPoints.size(), points.size());
+
+    for (orientedCoordinate<2> & ocoord : orientedPoints) {
+        float c1 = (ocoord[0] < squareWidth) ? 1 : -1;
+        float c2 = (ocoord[1] < squareWidth) ? 1 : -1;
+
+        c1 /= std::sqrt(2);
+        c2 /= std::sqrt(2);
+
+        QCOMPARE(ocoord.main_dir[0], c1);
+        QCOMPARE(ocoord.main_dir[1], c2);
+    }
 
 }
 

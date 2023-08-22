@@ -128,6 +128,7 @@ set(LIB_SRC
         io/image_io.h
         sparseMatching/cornerDetectors.h
         sparseMatching/nonLocalMaximumPointSelection.h
+        sparseMatching/pointsOrientation.h
 )
 
 if (buildGui)
