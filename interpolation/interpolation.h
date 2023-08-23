@@ -21,6 +21,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../stevi_global.h"
 
+#include <MultidimArrays/MultidimArrays.h>
+#include <MultidimArrays/MultidimIndexManipulators.h>
+
 #include <cmath>
 
 namespace StereoVision {
@@ -44,6 +47,67 @@ T pyramidFunction(std::array<T,inDIM> const& pos) {
 	return out;
 }
 
+template <int inDIM, typename T, T(kernel)(std::array<T,inDIM> const&), int kernelRadius>
+inline T interpolateValue(Multidim::Array<T, inDIM> const& input,
+                          std::array<T,inDIM> const& fractionalCoord) {
+
+    using IndexIn = typename Multidim::Array<T, inDIM>::IndexBlock;
+    using ShapeIn = typename Multidim::Array<T, inDIM>::ShapeBlock;
+    using CoordIn = std::array<T, inDIM>;
+
+    ShapeIn imgShape = input.shape();
+
+    CoordIn const& c = fractionalCoord;
+    IndexIn w_min;
+    IndexIn w_max;
+
+    //round up and extend coordinates
+    for (int i = 0; i < inDIM; i++) {
+
+        if (fabs(c[i] - std::round(c[i])) < 1e-3) {
+            w_min[i] = static_cast<int>(std::round(c[i])) - kernelRadius;
+            w_max[i] = w_min[i] + 1 + 2*kernelRadius;
+
+        } else {
+            w_min[i] = static_cast<int>(std::floor(c[i])) - kernelRadius;
+            w_max[i] = static_cast<int>(std::ceil(c[i])) + kernelRadius;
+        }
+
+        if (kernelRadius == 0) {
+            if (w_min[i] == w_max[i]) {
+                w_max[i] += 1;
+            }
+        }
+    }
+
+    IndexIn grid_shape = w_max - w_min + 1;
+
+    T v = 0;
+
+    Multidim::IndexConverter<inDIM> gridIdxConverter(grid_shape);
+
+    for (int j = 0; j < gridIdxConverter.numberOfPossibleIndices() ; j++) {
+
+        IndexIn filterCoordinate = gridIdxConverter.getIndexFromPseudoFlatId(j);
+        IndexIn imgCoordinate = w_min + filterCoordinate;
+
+        if (!imgCoordinate.isInLimit(imgShape)) {
+            continue;
+        }
+
+        CoordIn kernelCoordinate;
+        for (int i = 0; i < inDIM; i++) {
+            kernelCoordinate[i] = kernelRadius + c[i] - filterCoordinate[i];
+        }
+
+        v += kernel(kernelCoordinate) * input.valueUnchecked(imgCoordinate);
+
+    }
+
+    return v;
+
+}
+
 template <int inDIM, int outDIM, typename T, T(kernel)(std::array<T,inDIM> const&), int kernelRadius>
 Multidim::Array<T, outDIM> interpolate(Multidim::Array<T, inDIM> const& input,
 									   Multidim::Array<T, outDIM + 1> const& coordinates) {
@@ -60,8 +124,6 @@ Multidim::Array<T, outDIM> interpolate(Multidim::Array<T, inDIM> const& input,
 
 	assert(coordinates.shape().back() == inDIM);
 
-	IndexCoord b;
-	b.fill(0);
 	ShapeCoord s = coordinates.shape();
 
 	ShapeOut s_o;
@@ -69,77 +131,41 @@ Multidim::Array<T, outDIM> interpolate(Multidim::Array<T, inDIM> const& input,
 		s_o[i] = s[i];
 	}
 
-	Multidim::Array<T, outDIM> out(s_o);
-
-	IndexOut b_o;
-	b_o.fill(0);
+    Multidim::Array<T, outDIM> out(s_o);
 
 	ShapeIn s_i = input.shape();
 
 	int n = out.flatLenght();
 
-	for (int i = 0; i < n; i++) {
+    Multidim::DimsExclusionSet<outDIM+1> dimExclSet(outDIM);
+    Multidim::IndexConverter<outDIM+1> gridIdxConverter(coordinates.shape(), dimExclSet);
+
+    #pragma omp parallel for
+    for (int i = 0; i < gridIdxConverter.numberOfPossibleIndices(); i++) {
+
+        IndexCoord b = gridIdxConverter.getIndexFromPseudoFlatId(i);
+        IndexOut b_o;
+
+        for (int d = 0; d < outDIM; d++) {
+            b_o[d] = b[d];
+        }
+
 		CoordIn c;
 		IndexIn w_min;
 		IndexIn w_max;
 
 		IndexIn i_o;
-		i_o.fill(0);
-
-		int nPts = 1;
+        i_o.fill(0);
 
 		for (int i = 0; i < inDIM; i++) {
 			b.back() = i;
 			ShapeCoord& pos = b;
-			c[i] = coordinates.valueUnchecked(pos);
+            c[i] = coordinates.valueUnchecked(pos);
+        }
 
-			if (fabs(c[i] - std::round(c[i])) < 1e-3) {
-				w_min[i] = static_cast<int>(std::round(c[i])) - kernelRadius;
-				w_max[i] = w_min[i] + 1 + 2*kernelRadius;
+        T v = interpolateValue<2,T,pyramidFunction<float, 2>,0>(input, c);
 
-			} else {
-				w_min[i] = static_cast<int>(std::floor(c[i])) - kernelRadius;
-				w_max[i] = static_cast<int>(std::ceil(c[i])) + kernelRadius;
-			}
-
-			if (kernelRadius == 0) {
-				if (w_min[i] == w_max[i]) {
-					w_max[i] += 1;
-				}
-			}
-
-			nPts *= 2*(1 + kernelRadius);
-		}
-
-		IndexIn i_w_l = w_max - w_min + 1;
-		IndexIn i_w_c;
-		i_w_c.fill(0);
-
-		T v = 0;
-
-		for (int j = 0; j < nPts; j++) {
-
-			IndexIn w_c = w_min + i_w_c;
-
-			if (!w_c.isInLimit(s_i)) {
-				i_w_c.moveToNextIndex(i_w_l);
-				continue;
-			}
-
-			CoordIn s_c;
-			for (int i = 0; i < inDIM; i++) {
-				s_c[i] = kernelRadius + c[i] - w_c[i];
-			}
-
-			v += kernel(s_c) * input.valueUnchecked(w_c);
-
-			i_w_c.moveToNextIndex(i_w_l);
-		}
-
-		out.atUnchecked(b_o) = v;
-
-		b.moveToNextIndex(s);
-		b_o.moveToNextIndex(s_o);
+        out.atUnchecked(b_o) = v;
 	}
 
 	return out;
