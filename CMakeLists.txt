@@ -129,6 +129,7 @@ set(LIB_SRC
         sparseMatching/cornerDetectors.h
         sparseMatching/nonLocalMaximumPointSelection.h
         sparseMatching/pointsOrientation.h
+        sparseMatching/pointsDescriptors.h
 )
 
 if (buildGui)

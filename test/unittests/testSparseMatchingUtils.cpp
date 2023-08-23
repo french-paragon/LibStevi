@@ -3,6 +3,9 @@
 #include "sparseMatching/cornerDetectors.h"
 #include "sparseMatching/nonLocalMaximumPointSelection.h"
 #include "sparseMatching/pointsOrientation.h"
+#include "sparseMatching/pointsDescriptors.h"
+
+#include "correlation/matching_costs.h"
 
 #include <iostream>
 #include <random>
@@ -93,6 +96,9 @@ private Q_SLOTS:
     void testNonMaximumPointSelection();
 
     void testIntensityOrientedCoordinates();
+
+    void testBriefDescriptor();
+
 
 private:
     std::default_random_engine re;
@@ -283,7 +289,7 @@ void TestSparseMatchingUtils::testIntensityOrientedCoordinates() {
     constexpr int squareWidth = 30;
     constexpr int searchRadius = 3;
 
-    auto [img, gt_points] = generateSquare(squareWidth);;
+    auto [img, gt_points] = generateSquare(squareWidth);
 
     std::vector<std::array<int, 2>> points(gt_points.begin(), gt_points.end());
 
@@ -300,6 +306,51 @@ void TestSparseMatchingUtils::testIntensityOrientedCoordinates() {
 
         QCOMPARE(ocoord.main_dir[0], c1);
         QCOMPARE(ocoord.main_dir[1], c2);
+    }
+
+}
+
+void TestSparseMatchingUtils::testBriefDescriptor() {
+
+    constexpr int squareWidth = 30;
+    constexpr int searchRadius = 3;
+
+    constexpr int windowsRadius = searchRadius + 2;
+    constexpr int nSamples = 50;
+    constexpr int tol = 5;
+
+    int nNWords = nSamples/32;
+    if (nSamples%32 != 0) {
+        nNWords += 1;
+    }
+
+    auto tuple = generateSquare(squareWidth);
+    Multidim::Array<float,2>& img = std::get<0>(tuple);
+    std::array<std::array<int,2>,4>& gt_points = std::get<1>(tuple);
+
+    std::vector<std::array<int, 2>> points(gt_points.begin(), gt_points.end());
+
+    std::vector<orientedCoordinate<2>> orientedPoints = intensityOrientedCoordinates<false>(points, img, searchRadius);
+
+    std::vector<ComparisonPair<2>> comparisonPairs = generateRandomComparisonPairs<2>(nSamples, windowsRadius);
+
+    std::vector<pointFeatures<2, std::vector<uint32_t>>> descriptors = BriefDescriptor<false>(orientedPoints, img, comparisonPairs);
+
+    QCOMPARE(descriptors.size(), orientedPoints.size());
+
+    //feature vectors are supposed to be the same.
+    std::vector<uint32_t> vec0 = descriptors[0].features;
+
+    QCOMPARE(vec0.size(), nNWords);
+
+    for (int i = 1; i < 4; i++) {
+        std::vector<uint32_t> veci = descriptors[i].features;
+
+        QCOMPARE(veci.size(), vec0.size());
+
+        int unMatched = StereoVision::Correlation::hammingDistance(vec0, veci);
+
+        QVERIFY2(unMatched <= tol, qPrintable(QString("Corners do not have the same oriented briefs features (%1 unmatched pixels)").arg(unMatched)));
     }
 
 }

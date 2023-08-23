@@ -51,11 +51,11 @@ struct orientedCoordinate {
         }
 
         std::array<int, nDim> coord;
-        std::array<float, nDim> main_dir;
+        std::array<float, nDim> main_dir; //#TODO: for more than 2 dimensions, this is not enough to orient the patch, need to implement computing more moments
 };
 
 template<bool hasFeatureAxis = true,typename T, size_t nDim, Multidim::ArrayDataAccessConstness constNess>
-std::vector<orientedCoordinate<nDim>> intensityOrientedCoordinates(std::vector<std::array<int, nDim>> coords,
+std::vector<orientedCoordinate<nDim>> intensityOrientedCoordinates(std::vector<std::array<int, nDim>> const& coords,
                                                                    Multidim::Array<T, (hasFeatureAxis) ? nDim+1 : nDim, constNess> const& img,
                                                                    int searchRadius = 3,
                                                                    int featureAxis = nDim) {

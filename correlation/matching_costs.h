@@ -174,6 +174,19 @@ inline hamming_cv_t hammingDistance(Multidim::Array<T_S,1, viewConstness> const&
 	return score;
 }
 
+template<class T_S, class T_T>
+inline hamming_cv_t hammingDistance(std::vector<T_S> const& source,
+                                    std::vector<T_T> const& target) {
+
+    hamming_cv_t score = 0;
+
+    for (int i = 0; i < source.size(); i++) {
+        score += hammingScalar(source[i], target[i]);
+    }
+
+    return score;
+}
+
 template<>
 class MatchingFunctionTraits<matchingFunctions::None>{
 //This specialization is not meant to be used in practice, but provide a default implementation when implementing conditional templates.

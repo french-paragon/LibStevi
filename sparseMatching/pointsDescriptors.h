@@ -1,0 +1,181 @@
+#ifndef POINTSDESCRIPTORS_H
+#define POINTSDESCRIPTORS_H
+
+/*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
+
+Copyright (C) 2023  Paragon<french.paragon@gmail.com>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include <vector>
+#include <array>
+
+#include <cmath>
+
+#include <random>
+
+#include <MultidimArrays/MultidimArrays.h>
+#include <MultidimArrays/MultidimIndexManipulators.h>
+
+#include "./pointsOrientation.h"
+
+#include "../interpolation/interpolation.h"
+
+namespace StereoVision {
+namespace SparseMatching {
+
+template <int nDim, typename FT>
+struct pointFeatures {
+
+        pointFeatures()
+        {
+
+        }
+
+        pointFeatures(std::array<int, nDim> const& pos,
+                      FT const& features) :
+            coord(pos),
+            features(features)
+        {
+
+        }
+
+        std::array<int, nDim> coord;
+        FT features;
+};
+
+template<int nDim>
+using ComparisonPair = std::array<std::array<float, nDim>,2>;
+
+/*!
+ * \brief generateRandomComparisonPairs generate random comparison pairs for descriptors
+ * \param nSamples the number of comparison to generate.
+ * \param windowsRadius the size of the window to consider
+ * \return randomly generated pairs
+ *
+ * The pairs are generated indepandently from an isotropic gaussian distribution, as was found to be optimal in
+ * Calonder, Michael, et al. "Brief: Binary robust independent elementary features." Computer Vision–ECCV 2010:
+ * 11th European Conference on Computer Vision, Heraklion, Crete, Greece, September 5-11, 2010, Proceedings,
+ * Part IV 11. Springer Berlin Heidelberg, 2010.
+ */
+template<int nDim>
+std::vector<ComparisonPair<nDim>> generateRandomComparisonPairs(int nSamples, int windowsRadius) {
+
+    int windowsWidth = windowsRadius;
+    float std = static_cast<float>(windowsWidth)/5;
+
+    std::default_random_engine re;
+    re.seed(std::random_device{}());
+    std::normal_distribution<float> distribution(0.0,std);
+
+    std::vector<ComparisonPair<nDim>> ret(nSamples);
+
+    for (int i = 0; i < nSamples; i++) {
+        for (int j = 0; j < nDim; j++) {
+            ret[i][0][j] = distribution(re);
+            ret[i][1][j] = distribution(re);
+
+            ret[i][0][j] = std::clamp<float>(ret[i][0][j], -windowsRadius, windowsRadius);
+            ret[i][1][j] = std::clamp<float>(ret[i][1][j], -windowsRadius, windowsRadius);
+        }
+    }
+
+    return ret;
+
+}
+
+template <bool hasFeatureAxis = true, int nDim, typename T, Multidim::ArrayDataAccessConstness constNess>
+std::vector<pointFeatures<nDim, std::vector<uint32_t>>> BriefDescriptor(std::vector<orientedCoordinate<nDim>> const& coords,
+                                                                        Multidim::Array<T, (hasFeatureAxis) ? nDim+1 : nDim, constNess> const& img,
+                                                                        std::vector<ComparisonPair<(hasFeatureAxis) ? nDim+1 : nDim>> const& comparisonPairs,
+                                                                        int featureAxis = nDim) {
+
+    static_assert (nDim == 2, "only nDim == 2 is supported at the moment"); //TODO: change the oriented coordinate class to support at least nDim == 3 as well.
+
+    constexpr int imDim = (hasFeatureAxis) ? nDim+1 : nDim;
+
+    int nPairs = comparisonPairs.size();
+
+    constexpr int nbits = 32;
+    int nDWord = nPairs/nbits;
+    if (nPairs % nbits != 0) {
+        nDWord += 1;
+    }
+
+    std::vector<pointFeatures<nDim, std::vector<uint32_t>>> ret;
+    ret.reserve(coords.size());
+
+    for (orientedCoordinate<nDim> const& coord : coords) {
+
+        std::vector<uint32_t> feature(nDWord);
+        std::fill(feature.begin(), feature.end(), 0);
+
+        int bId = 0;
+        int fId = 0;
+
+        float theta = std::atan2(coord.main_dir[0], coord.main_dir[1]);
+
+        float cos = std::cos(theta);
+        float sin = std::sin(theta);
+
+        for (ComparisonPair<imDim> const& pair : comparisonPairs) {
+
+            std::array<float, imDim> transformed_coords0;
+            std::array<float, imDim> transformed_coords1;
+
+            int coord0_id = (hasFeatureAxis and (featureAxis == 0)) ? 1 : 0;
+            int coord1_id = (hasFeatureAxis and (featureAxis >= 1)) ? 2 : 1;
+
+            transformed_coords0[coord0_id] = cos*pair[0][coord0_id] - sin*pair[0][coord1_id];
+            transformed_coords1[coord0_id] = cos*pair[1][coord0_id] - sin*pair[1][coord1_id];
+
+            transformed_coords0[coord1_id] = sin*pair[0][coord0_id] + cos*pair[0][coord1_id];
+            transformed_coords1[coord1_id] = sin*pair[1][coord0_id] + cos*pair[1][coord1_id];
+
+            if (hasFeatureAxis) {
+                transformed_coords0[featureAxis] = pair[0][featureAxis];
+                transformed_coords1[featureAxis] = pair[1][featureAxis];
+            }
+
+            T val0 = Interpolation::interpolateValue<imDim, T, Interpolation::pyramidFunction<T, 2>, 0>(img, transformed_coords0);
+            T val1 = Interpolation::interpolateValue<imDim, T, Interpolation::pyramidFunction<float, 2>, 0>(img, transformed_coords1);
+
+            uint32_t m = (val0 > val1) ? 1 : 0; //compute bitmask
+
+            m <<= bId; //shift bit to id
+
+            feature[fId] |= m; //apply bitmask
+
+            bId++;
+
+            if (bId >= nbits) {
+                bId = 0;
+                fId++;
+            }
+
+        }
+
+        ret.emplace_back(coord.coord, feature);
+
+    }
+
+    return ret;
+
+}
+
+} // namespace SparseMatching
+} // namespace StereoVision
+
+#endif // POINTSDESCRIPTORS_H
