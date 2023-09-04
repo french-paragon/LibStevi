@@ -131,5 +131,9 @@ add_executable(testSparseMatchingUtils testSparseMatchingUtils.cpp)
 target_link_libraries(testSparseMatchingUtils ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestSparseMatchingUtils testSparseMatchingUtils)
 
+add_executable(testAssignementProblems testAssignementProblems.cpp)
+target_link_libraries(testAssignementProblems ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestAssignementProblems testAssignementProblems)
+
 
 

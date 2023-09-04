@@ -69,6 +69,7 @@ set(LIB_SRC
         graphs/graphs.h
         graphs/graph_flow.h
         graphs/graph_cut.h
+        optimization/assignement_problems.h
         interpolation/interpolation.cpp
         interpolation/interpolation.h
         interpolation/lensdistortionsmap.cpp
