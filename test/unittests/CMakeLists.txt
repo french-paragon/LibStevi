@@ -135,5 +135,9 @@ add_executable(testAssignementProblems testAssignementProblems.cpp)
 target_link_libraries(testAssignementProblems ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestAssignementProblems testAssignementProblems)
 
+add_executable(testInterpolation testInterpolation.cpp)
+target_link_libraries(testInterpolation ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestInterpolation testInterpolation)
+
 
 

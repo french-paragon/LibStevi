@@ -96,6 +96,48 @@ std::vector<ComparisonPair<nDim>> generateRandomComparisonPairs(int nSamples, in
 
 }
 
+/*!
+ * \brief generateRandomComparisonPairs generate random comparison pairs for descriptors for a multi channel image.
+ * \param nSamples the number of samples
+ * \param windowsRadius the radius of the search window
+ * \param nChannels the number of channels in the image
+ * \return comparison pairs
+ */
+template<int nDim>
+std::vector<ComparisonPair<nDim+1>> generateRandomComparisonPairs(int nSamples, int windowsRadius, int nChannels) {
+
+    int windowsWidth = windowsRadius;
+    float std = static_cast<float>(windowsWidth)/5;
+
+    std::default_random_engine re;
+    re.seed(std::random_device{}());
+    std::normal_distribution<float> distribution(0.0,std);
+
+    std::vector<ComparisonPair<nDim+1>> ret(nSamples);
+
+    int channel = 0;
+
+    for (int i = 0; i < nSamples; i++) {
+        for (int j = 0; j < nDim; j++) {
+            ret[i][0][j] = distribution(re);
+            ret[i][1][j] = distribution(re);
+
+            ret[i][0][j] = std::clamp<float>(ret[i][0][j], -windowsRadius, windowsRadius);
+            ret[i][1][j] = std::clamp<float>(ret[i][1][j], -windowsRadius, windowsRadius);
+        }
+
+        ret[i][0][nDim] = channel;
+        ret[i][1][nDim] = channel;
+
+        channel++;
+        channel %= nChannels;
+
+    }
+
+    return ret;
+
+}
+
 template <bool hasFeatureAxis = true, int nDim, typename T, Multidim::ArrayDataAccessConstness constNess>
 std::vector<pointFeatures<nDim, std::vector<uint32_t>>> BriefDescriptor(std::vector<orientedCoordinate<nDim>> const& coords,
                                                                         Multidim::Array<T, (hasFeatureAxis) ? nDim+1 : nDim, constNess> const& img,
@@ -149,8 +191,8 @@ std::vector<pointFeatures<nDim, std::vector<uint32_t>>> BriefDescriptor(std::vec
                 transformed_coords1[featureAxis] = pair[1][featureAxis];
             }
 
-            T val0 = Interpolation::interpolateValue<imDim, T, Interpolation::pyramidFunction<T, 2>, 0>(img, transformed_coords0);
-            T val1 = Interpolation::interpolateValue<imDim, T, Interpolation::pyramidFunction<float, 2>, 0>(img, transformed_coords1);
+            T val0 = Interpolation::interpolateValue<imDim, T, Interpolation::pyramidFunction<T, imDim>, 0>(img, transformed_coords0);
+            T val1 = Interpolation::interpolateValue<imDim, T, Interpolation::pyramidFunction<T, imDim>, 0>(img, transformed_coords1);
 
             uint32_t m = (val0 > val1) ? 1 : 0; //compute bitmask
 

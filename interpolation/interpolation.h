@@ -3,7 +3,7 @@
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 
-Copyright (C) 2021  Paragon<french.paragon@gmail.com>
+Copyright (C) 2021-2023  Paragon<french.paragon@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -163,7 +163,7 @@ Multidim::Array<T, outDIM> interpolate(Multidim::Array<T, inDIM> const& input,
             c[i] = coordinates.valueUnchecked(pos);
         }
 
-        T v = interpolateValue<2,T,pyramidFunction<float, 2>,0>(input, c);
+        T v = interpolateValue<2,T,kernel,kernelRadius>(input, c);
 
         out.atUnchecked(b_o) = v;
 	}

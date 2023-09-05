@@ -39,6 +39,37 @@ Multidim::Array<float,2> generateSampleProblem(std::default_random_engine & re, 
     return ret;
 }
 
+Multidim::Array<float,3> generateMultiProblem(std::default_random_engine & re, int radius = 3) {
+
+    int s = 2*radius+1;
+    int c = 3;
+
+    float max = -std::numeric_limits<float>::infinity();
+
+
+    std::uniform_real_distribution<float> dist(-1, 1);
+    Multidim::Array<float,3> ret(s,s,c);
+
+    for (int i = 0; i < s; i++) {
+        for (int j = 0; j < s; j++) {
+            for (int k = 0; k < c; k++) {
+                float val = dist(re);
+                ret.atUnchecked(i,j,k) = val;
+
+                if (max < val) {
+                    max = val;
+                }
+            }
+        }
+    }
+
+    for (int k = 0; k < c; k++) {
+        ret.atUnchecked(radius, radius, k) = max+1+k;
+    }
+
+    return ret;
+}
+
 std::tuple<Multidim::Array<float,2>, std::array<std::array<int,2>,4>> generateSquare(int width) {
 
     int squareWidth = 2*width;
@@ -352,6 +383,21 @@ void TestSparseMatchingUtils::testBriefDescriptor() {
 
         QVERIFY2(unMatched <= tol, qPrintable(QString("Corners do not have the same oriented briefs features (%1 unmatched pixels)").arg(unMatched)));
     }
+
+    //test if the system can hand multi-channels images.
+    Multidim::Array<float,3> test3Channels = generateMultiProblem(re, searchRadius);
+
+    std::vector<std::array<int, 2>> centralPoint = {{searchRadius, searchRadius}};
+
+    std::vector<orientedCoordinate<2>> orientedCentralPoint = intensityOrientedCoordinates<true>(centralPoint, test3Channels, searchRadius);
+
+    std::vector<ComparisonPair<3>> comparisonPairsMultiChannels = generateRandomComparisonPairs<2>(nSamples, windowsRadius, test3Channels.shape()[2]);
+
+    std::vector<pointFeatures<2, std::vector<uint32_t>>> descriptors3Channels = BriefDescriptor<true>(orientedCentralPoint, test3Channels, comparisonPairsMultiChannels);
+
+    QCOMPARE(descriptors3Channels.size(), 1);
+
+
 
 }
 
