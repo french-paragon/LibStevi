@@ -78,7 +78,20 @@ void TestAssignementProblem::testOptimalAssignement_data() {
 
     QVector<std::array<int,2>> problem4matches = {{0,1},{1,0}};
 
-    QTest::newRow("Non-square basic vertical") << problem3cost << problem3matches;
+    QTest::newRow("Non-square basic vertical") << problem4cost << problem4matches;
+
+
+    CostT problem5cost;
+    problem5cost.resize(4,4);
+
+    problem5cost << 5, 4, 1, 6,
+                    3, 5, 2, 6,
+                    6, 6, 3, 4,
+                    4, 3, 2, 5;
+
+    QVector<std::array<int,2>> problem5matches = {{0,2},{1,0},{2,3},{3,1}};
+
+    QTest::newRow("Larger") << problem5cost << problem5matches;
 
 
 

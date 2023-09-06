@@ -35,7 +35,137 @@ namespace Optimization {
 template<typename T>
 std::vector<std::array<int, 2>> optimalAssignement(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> const& Costs) {
 
-    //TODO: implement cubic complexity graph based algorithm
+    using CostT = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+    using DirMatT = Eigen::Matrix<uint8_t, Eigen::Dynamic, Eigen::Dynamic>;
+
+    int o_n = Costs.rows();
+    int o_m = Costs.cols();
+
+    bool transpose = false;
+    CostT costs;
+
+    if (o_n <= o_m) {
+        costs = Costs;
+    } else {
+        costs = Costs.transpose();
+        transpose = true;
+    }
+
+    int n = costs.rows();
+    int m = costs.cols();
+
+    std::vector<T> potentialS(n);
+    std::fill(potentialS.begin(), potentialS.end(), 0);
+
+    std::vector<T> potentialT(m+1);
+    std::fill(potentialT.begin(), potentialT.end(), 0);
+
+    std::vector<int> matchedS(m+1); //given a T, contain the matched S
+    std::fill(matchedS.begin(), matchedS.end(), -1);
+
+
+    //add the vertices from the S set, one by one
+    for (int s = 0; s < n; s++) {
+
+
+        //the minimum delta from Z to any T will not change once T is in delta.
+        //So they can be recorded and updated with linear complexity.
+        std::vector<T> minDeltas(m+1,std::numeric_limits<T>::max());
+
+        std::vector<int> previous(m + 1, -1);  // previous t on alternating path
+        std::vector<bool> in_Z(m + 1, false); // t that are in Z
+
+        int minDeltaTId = m;
+        matchedS[m] = s; //add the current job in the reserve slots
+
+        //main extension loop
+        while (matchedS[minDeltaTId] != -1) {
+
+            in_Z[minDeltaTId] = true;
+
+            int nextMinDeltaTId;
+            T minDelta = std::numeric_limits<T>::max();
+            int j = matchedS[minDeltaTId];
+
+            //update the min delta
+            for (int t = 0; t < m; t++) {
+                if (!in_Z[t]) {
+                    //check if delta has changed.
+                    T newDelta = costs(j,t) - potentialS[j] - potentialT[t];
+
+                    if (newDelta < minDeltas[t]) {
+                        minDeltas[t] = newDelta;
+                        previous[t] = minDeltaTId;
+                    }
+
+                    if (minDeltas[t] < minDelta) {
+                        minDelta = minDeltas[t];
+                        nextMinDeltaTId = t;
+                    }
+                }
+            }
+
+            //update the potentials
+            for (int t = 0; t <= m; t++) {
+                if (in_Z[t]) {
+                    potentialS[matchedS[t]] += minDelta;
+                    potentialT[t] -= minDelta;
+                } else {
+                    minDeltas[t] -= minDelta;
+                }
+            }
+
+            minDeltaTId = nextMinDeltaTId;
+
+        };
+
+        // update assignments along alternating path
+        int current_t = minDeltaTId;
+
+        while(current_t != -1) {
+            int previous_t = previous[current_t];
+
+            if (previous_t < 0) {
+                break;
+            }
+
+            matchedS[current_t] = matchedS[previous_t];
+
+            current_t = previous_t;
+        }
+    }
+
+    std::vector<std::array<int, 2>> ret;
+    ret.reserve(n);
+
+    for (int t = 0; t < m; t++) {
+
+        int i = matchedS[t];
+
+        if (i < 0) {
+            continue;
+        }
+
+        if (transpose) {
+            ret.push_back({t, i});
+        } else {
+            ret.push_back({i,t});
+        }
+    }
+
+    return ret;
+
+}
+
+/*!
+ * \brief optimalAssignementO4 compute an optimal assignement between two finite sets, given a cost matrix
+ * \param Costs the costs of assigning elements to one another, as a matrix.
+ * \return the optimal assignement
+ *
+ * This version has suboptimal complexity and is kept mainly for benchmarking and
+ */
+template<typename T>
+std::vector<std::array<int, 2>> optimalAssignementO4(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> const& Costs) {
 
     using CostT = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     using RowVec = Eigen::Matrix<T, 1, Eigen::Dynamic>;
