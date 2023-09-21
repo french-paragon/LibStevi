@@ -9,4 +9,4 @@ add_executable(
     ${PROG_SRC}
 )
 
-target_link_libraries(${EXEC_NAME} ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Core)
+target_link_libraries(${EXEC_NAME} ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Core Threads::Threads)

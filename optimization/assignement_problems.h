@@ -169,7 +169,7 @@ std::vector<std::array<int, 2>> optimalAssignementO4(Eigen::Matrix<T, Eigen::Dyn
 
     using CostT = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     using RowVec = Eigen::Matrix<T, 1, Eigen::Dynamic>;
-    using ColVec = Eigen::Vector<T, Eigen::Dynamic>;
+	using ColVec = Eigen::Matrix<T, Eigen::Dynamic,1>;
 
     int o_n = Costs.rows();
     int o_m = Costs.cols();

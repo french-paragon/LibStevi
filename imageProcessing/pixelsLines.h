@@ -30,8 +30,8 @@ namespace ImageProcessing {
  * \return the point on the line the closest to the center of the pixel for each pixel crossed by the line.
  */
 template<typename T>
-Eigen::Array<T, 2, Eigen::Dynamic> listPixPointsOnLine(Eigen::Vector<T,2> const& pt1,
-                                                       Eigen::Vector<T,2> const& pt2) {
+Eigen::Array<T, 2, Eigen::Dynamic> listPixPointsOnLine(Eigen::Matrix<T,2,1> const& pt1,
+													   Eigen::Matrix<T,2,1> const& pt2) {
 
     static_assert (std::is_floating_point_v<T>, "Function requires a floating point value");
 
@@ -52,10 +52,10 @@ Eigen::Array<T, 2, Eigen::Dynamic> listPixPointsOnLine(Eigen::Vector<T,2> const&
     Eigen::Array<T, 2, Eigen::Dynamic> ret;
     ret.resize(2, nPixels);
 
-    Eigen::Vector<T,2> v0(x_incr*pt1[0], y_incr*pt1[1]);
-    Eigen::Vector<T,2> v1(x_incr*pt2[0], y_incr*pt2[1]);
+	Eigen::Matrix<T,2,1> v0(x_incr*pt1[0], y_incr*pt1[1]);
+	Eigen::Matrix<T,2,1> v1(x_incr*pt2[0], y_incr*pt2[1]);
 
-    Eigen::Vector<T,2> v = v1 - v0;
+	Eigen::Matrix<T,2,1> v = v1 - v0;
 
     int dx = 0;
     int dy = 0;
@@ -64,10 +64,10 @@ Eigen::Array<T, 2, Eigen::Dynamic> listPixPointsOnLine(Eigen::Vector<T,2> const&
 
     for (int i = 0; i < nPixels; i++) {
 
-        Eigen::Vector<T,2> x(v0[0]+dx, v0[1]+dy);
+		Eigen::Matrix<T,2,1> x(v0[0]+dx, v0[1]+dy);
         T t = v.dot(x - v0)/vSquared;
 
-        Eigen::Vector<T,2> nearest = v0 + t*v;
+		Eigen::Matrix<T,2,1> nearest = v0 + t*v;
 
         ret(0,i) = x_incr*nearest[0];
         ret(1,i) = y_incr*nearest[1];

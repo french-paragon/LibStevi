@@ -12,13 +12,13 @@ target_link_libraries(benchmarkL0ApproximationFunctions ${STEREOVISION_LIB} Qt${
 
 configure_file(benchmarkStereoMatchingModels.cpp benchmarkStereoMatchingModels.cpp)
 add_executable(benchmarkStereoMatchingModels ${CMAKE_CURRENT_BINARY_DIR}/benchmarkStereoMatchingModels.cpp)
-target_link_libraries(benchmarkStereoMatchingModels ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+target_link_libraries(benchmarkStereoMatchingModels ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test Threads::Threads)
 
 add_executable(benchmarkRandomUtils benchmarkRandomUtils.cpp)
 target_link_libraries(benchmarkRandomUtils ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 
 add_executable(benchmarkImageSaving benchmarkImageSaving.cpp)
-target_link_libraries(benchmarkImageSaving ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+target_link_libraries(benchmarkImageSaving ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test Threads::Threads)
 
 if (TARGET JPEG::JPEG)
     target_link_libraries(benchmarkImageSaving JPEG::JPEG)

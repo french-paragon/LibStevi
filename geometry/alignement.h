@@ -467,6 +467,9 @@ struct p3pSolution {
     int nValidSolutions;
 };
 
+template<typename T, int nRefineIteration = 5>
+p3pSolution<T> p3p(Eigen::Array<T,3,3> const& pt_cam, Eigen::Array<T,3,3> const& pt_world);
+
 class p3pInternals {
 private:
 
@@ -507,14 +510,14 @@ private:
     }
 
     template<typename T>
-    inline static Eigen::Vector<T,3> getEigenVectorKnowing0(Eigen::Vector<T,9> const& flat, T lambda) {
+	inline static Eigen::Matrix<T,3, 1> getEigenVectorKnowing0(Eigen::Matrix<T,9,1> const& flat, T lambda) {
 
         T c = c = lambda*lambda + flat[0]*flat[4] - lambda*(flat[0]+flat[4]) - flat[1]*flat[1];
 
         T a1 = (lambda*flat[2] + flat[1]*flat[5] - flat[2]*flat[4])/c;
         T a2 = (lambda*flat[5] + flat[1]*flat[2] - flat[0]*flat[5])/c;
 
-        Eigen::Vector<T,3> ret;
+		Eigen::Matrix<T,3,1> ret;
         ret << a1, a2, 1;
         ret.normalize();
 
@@ -530,7 +533,7 @@ private:
         Vec b3 = mat.row(1).cross(mat.row(2)); //0-eigenvector
         b3.normalize();
 
-        Eigen::Vector<T,9> flat;
+		Eigen::Matrix<T,9,1> flat;
         flat << mat(0,0), mat(0,1), mat(0,2),
                 mat(1,0), mat(1,1), mat(1,2),
                 mat(2,0), mat(2,1), mat(2,2);
@@ -574,7 +577,7 @@ private:
     }
 
     template<typename T, int nRefineIteration>
-    friend p3pSolution<T> p3p(Eigen::Array<T,3,3> const& pt_cam, Eigen::Array<T,3,3> const& pt_world);
+	friend p3pSolution<T> p3p(Eigen::Array<T,3,3> const& pt_cam, Eigen::Array<T,3,3> const& pt_world);
 
 };
 
@@ -587,7 +590,7 @@ private:
  *
  * Code derived from the paper https://openaccess.thecvf.com/content_ECCV_2018/papers/Mikael_Persson_Lambda_Twist_An_ECCV_2018_paper.pdf
  */
-template<typename T, int nRefineIteration = 5>
+template<typename T, int nRefineIteration>
 p3pSolution<T> p3p(Eigen::Array<T,3,3> const& pt_cam, Eigen::Array<T,3,3> const& pt_world) {
 
     using Vec = Eigen::Matrix<T,3,1>;
@@ -678,7 +681,7 @@ p3pSolution<T> p3p(Eigen::Array<T,3,3> const& pt_cam, Eigen::Array<T,3,3> const&
     p3pSolution<T> sol;
     sol.nValidSolutions = 0;
 
-    Eigen::Vector<T,9> flatE;
+	Eigen::Matrix<T,9,1> flatE;
     flatE << E(0,0), E(0,1), E(0,2),
              E(1,0), E(1,1), E(1,2),
              E(2,0), E(2,1), E(2,2);
@@ -806,13 +809,13 @@ AffineTransform<T> p4p(Eigen::Array<T,2,4> const& pt_cam, Eigen::Array<T,3,4> co
     static_assert (std::is_floating_point_v<T>, "P4P function support only floating point numbers template type");
 
     using Mat = Eigen::Matrix<T,3,3>;
-    using Vec = Eigen::Vector<T,3>;
+	using Vec = Eigen::Matrix<T,3,1>;
 
     Eigen::Array<T,3,3> homPtCam;
     homPtCam.template block<2,3>(0,0) = pt_cam.template block<2,3>(0,0);
     homPtCam.template block<1,3>(2,0) = Eigen::Array<T,1,3>::Constant(1);
 
-    p3pSolution<T> p3pSolution = p3p<T>(homPtCam, pt_world.template block<3,3>(0,0));
+	p3pSolution<T> p3pSolution = p3p<T>(homPtCam, pt_world.template block<3,3>(0,0));
 
     Vec imgPt;
     imgPt.template block<2,1>(0,0) = pt_cam.col(3);
@@ -865,7 +868,7 @@ AffineTransform<T> p4p(Eigen::Array<T,2,4> const& pt_cam, Eigen::Array<T,3,4> co
  */
 template<typename T>
 Eigen::Matrix<T, 2, 6> JacobianPointProjection(ShapePreservingTransform<T> const& currentWorld2Cam,
-                                               Eigen::Vector<T,3> const& pt_world) {
+											   Eigen::Matrix<T,3,1> const& pt_world) {
 
     using Mat36 = Eigen::Matrix<T,3,6>;
     using Mat33 = Eigen::Matrix<T,3,3>;
@@ -873,8 +876,8 @@ Eigen::Matrix<T, 2, 6> JacobianPointProjection(ShapePreservingTransform<T> const
     using Mat23 = Eigen::Matrix<T,2,3>;
     using Mat22 = Eigen::Matrix<T,2,2>;
 
-    using Vec3 = Eigen::Vector<T,3>;
-    using Vec2 = Eigen::Vector<T,2>;
+	using Vec3 = Eigen::Matrix<T,3,1>;
+	using Vec2 = Eigen::Matrix<T,2,1>;
 
     Mat33 diffRx = diffRodriguez(currentWorld2Cam.r, Axis::X);
     Mat33 diffRy = diffRodriguez(currentWorld2Cam.r, Axis::Y);
@@ -909,14 +912,14 @@ AffineTransform<T> pnpRefine(Eigen::Array<T,2,Eigen::Dynamic> const& pt_cam,
 
     using MatrixAT = Eigen::Matrix<T,Eigen::Dynamic,6>;
 
-    using VecObsT = Eigen::Vector<T,Eigen::Dynamic>;
-    using VecParamT = Eigen::Vector<T,6>;
+	using VecObsT = Eigen::Matrix<T,Eigen::Dynamic,1>;
+	using VecParamT = Eigen::Matrix<T,6,1>;
 
     using MatrixQT = Eigen::Matrix<T,6,6>;
 
     using Mat33 = Eigen::Matrix<T,3,3>;
 
-    using Vec3 = Eigen::Vector<T,3>;
+	using Vec3 = Eigen::Matrix<T,3,1>;
 
     int nPts = pt_cam.cols();
     int nObs = 2*nPts;
@@ -987,7 +990,7 @@ AffineTransform<T> pnp(Eigen::Array<T,2,nCols> const& pt_cam,
 
 
     using Mat33 = Eigen::Matrix<T,3,3>;
-    using Vec3 = Eigen::Vector<T,3>;
+	using Vec3 = Eigen::Matrix<T,3,1>;
 
     //treat invalid cases
 
@@ -1081,7 +1084,7 @@ AffineTransform<T> pnp(Eigen::Array<T,2,nCols> const& pt_cam,
 
 
     using Mat33 = Eigen::Matrix<T,3,3>;
-    using Vec3 = Eigen::Vector<T,3>;
+	using Vec3 = Eigen::Matrix<T,3,1>;
 
     //treat invalid cases
 
