@@ -397,7 +397,9 @@ public:
 
             for (int i = 0; i < nBatchedOutputAxes; i++) {
                 int outputAxis = crspdWthOutput[jointFilterOutputAxesInternalId[i]];
-                int filterAxis = crspdWthOutput[jointFilterOutputAxesInternalId[i]];
+                int filterAxis = crspdWthFilter[jointFilterOutputAxesInternalId[i]];
+
+                baseFilterIdx[filterAxis] = outputIdx[outputAxis];
             }
 
             std::array<int, nInputAxes> baseInputIdx;

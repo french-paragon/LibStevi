@@ -217,6 +217,8 @@ std::vector<pointFeatures<nDim, std::vector<uint32_t>>> BriefDescriptor(std::vec
 
 }
 
+
+
 } // namespace SparseMatching
 } // namespace StereoVision
 

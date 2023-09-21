@@ -10,9 +10,194 @@
 #include <Eigen/SparseLU>
 
 #include "./convolutions.h"
+#include "./edgesDetection.h"
 
 namespace StereoVision {
 namespace ImageProcessing {
+
+template<typename ComputeType>
+Multidim::Array<ComputeType, 3> initialNormalMapEstimate(Multidim::Array<ComputeType, 2> const& shading,
+                                                         Eigen::Matrix<ComputeType, 3, 1> const& lightDirection) {
+
+    constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+    ComputeType check = 1/lightDirection.z();
+    if (std::isinf(check) or std::isnan(check)) {
+        return Multidim::Array<ComputeType, 3>();
+    }
+
+    std::array<int,2> inShape = shading.shape();
+
+    Multidim::Array<ComputeType, 4> possibleEstimates(inShape[0], inShape[1], 3, 2);
+
+    constexpr int nGradientDir = 2;
+    Multidim::Array<ComputeType,3> coefficients(3,3,nGradientDir);
+
+    coefficients.atUnchecked(0,0,0) = 1;
+    coefficients.atUnchecked(1,0,0) = 2;
+    coefficients.atUnchecked(2,0,0) = 1;
+
+    coefficients.atUnchecked(0,1,0) = 0;
+    coefficients.atUnchecked(1,1,0) = 0;
+    coefficients.atUnchecked(2,1,0) = 0;
+
+    coefficients.atUnchecked(0,2,0) = -1;
+    coefficients.atUnchecked(1,2,0) = -2;
+    coefficients.atUnchecked(2,2,0) = -1;
+
+    coefficients.atUnchecked(0,0,1) = 1;
+    coefficients.atUnchecked(0,1,1) = 2;
+    coefficients.atUnchecked(0,2,1) = 1;
+
+    coefficients.atUnchecked(1,0,1) = 0;
+    coefficients.atUnchecked(1,1,1) = 0;
+    coefficients.atUnchecked(1,2,1) = 0;
+
+    coefficients.atUnchecked(2,0,1) = -1;
+    coefficients.atUnchecked(2,1,1) = -2;
+    coefficients.atUnchecked(2,2,1) = -1;
+
+    using Maxis = Convolution::MovingWindowAxis;
+    using BOaxis = Convolution::BatchedOutputAxis;
+
+    Convolution::Filter<ComputeType, Maxis, Maxis, BOaxis> gradientFilter(coefficients, Maxis(), Maxis(), BOaxis());
+
+    Multidim::Array<ComputeType, 3> gradients = gradientFilter.convolve(shading);
+
+    ComputeType maxShading = shading.valueUnchecked(0,0);
+
+    for (int i = 0; i < inShape[0]; i++) {
+        for (int j = 0; j < inShape[1]; j++) {
+
+            ComputeType val = shading.valueUnchecked(i,j);
+
+            if (val > maxShading) {
+                maxShading = val;
+            }
+        }
+    }
+
+    Eigen::Matrix<ComputeType, 3, 1> ld = lightDirection;
+    ld.normalize();
+    ld *= maxShading;
+
+    for (int i = 0; i < inShape[0]; i++) {
+        for (int j = 0; j < inShape[1]; j++) {
+
+            ComputeType gx = gradients.atUnchecked(i,j,0);
+            ComputeType gy = gradients.atUnchecked(i,j,1);
+
+            ComputeType s = shading.valueUnchecked(i,j);
+
+            ComputeType x;
+            ComputeType y;
+            ComputeType z;
+
+            ComputeType scale;
+
+            //branch x = f(y), d = x
+            if (std::abs(gx) < std::abs(gy)) {
+                scale = gx/gy; //x = scale*y;
+            } else { //branch y = f(x)
+                scale = gy/gx; //y = scale*x;
+            }
+
+            if (std::isinf(scale) or std::isnan(scale)) {
+                scale = 1;
+            }
+
+            ComputeType lv;
+
+            if (std::abs(gx) < std::abs(gy)) {
+                lv = scale*ld.x() + ld.y();
+            } else {
+                lv = scale*ld.y() + ld.x();
+            }
+
+            ComputeType lz = ld.z();
+
+            ComputeType tr = -lv/lz; //z = s + tr*v
+
+            ComputeType a = tr*tr + scale*scale + 1; //a*v*v + b*v + c = 0
+            ComputeType b = 2*tr*s;
+            ComputeType c = s*s - 1;
+
+            ComputeType delta = b*b - 4*a*c;
+
+            if (std::abs(gx) < std::abs(gy)) {
+                y = (-b + sqrt(delta))/(2*a);
+                z = tr*y + s;
+                x = scale*y;
+            } else {
+                x = (-b + sqrt(delta))/(2*a);
+                z = tr*x + s;
+                y = scale*x;
+            }
+
+            possibleEstimates.atUnchecked(i,j,0,0) = x;
+            possibleEstimates.atUnchecked(i,j,1,0) = y;
+            possibleEstimates.atUnchecked(i,j,2,0) = z;
+
+            if (std::abs(gx) < std::abs(gy)) {
+                y = (-b - sqrt(delta))/(2*a);
+                z = tr*y + s;
+                x = scale*y;
+            } else {
+                x = (-b - sqrt(delta))/(2*a);
+                z = tr*x + s;
+                y = scale*x;
+            }
+
+            possibleEstimates.atUnchecked(i,j,0,1) = x;
+            possibleEstimates.atUnchecked(i,j,1,1) = y;
+            possibleEstimates.atUnchecked(i,j,2,1) = z;
+
+        }
+    }
+
+    Multidim::Array<ComputeType, 3> estimates(inShape[0], inShape[1], 3);
+
+    for (int i = 0; i < inShape[0]; i++) {
+        for (int j = 0; j < inShape[1]; j++) {
+
+            std::array<ComputeType, 2> deltas = {0, 0};
+
+            for (int d = 0; d < 2; d++) {
+                ComputeType x = possibleEstimates.atUnchecked(i,j,0,d);
+                ComputeType y = possibleEstimates.atUnchecked(i,j,1,d);
+                ComputeType z = possibleEstimates.atUnchecked(i,j,2,d);
+
+                if (i > 0) {
+                    ComputeType dx = estimates.atUnchecked(i-1,j,0) - x;
+                    ComputeType dy = estimates.atUnchecked(i-1,j,1) - y;
+                    ComputeType dz = estimates.atUnchecked(i-1,j,2) - z;
+
+                    deltas[d] += std::sqrt(dx*dx + dy*dy + dz*dz);
+                }
+
+                if (j > 0) {
+                    ComputeType dx = estimates.atUnchecked(i,j-1,0) - x;
+                    ComputeType dy = estimates.atUnchecked(i,j-1,1) - y;
+                    ComputeType dz = estimates.atUnchecked(i,j-1,2) - z;
+
+                    deltas[d] += std::sqrt(dx*dx + dy*dy + dz*dz);
+                }
+            }
+
+            int selected = 0;
+            if (deltas[1] < deltas[0]) {
+                selected = 1;
+            }
+            for (int a = 0; a < 3; a++) {
+                estimates.atUnchecked(i,j,a) = possibleEstimates.atUnchecked(i,j,a,selected);
+            }
+
+        }
+    }
+
+    return estimates;
+
+}
 
 template<typename ComputeType>
 Multidim::Array<ComputeType, 3> normalMapFromSingleShadingImage(Multidim::Array<ComputeType, 2> const& shading,
@@ -259,7 +444,7 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 
     //using SolverType = Eigen::ConjugateGradient<MatrixAType, Eigen::Lower|Eigen::Upper, Eigen::DiagonalPreconditioner<ComputeType>>;
     //using SolverType = Eigen::BiCGSTAB<MatrixAType, Eigen::IncompleteLUT<ComputeType>>;
-    using SolverType = Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int> >;
+    using SolverType = Eigen::SparseLU<Eigen::SparseMatrix<ComputeType>, Eigen::COLAMDOrdering<int> >;
 
     int VectorPlen = shading.flatLenght();
     int VectorNlen = 3*VectorPlen;
@@ -379,126 +564,36 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 
     //Constraint H(||\nabla R||-c)\dotprod{S\nabla R}{N} = 0
 
-    constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
-
-    constexpr int nGradientDir = 2;
-    Multidim::Array<ComputeType,3> coefficients(3,3,nGradientDir);
-
-    coefficients.atUnchecked(0,0,0) = 1;
-    coefficients.atUnchecked(1,0,0) = 2;
-    coefficients.atUnchecked(2,0,0) = 1;
-
-    coefficients.atUnchecked(0,1,0) = 0;
-    coefficients.atUnchecked(1,1,0) = 0;
-    coefficients.atUnchecked(2,1,0) = 0;
-
-    coefficients.atUnchecked(0,2,0) = -1;
-    coefficients.atUnchecked(1,2,0) = -2;
-    coefficients.atUnchecked(2,2,0) = -1;
-
-    coefficients.atUnchecked(0,0,1) = 1;
-    coefficients.atUnchecked(0,1,1) = 2;
-    coefficients.atUnchecked(0,2,1) = 1;
-
-    coefficients.atUnchecked(1,0,1) = 0;
-    coefficients.atUnchecked(1,1,1) = 0;
-    coefficients.atUnchecked(1,2,1) = 0;
-
-    coefficients.atUnchecked(2,0,1) = -1;
-    coefficients.atUnchecked(2,1,1) = -2;
-    coefficients.atUnchecked(2,2,1) = -1;
-
-    using Maxis = Convolution::MovingWindowAxis;
-    using BIaxis = Convolution::BatchedInputAxis;
-    using BOaxis = Convolution::BatchedOutputAxis;
-
-    Convolution::Filter<ComputeType, Maxis, Maxis, BIaxis, BOaxis> gradientFilter(coefficients, Maxis(), Maxis(), BIaxis(), BOaxis());
-
-    Multidim::Array<ComputeType, 4> gradientsPerChannels = gradientFilter.convolve(reflectance);
-
-    Multidim::Array<ComputeType, 3> aggregatedGradients(inSize[0], inSize[1], nGradientDir);
-    Multidim::Array<ComputeType, 2> gradientsAmplitude(inSize[0], inSize[1]);
-
-    std::vector<ComputeType> sortedGradientsAmpl;
-    sortedGradientsAmpl.reserve(inSize[0]*inSize[1]);
-
-    ComputeType maxAmpl = 0;
-
-    for (int i = 0; i < inSize[0]; i++) {
-        for (int j = 0; j < inSize[1]; j++) {
-
-            ComputeType d0 = 0;
-            ComputeType d1 = 0;
-
-            for (int c = 0; c < inSize[2]; c++) {
-
-                ComputeType coeff = 1;
-
-                if (gradientsPerChannels.atUnchecked(i,j,c,0) < 0) {
-                    coeff = -1;
-                }
-
-                d0 += coeff*gradientsPerChannels.atUnchecked(i,j,c,0);
-                d1 += coeff*gradientsPerChannels.atUnchecked(i,j,c,1);
-            }
-
-            aggregatedGradients.atUnchecked(i,j,0) = d0;
-            aggregatedGradients.atUnchecked(i,j,1) = d1;
-
-            ComputeType ampl = d0*d0 + d1*d1;
-
-            gradientsAmplitude.atUnchecked(i,j) = ampl;
-            sortedGradientsAmpl.push_back(ampl);
-
-            maxAmpl = std::max(ampl, maxAmpl);
-
-        }
-    }
-
-    maxAmpl = std::sqrt(maxAmpl);
-
-    int qant = (sortedGradientsAmpl.size()-1)*(1.-propEdges);
-
-    if (qant < 0) {
-        qant = 0;
-    }
-
-    if (qant >= sortedGradientsAmpl.size()) {
-        qant = sortedGradientsAmpl.size()-1;
-    }
-
-    std::nth_element(sortedGradientsAmpl.begin(), sortedGradientsAmpl.begin()+qant, sortedGradientsAmpl.end());
-
-    ComputeType threshold = sortedGradientsAmpl[qant];
+    std::vector<std::tuple<std::array<int,2>, std::array<ComputeType,2>>> coords = gradientBasedEdges(reflectance, propEdges);
 
     MatrixAType D;
 
     D.resize(VectorPlen, VectorNlen);
     D.reserve(Eigen::VectorXi::Constant(VectorNlen, 1));
 
-    for (int j = 0; j < idxConverterOut.numberOfPossibleIndices(); j++) {
-        auto idxOut = idxConverterOut.getIndexFromPseudoFlatId(j);
-
-        if (gradientsAmplitude.atUnchecked(idxOut[0], idxOut[1]) < threshold) {
-            continue;
-        }
-
-        std::array<int,2> idxIn = {idxOut[0], idxOut[1]};
+    for (auto const& [idxIn, gradient] : coords) {
 
         int i = idxConverterIn.getPseudoFlatIdFromIndex(idxIn);
 
-        ComputeType DVal = 0;
+        ComputeType ampl = std::sqrt(gradient[0]*gradient[0] + gradient[1]*gradient[1]);
 
-        if (idxOut[2] < 2) {
+        for (int c = 0; c < 2; c++) {
+            std::array<int,3> idxOut = {idxIn[0], idxIn[1], c};
+            int j = idxConverterOut.getPseudoFlatIdFromIndex(idxOut);
 
+
+            ComputeType DVal = 0;
+
+            //turn the gradient 90°, so that cross product with normal is 0!
             int idx = idxOut[2] == 1 ? 0 : 1;
             int scale = idxOut[2] == 1 ? -1 : 1;
-            ComputeType d = aggregatedGradients.atUnchecked(idxOut[0], idxOut[1], idx);
 
-            DVal = scale*d/maxAmpl;
+            ComputeType d = gradient[idx];
+
+            DVal = scale*d/ampl;
+
+            D.coeffRef(i,j) -= DVal;
         }
-
-        D.coeffRef(i,j) -= DVal;
     }
 
     //Constraint |N| = 1 and iterations
@@ -506,7 +601,7 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
     Abase += lambdaDiff*(Dx.transpose()*Dx);
     Abase += lambdaDiff*(Dy.transpose()*Dy);
 
-    ComputeType rescale = static_cast<ComputeType>(sortedGradientsAmpl.size())/(sortedGradientsAmpl.size() - qant);
+    ComputeType rescale = static_cast<ComputeType>(inSize[0]*inSize[1])/coords.size();
     Abase += rescale*lambdaDir*(D.transpose()*D);
 
     VectorSolType solution = VectorSolType::Zero(VectorNlen);
@@ -551,12 +646,20 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
         VectorBType b = P.transpose()*p - A*solution - lambdaNorm*normDiffs; //rhs = c - (A*x_0 + g(x_0))
         A += lambdaNorm*N; //Diff = A + Diff(g)
 
-        SolverType solver;
-        solver.compute(A);
+        A.makeCompressed();
 
+        SolverType solver;
+
+        // Compute the ordering permutation vector from the structural pattern of A
+        solver.analyzePattern(A);
+        // Compute the numerical factorization
+        solver.factorize(A);
+        //solver.compute(A);
+
+        std::cout << "\titerations " << iter << std::endl;
         VectorSolType delta = solver.solve(b);
 
-        if(solver.info()!=Eigen::Success) {
+        if(solver.info()!= Eigen::Success) {
             return Multidim::Array<ComputeType, 3>();
         }
 
