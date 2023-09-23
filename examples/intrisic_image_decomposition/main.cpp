@@ -43,6 +43,8 @@ using namespace StereoVision::ImageProcessing;
 
 int main(int argc, char** argv) {
 
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
     #ifdef WITH_GUI
     QApplication app(argc, argv);
     #endif
@@ -144,6 +146,58 @@ int main(int argc, char** argv) {
 
 	IntrinsicImageDecomposition<float, 3> decomposition = autoRetinexWithNonLocalTextureConstraint<float, float>(img);
 
+	out << "Decomposition computed!" << Qt::endl;
+	out << "Out shape: " << decomposition.reflectance.shape()[0] << ' ' << decomposition.reflectance.shape()[1] << Qt::endl;
+
+	float minS = decomposition.shading.at<Nc>(0,0,0);
+	float maxS = decomposition.shading.at<Nc>(0,0,0);
+
+	float minR = decomposition.reflectance.at<Nc>(0,0,0);
+	float maxR = decomposition.reflectance.at<Nc>(0,0,0);
+
+	float maxE = 0;
+
+	Multidim::Array<float,3> reconstructed(img.shape());
+	Multidim::Array<float,3> error(img.shape());
+
+	for (int i = 0; i < img.shape()[0]; i++) {
+		for (int j = 0; j < img.shape()[1]; j++) {
+
+			float valS = decomposition.shading.value<Nc>(i,j,0);
+
+			if (valS < minS) {
+				minS = valS;
+			}
+
+			if (valS > maxS) {
+				maxS = valS;
+			}
+
+			for (int c = 0; c < img.shape()[2]; c++) {
+				float valR = decomposition.reflectance.value<Nc>(i,j,c);
+
+				if (valR < minR) {
+					minR = valR;
+				}
+
+				if (valR > maxR) {
+					maxR = valR;
+				}
+
+				reconstructed.at<Nc>(i,j,c) = valS*valR;
+				error.at<Nc>(i,j,c) = std::abs(reconstructed.at<Nc>(i,j,c) - img.at<Nc>(i,j,c));
+
+				if (error.at<Nc>(i,j,c) > maxE) {
+					maxE = error.at<Nc>(i,j,c);
+				}
+			}
+		}
+	}
+
+	out << "min and max shading: min=" << minS << " max=" << maxS << Qt::endl;
+	out << "min and max reflectance: min=" << minR << " max=" << maxR << Qt::endl;
+	out << "max reconstruction error:" << maxE << Qt::endl;
+
     bool outputFiles = true;
     bool ok = true;
 
@@ -163,12 +217,28 @@ int main(int argc, char** argv) {
     }
 
     #ifdef WITH_GUI
-    StereoVision::Gui::ArrayDisplayAdapter<float> reflectanceAdapter(&decomposition.reflectance, 0, 1);
+	StereoVision::Gui::ArrayDisplayAdapter<float> reflectanceAdapter(&decomposition.reflectance, 0, maxS);
     reflectanceAdapter.configureOriginalChannelDisplay(channelsNames);
     QImageDisplay::ImageWindow reflectanceWindow;
     reflectanceWindow.setImage(&reflectanceAdapter);
     reflectanceWindow.setWindowTitle("Reflectance image");
     #endif
+
+	#ifdef WITH_GUI
+	StereoVision::Gui::ArrayDisplayAdapter<float> shadingAdapter(&decomposition.shading, 0, maxS);
+	shadingAdapter.configureOriginalChannelDisplay(channelsNames);
+	QImageDisplay::ImageWindow shadingWindow;
+	shadingWindow.setImage(&shadingAdapter);
+	shadingWindow.setWindowTitle("shading image");
+	#endif
+
+	#ifdef WITH_GUI
+	StereoVision::Gui::ArrayDisplayAdapter<float> errorAdapter(&error, 0, maxE);
+	errorAdapter.configureOriginalChannelDisplay(channelsNames);
+	QImageDisplay::ImageWindow errorWindow;
+	errorWindow.setImage(&errorAdapter);
+	errorWindow.setWindowTitle("reconstruction error");
+	#endif
 
     if (outputFiles) {
         ok = StereoVision::IO::writeImage<float>((outDir.filePath(info.baseName() + "_shading") + ".stevimg" ).toStdString(), decomposition.shading);
@@ -179,20 +249,13 @@ int main(int argc, char** argv) {
             out << "\t" << "Failed to write shading file to disk" << Qt::endl;
             return 1;
         }
-    }
-
-    #ifdef WITH_GUI
-    StereoVision::Gui::ArrayDisplayAdapter<float> shadingAdapter(&decomposition.shading, 0, 1);
-    shadingAdapter.configureOriginalChannelDisplay(channelsNames);
-    QImageDisplay::ImageWindow shadingWindow;
-    shadingWindow.setImage(&shadingAdapter);
-    shadingWindow.setWindowTitle("shading image");
-    #endif
+	}
 
     #ifdef WITH_GUI
     imgWindow.show();
-    reflectanceWindow.show();
-    shadingWindow.show();
+	reflectanceWindow.show();
+	shadingWindow.show();
+	errorWindow.show();
     return app.exec();
     #endif
 

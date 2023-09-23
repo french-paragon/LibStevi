@@ -53,7 +53,7 @@ Multidim::Array<O, nDim> linear2logColorSpaceImg(Multidim::Array<T, nDim> const&
 template<typename T, typename O = float, int nDim = 3>
 Multidim::Array<O, nDim> log2linearColorSpaceImg(Multidim::Array<T, nDim> const& logimg) {
 
-	Multidim::Array<O, nDim> out(logimg.shape(), logimg.strides());
+	Multidim::Array<O, nDim> out(logimg.shape());
 
 	Multidim::IndexConverter<nDim> idxConverter(logimg.shape());
 

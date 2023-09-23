@@ -538,8 +538,8 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 		logR.atUnchecked(idx) = logImg.valueUnchecked(idx) - logS.valueUnchecked(idx);
 	}
 
-	Multidim::Array<ComputeType, 3> R = linear2logColorSpaceImg(logR);
-	Multidim::Array<ComputeType, 3> S = linear2logColorSpaceImg(logS);
+	Multidim::Array<ComputeType, 3> R = log2linearColorSpaceImg(logR);
+	Multidim::Array<ComputeType, 3> S = log2linearColorSpaceImg(logS);
 
 	return IntrinsicImageDecomposition<ComputeType, 3>{ R, S };
 
