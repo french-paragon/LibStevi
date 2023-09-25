@@ -109,7 +109,7 @@ int main(int argc, char** argv) {
     Eigen::Matrix<float, 3, 1> lightDirection;
     lightDirection << 0, 1, 1;
 
-    float lambdaNorm = 1.0;
+	float lambdaNorm = 9.0;
     float lambdaDiff = 0.25;
     float lambdaDir = 0.25;
     float propEdges = 0.05;
@@ -117,16 +117,26 @@ int main(int argc, char** argv) {
     int nIter = 60;
     float incrTol = 1e-5;
 
-    Multidim::Array<float, 3> normals = initialNormalMapEstimate(shading.sliceView(2,0), lightDirection);
-    /*Multidim::Array<float, 3> normals = normalMapFromIntrinsicDecomposition(shading.sliceView(2,0),
-                                                                            reflectance,
+	Multidim::Array<float, 3> img(shape_s);
+
+	for (int i = 0; i < shape_s[0]; i++) {
+		for (int j = 0; j < shape_s[1]; j++) {
+			for (int c = 0; c < shape_s[2]; c++) {
+				img.atUnchecked(i,j,c) = shading.atUnchecked(i,j,c)*reflectance.atUnchecked(i,j,c);
+			}
+		}
+	}
+
+	/*Multidim::Array<float, 3> normals = initialNormalMapEstimate(shading.sliceView(2,0), lightDirection);*/
+	Multidim::Array<float, 3> normals = normalMapFromIntrinsicDecomposition(shading.sliceView(2,0),
+																			img,
                                                                             lightDirection,
                                                                             lambdaNorm,
                                                                             lambdaDiff,
                                                                             lambdaDir,
                                                                             propEdges,
                                                                             nIter,
-                                                                            incrTol);*/
+																			incrTol);
 
     out << "Processing finished -> normals shape = " << normals.shape()[0] << " x " << normals.shape()[1] << Qt::endl;
 
