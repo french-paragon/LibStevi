@@ -8,6 +8,7 @@
 #include <Eigen/Sparse>
 #include <Eigen/IterativeLinearSolvers>
 #include <Eigen/SparseLU>
+#include <Eigen/SparseCholesky>
 
 #include "./convolutions.h"
 #include "./edgesDetection.h"
@@ -458,9 +459,10 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
     using VectorBType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
     using VectorSolType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
 
-	using SolverType = Eigen::ConjugateGradient<MatrixAType, Eigen::Lower|Eigen::Upper, Eigen::DiagonalPreconditioner<ComputeType>>;
+    //using SolverType = Eigen::ConjugateGradient<MatrixAType, Eigen::Lower|Eigen::Upper, Eigen::DiagonalPreconditioner<ComputeType>>;
     //using SolverType = Eigen::BiCGSTAB<MatrixAType, Eigen::IncompleteLUT<ComputeType>>;
-	//using SolverType = Eigen::SparseLU<Eigen::SparseMatrix<ComputeType>, Eigen::COLAMDOrdering<int> >;
+    //using SolverType = Eigen::SparseLU<Eigen::SparseMatrix<ComputeType>, Eigen::COLAMDOrdering<int> >;
+    using SolverType = Eigen::SimplicialLDLT<Eigen::SparseMatrix<ComputeType>>;
 
     int VectorPlen = shading.flatLenght();
     int VectorNlen = 3*VectorPlen;
@@ -518,7 +520,7 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 
         ComputeType PVal = normalizedLightDirection[idxOut[2]];
 
-        P.coeffRef(i,j) -= PVal;
+        P.coeffRef(i,j) += PVal;
 
         ComputeType pVal = shading.valueUnchecked(idxIn);
 
@@ -640,6 +642,8 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 
     for (int iter = 0; iter < nIter; iter++) {
 
+        std::cout << "\tStarting iterations " << iter << std::endl;
+
 		for (int i = 0; i < outSize[0]; i++) {
 			for (int j = 0; j < outSize[1]; j++) {
 				int i1 = idxConverterOut.getPseudoFlatIdFromIndex({i,j,0});
@@ -652,20 +656,21 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 				ComputeType x2 = solution[i2];
 				ComputeType x3 = solution[i3];
 
-				ComputeType quadr = (x1*x1 + x2*x2 + x3*x3 - 1);
-				ComputeType sign = (quadr >= 0) ? 1 : -1;
+                ComputeType quadr = (x1*x1 + x2*x2 + x3*x3 - 1);
 
-				nClosure[i_n] = quadr + 2*sign*x1*x1 + 2*sign*x2*x2 + 2*sign*x3*x3;
+                nClosure[i_n] = quadr + 4*quadr*x1*x1 + 4*quadr*x2*x2 + 4*quadr*x3*x3;
 
-				N.coeffRef(i_n,i1) = 2*sign*x1;
-				N.coeffRef(i_n,i2) = 2*sign*x2;
-				N.coeffRef(i_n,i3) = 2*sign*x3;
+                N.coeffRef(i_n,i1) = 4*quadr*x1;
+                N.coeffRef(i_n,i2) = 4*quadr*x2;
+                N.coeffRef(i_n,i3) = 4*quadr*x3;
 			}
         }
 
+        std::cout << "\tFinished rebuilding N " << std::endl;
+
         MatrixAType A = Abase;
-		VectorBType b = -P.transpose()*p + lambdaNorm*N.transpose()*nClosure; //rhs = c - (A*x_0 + g(x_0))
-		A += lambdaNorm*N.transpose()*N; //Diff = A + Diff(g)
+        VectorBType b = P.transpose()*p + lambdaNorm*N.transpose()*nClosure;
+        A += lambdaNorm*N.transpose()*N;
 
         A.makeCompressed();
 
@@ -674,15 +679,23 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 		std::cout << "\tPreparing iterations " << iter << std::endl;
 
         // Compute the ordering permutation vector from the structural pattern of A
-		//solver.analyzePattern(A);
+        solver.analyzePattern(A);
         // Compute the numerical factorization
-		//solver.factorize(A);
-		solver.compute(A);
+        solver.factorize(A);
+        //solver.compute(A);
 
+        if(solver.info() != Eigen::Success) {
+
+            std::cout << "\tFailure to factorize " << iter << std::endl;
+            return Multidim::Array<ComputeType, 3>();
+        }
+
+        VectorSolType nSol = solver.solve(b);
         std::cout << "\titerations " << iter << std::endl;
-		VectorSolType nSol = solver.solve(b);
 
-		if(solver.info()!= Eigen::Success) {
+        if(solver.info() != Eigen::Success) {
+
+            std::cout << "\tFailure to optimize " << iter << std::endl;
 			return Multidim::Array<ComputeType, 3>();
 		}
 
@@ -697,6 +710,8 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 		if (delta.norm()/VectorNlen < incrTol) {
             break;
         }
+
+        std::cout << "\titerations ended " << iter << std::endl;
     }
 
     //return normal map
