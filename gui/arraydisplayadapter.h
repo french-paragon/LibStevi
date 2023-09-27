@@ -56,6 +56,26 @@ public:
         _y_axis(yAxis),
         _channel_axis(channelAxis),
         _color_channels(colorChannel),
+        _black_level{blackLevel, blackLevel, blackLevel},
+        _white_level{whiteLevel, whiteLevel, whiteLevel}
+    {
+
+    }
+
+    ArrayDisplayAdapter(Multidim::Array<Array_T, 3, viewConstness> const* array,
+                        std::array<Array_T, 3> const& blackLevel,
+                        std::array<Array_T, 3> const& whiteLevel,
+                        int xAxis = 1,
+                        int yAxis = 0,
+                        int channelAxis = 2,
+                        std::array<int, 3> colorChannel = {0,1,2},
+                        QObject* parent = nullptr) :
+        QImageDisplay::ImageAdapter(parent),
+        _array(array),
+        _x_axis(xAxis),
+        _y_axis(yAxis),
+        _channel_axis(channelAxis),
+        _color_channels(colorChannel),
         _black_level(blackLevel),
         _white_level(whiteLevel)
     {
@@ -82,13 +102,13 @@ public:
         QColor ret;
 
         idx[_channel_axis] = _color_channels[0];
-        ret.setRed(valueToColor(_array->valueOrAlt(idx, 0)));
+        ret.setRed(valueToColor(_array->valueOrAlt(idx, 0), 0));
 
         idx[_channel_axis] = _color_channels[1];
-        ret.setGreen(valueToColor(_array->valueOrAlt(idx, 0)));
+        ret.setGreen(valueToColor(_array->valueOrAlt(idx, 0), 1));
 
         idx[_channel_axis] = _color_channels[2];
-        ret.setBlue(valueToColor(_array->valueOrAlt(idx, 0)));
+        ret.setBlue(valueToColor(_array->valueOrAlt(idx, 0), 2));
 
         return ret;
     }
@@ -136,6 +156,11 @@ public:
     }
 
     void setBWLevel(Array_T blackLevel, Array_T whiteLevel) {
+        _black_level = {blackLevel, blackLevel, blackLevel};
+        _white_level = {whiteLevel, whiteLevel, whiteLevel};
+    }
+
+    void setBWLevel(std::array<Array_T, 3> const& blackLevel, std::array<Array_T, 3> const& whiteLevel) {
         _black_level = blackLevel;
         _white_level = whiteLevel;
     }
@@ -144,18 +169,18 @@ protected:
 
     using ComputeType = TypesManipulations::accumulation_extended_t<Array_T>;
 
-    inline uint8_t valueToColor(Array_T const& value) const {
+    inline uint8_t valueToColor(Array_T const& value, int channel) const {
 
-        if (value < _black_level) {
+        if (value < _black_level[channel]) {
             return 0;
         }
 
-        if (value >= _white_level) {
+        if (value >= _white_level[channel]) {
             return 255;
         }
 
-        ComputeType transformed = (255*(static_cast<ComputeType>(value) - static_cast<ComputeType>(_black_level)))
-                /(_white_level - _black_level);
+        ComputeType transformed = (255*(static_cast<ComputeType>(value) - static_cast<ComputeType>(_black_level[channel])))
+                /(_white_level[channel] - _black_level[channel]);
 
         return static_cast<uint8_t>(transformed);
     }
@@ -168,8 +193,8 @@ protected:
     int _y_axis;
     int _channel_axis;
 
-    Array_T _black_level;
-    Array_T _white_level;
+    std::array<Array_T, 3> _black_level;
+    std::array<Array_T, 3> _white_level;
 
     bool _displayOriginalChannels;
     QVector<QString> _channelsName;
