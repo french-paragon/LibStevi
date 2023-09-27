@@ -437,12 +437,12 @@ Multidim::Array<ComputeType, 3> normalMapFromSingleShadingImage(Multidim::Array<
 /*!
  * \brief normalMapFromIntrinsicDecomposition compute a normal map using the intrinsic image decompisition
  * \param shading the shading image
- * \param reflectance
- * \param lambdaNorm
- * \param lambdaDiff
- * \param nIter
- * \param incrTol
- * \return
+ * \param guide the guide used to detect edges, where it is assumed the normal align with the gradient
+ * \param lambdaNorm the coefficient weight for enforcing the normal to be unit length
+ * \param lambdaDiff the coefficient weight for smoothing the solution
+ * \param nIter the number of iterations for non linear optimization
+ * \param incrTol The tolerance threshold on the solution increment to exit the non linear optimization loop.
+ * \return The estimated normal map.
  */
 template<typename ComputeType>
 Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Array<ComputeType, 2> const& shading,
@@ -459,10 +459,10 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
     using VectorBType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
     using VectorSolType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
 
-    //using SolverType = Eigen::ConjugateGradient<MatrixAType, Eigen::Lower|Eigen::Upper, Eigen::DiagonalPreconditioner<ComputeType>>;
+    using SolverType = Eigen::ConjugateGradient<MatrixAType, Eigen::Lower|Eigen::Upper, Eigen::DiagonalPreconditioner<ComputeType>>;
     //using SolverType = Eigen::BiCGSTAB<MatrixAType, Eigen::IncompleteLUT<ComputeType>>;
     //using SolverType = Eigen::SparseLU<Eigen::SparseMatrix<ComputeType>, Eigen::COLAMDOrdering<int> >;
-    using SolverType = Eigen::SimplicialLDLT<Eigen::SparseMatrix<ComputeType>>;
+    //using SolverType = Eigen::SimplicialLDLT<Eigen::SparseMatrix<ComputeType>>;
 
     int VectorPlen = shading.flatLenght();
     int VectorNlen = 3*VectorPlen;
@@ -480,7 +480,7 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
     std::array<int,3> outSize;
     outSize[0] = inSize[0];
     outSize[1] = inSize[1];
-    outSize[2] = 2;
+    outSize[2] = 3;
 
     for (int i = 0; i < inSize[0]; i++) {
         for (int j = 0; j < inSize[1]; j++) {
@@ -497,9 +497,6 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
     lightDirNorm *= maxShadingVal/lightDirNorm;
 
     normalizedLightDirection *= lightDirNorm;
-
-    std::array<int,3> fullOutSize = outSize;
-    fullOutSize[2] = 3;
 
     Multidim::IndexConverter<2> idxConverterIn(inSize);
     Multidim::IndexConverter<3> idxConverterOut(outSize);
@@ -529,12 +526,12 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 
 	//Constraint Gradient N = 0
     MatrixAType Dx;
-    Dx.resize(VectorNlen, VectorNlen);
-    Dx.reserve(Eigen::VectorXi::Constant(VectorNlen, 2));
+    Dx.resize(2*VectorNlen, VectorNlen);
+    Dx.reserve(Eigen::VectorXi::Constant(VectorNlen, 4));
 
     MatrixAType Dy;
-    Dy.resize(VectorNlen, VectorNlen);
-    Dy.reserve(Eigen::VectorXi::Constant(VectorNlen, 2));
+    Dy.resize(2*VectorNlen, VectorNlen);
+    Dy.reserve(Eigen::VectorXi::Constant(VectorNlen, 4));
 
     for (int i = 0; i < idxConverterOut.numberOfPossibleIndices(); i++) {
         auto idxOut = idxConverterOut.getIndexFromPseudoFlatId(i);
@@ -542,41 +539,47 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
         auto idxOutM1 = idxOut;
         auto idxOutP1 = idxOut;
 
-        if (idxOut[0]-1 >= 0 or idxOut[0]+1 < outSize[0]) {
-            if (idxOut[0]-1 >= 0 and idxOut[0]+1 < outSize[0]) {
-                idxOutM1[0] -= 1;
-                idxOutP1[0] += 1;
-            } else if (idxOut[0]-1 >= 0) {
-                idxOutM1[0] -= 1;
-            } else if (idxOut[0]+1 < outSize[0]) {
-                idxOutP1[0] += 1;
-            }
+        if (idxOut[0]-1 >= 0) {
+            idxOutM1[0] -= 1;
 
             int j = idxConverterOut.getPseudoFlatIdFromIndex(idxOutM1);
             Dx.coeffRef(i,j) -= 1;
 
-            j = idxConverterOut.getPseudoFlatIdFromIndex(idxOutP1);
+            j = idxConverterOut.getPseudoFlatIdFromIndex(idxOut);
             Dx.coeffRef(i,j) += 1;
+        }
+
+        if (idxOut[0]+1 < outSize[0]) {
+            idxOutP1[0] += 1;
+
+            int j = idxConverterOut.getPseudoFlatIdFromIndex(idxOut);
+            Dx.coeffRef(i+VectorNlen,j) -= 1;
+
+            j = idxConverterOut.getPseudoFlatIdFromIndex(idxOutP1);
+            Dx.coeffRef(i+VectorNlen,j) += 1;
         }
 
         idxOutM1 = idxOut;
         idxOutP1 = idxOut;
 
-        if (idxOut[1]-1 >= 0 or idxOut[1]+1 < outSize[1]) {
-            if (idxOut[1]-1 >= 0 and idxOut[1]+1 < outSize[1]) {
-                idxOutM1[1] -= 1;
-                idxOutP1[1] += 1;
-            } else if (idxOut[1]-1 >= 0) {
-                idxOutM1[1] -= 1;
-            } else if (idxOut[1]+1 < outSize[1]) {
-                idxOutP1[1] += 1;
-            }
+        if (idxOut[1]-1 >= 0) {
+            idxOutM1[1] -= 1;
 
             int j = idxConverterOut.getPseudoFlatIdFromIndex(idxOutM1);
-            Dx.coeffRef(i,j) -= 1;
+            Dy.coeffRef(i,j) -= 1;
+
+            j = idxConverterOut.getPseudoFlatIdFromIndex(idxOut);
+            Dy.coeffRef(i,j) += 1;
+        }
+
+        if (idxOut[1]+1 < outSize[1]) {
+            idxOutP1[1] += 1;
+
+            int j = idxConverterOut.getPseudoFlatIdFromIndex(idxOut);
+            Dy.coeffRef(i+VectorNlen,j) -= 1;
 
             j = idxConverterOut.getPseudoFlatIdFromIndex(idxOutP1);
-            Dx.coeffRef(i,j) += 1;
+            Dy.coeffRef(i+VectorNlen,j) += 1;
         }
     }
 
@@ -603,8 +606,8 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
             ComputeType DVal = 0;
 
             //turn the gradient 90°, so that cross product with normal is 0!
-            int idx = idxOut[2] == 1 ? 0 : 1;
-            int scale = idxOut[2] == 1 ? -1 : 1;
+            int idx = idxOut[2] == 1 ? 1 : 0;
+            int scale = idxOut[2] == 1 ? 1 : 1;
 
             ComputeType d = gradient[idx];
 
@@ -631,14 +634,23 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 	for (int i = 0; i < idxConverterOut.numberOfPossibleIndices(); i++) {
 		auto idxOut = idxConverterOut.getIndexFromPseudoFlatId(i);
 
-		solution[i] = guess.atUnchecked(idxOut);
-	}
+        ComputeType val = guess.atUnchecked(idxOut);
+
+        if (!std::isfinite(val)) {
+            val = (idxOut[2] == 2) ? 1 : 0; //if the guess failed initialize with the normal pointing up
+        }
+
+        solution[i] = val;
+    }
 
     MatrixAType N;
 	N.resize(VectorPlen, VectorNlen);
     N.reserve(Eigen::VectorXi::Constant(VectorNlen, 3));
 
 	VectorBType nClosure = VectorSolType::Zero(VectorPlen);
+
+    VectorSolType res = VectorSolType::Zero(VectorPlen);
+    VectorSolType delta = VectorSolType::Zero(VectorPlen);
 
     for (int iter = 0; iter < nIter; iter++) {
 
@@ -674,38 +686,42 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 
         A.makeCompressed();
 
-        SolverType solver;
+        //SolverType solver;
 
 		std::cout << "\tPreparing iterations " << iter << std::endl;
 
         // Compute the ordering permutation vector from the structural pattern of A
-        solver.analyzePattern(A);
+        //solver.analyzePattern(A);
         // Compute the numerical factorization
-        solver.factorize(A);
+        //solver.factorize(A);
         //solver.compute(A);
 
-        if(solver.info() != Eigen::Success) {
+        /*if(solver.info() != Eigen::Success) {
 
             std::cout << "\tFailure to factorize " << iter << std::endl;
             return Multidim::Array<ComputeType, 3>();
-        }
+        }*/
 
-        VectorSolType nSol = solver.solve(b);
+        //since we will iterate anyway, do a single step of conjugate gradient method each time.
+        res = b - A*solution;
+        ComputeType scale = res.dot(A*res);
+        ComputeType alpha = res.dot(res)/scale;
+
+        delta = alpha*res;
         std::cout << "\titerations " << iter << std::endl;
 
-        if(solver.info() != Eigen::Success) {
+        /*if(solver.info() != Eigen::Success) {
 
             std::cout << "\tFailure to optimize " << iter << std::endl;
 			return Multidim::Array<ComputeType, 3>();
-		}
+        }*/
 
-		if(!nSol.array().isFinite().all()) {
+        if(!delta.array().isFinite().all()) {
 			std::cout << "Non finite increments in solution!" << std::endl;
 			return Multidim::Array<ComputeType, 3>();
 		}
 
-		VectorSolType delta = solution - nSol;
-		solution = nSol;
+        solution += delta;
 
 		if (delta.norm()/VectorNlen < incrTol) {
             break;

@@ -86,12 +86,51 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    Multidim::Array<float, 3> img(shape_s);
+
+    bool allSFinite = true;
+    bool allRFinite = true;
+
+    float maxS = 0;
+    float maxR = 0;
+
+    for (int i = 0; i < shape_s[0]; i++) {
+        for (int j = 0; j < shape_s[1]; j++) {
+            for (int c = 0; c < shape_s[2]; c++) {
+                float s = shading.atUnchecked(i,j,c);
+                float r = reflectance.atUnchecked(i,j,c);
+
+                if (s > maxS) {
+                    maxS = s;
+                }
+
+                if (r > maxR) {
+                    maxR = r;
+                }
+
+                allSFinite = allSFinite and std::isfinite(s);
+                allRFinite = allRFinite and std::isfinite(r);
+
+                img.atUnchecked(i,j,c) = s*r;
+            }
+        }
+    }
+
+    if (!allSFinite) {
+        std::cout << "Not all shading value finite!" << std::endl;
+    }
+
+    if (!allRFinite) {
+        std::cout << "Not all reflectance value finite!" << std::endl;
+    }
+
+
     #ifdef WITH_GUI
     QVector<QString> channelsNames = {"R", "G", "B"};
     #endif
 
     #ifdef WITH_GUI
-    StereoVision::Gui::ArrayDisplayAdapter<float> reflectanceAdapter(&reflectance, 0, 1);
+    StereoVision::Gui::ArrayDisplayAdapter<float> reflectanceAdapter(&reflectance, 0, 15);
     reflectanceAdapter.configureOriginalChannelDisplay(channelsNames);
     QImageDisplay::ImageWindow reflectanceWindow;
     reflectanceWindow.setImage(&reflectanceAdapter);
@@ -99,7 +138,7 @@ int main(int argc, char** argv) {
     #endif
 
     #ifdef WITH_GUI
-    StereoVision::Gui::ArrayDisplayAdapter<float> shadingAdapter(&shading, 0, 1);
+    StereoVision::Gui::ArrayDisplayAdapter<float> shadingAdapter(&shading, 0, 15);
     shadingAdapter.configureOriginalChannelDisplay(channelsNames);
     QImageDisplay::ImageWindow shadingWindow;
     shadingWindow.setImage(&shadingAdapter);
@@ -107,28 +146,17 @@ int main(int argc, char** argv) {
     #endif
 
     Eigen::Matrix<float, 3, 1> lightDirection;
-    lightDirection << 0, 1, 1;
+    lightDirection << 0.0, 1, 1;
 
 	float lambdaNorm = 9.0;
-    float lambdaDiff = 0.25;
-    float lambdaDir = 0.25;
+    float lambdaDiff = 4.0;
+    float lambdaDir = 2.0;
     float propEdges = 0.05;
 
-    int nIter = 60;
+    int nIter = 50;
     float incrTol = 1e-5;
-
-	Multidim::Array<float, 3> img(shape_s);
-
-	for (int i = 0; i < shape_s[0]; i++) {
-		for (int j = 0; j < shape_s[1]; j++) {
-			for (int c = 0; c < shape_s[2]; c++) {
-				img.atUnchecked(i,j,c) = shading.atUnchecked(i,j,c)*reflectance.atUnchecked(i,j,c);
-			}
-		}
-	}
-
-	/*Multidim::Array<float, 3> normals = initialNormalMapEstimate(shading.sliceView(2,0), lightDirection);*/
-	Multidim::Array<float, 3> normals = normalMapFromIntrinsicDecomposition(shading.sliceView(2,0),
+    /*Multidim::Array<float, 3> normals = initialNormalMapEstimate(shading.sliceView(2,0), lightDirection);*/
+    Multidim::Array<float, 3> normals = normalMapFromIntrinsicDecomposition(shading.sliceView(2,0),
 																			img,
                                                                             lightDirection,
                                                                             lambdaNorm,
@@ -136,7 +164,7 @@ int main(int argc, char** argv) {
                                                                             lambdaDir,
                                                                             propEdges,
                                                                             nIter,
-																			incrTol);
+                                                                            incrTol);
 
     out << "Processing finished -> normals shape = " << normals.shape()[0] << " x " << normals.shape()[1] << Qt::endl;
 
@@ -158,7 +186,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    StereoVision::Gui::ArrayDisplayAdapter<float> normalAdapter(&normalsDisplay, 0, 1);
+    StereoVision::Gui::ArrayDisplayAdapter<float> normalAdapter(&normals, {-1, -1, 0}, {1,1,1});
     normalAdapter.configureOriginalChannelDisplay(normalChannelsNames);
     QImageDisplay::ImageWindow normalWindow;
     normalWindow.setImage(&normalAdapter);
