@@ -42,6 +42,19 @@ Eigen::Matrix<T,3,3> rodriguezFormula(Eigen::Matrix<T,3,1> const& r) {
 }
 
 template<typename T>
+Eigen::Matrix<T,3,1> angleAxisRotate(Eigen::Matrix<T,3,1> const& r, Eigen::Matrix<T,3,1> const& v) {
+    T theta = r.norm();
+
+    Eigen::Matrix<T,3,1> rxv = r.cross(v);
+
+    if (theta < 1e-6) {
+        return v + rxv + 0.5*r.cross(rxv);
+    }
+
+    return v + sin(theta)/theta*rxv + (T(1) - cos(theta))/(theta*theta)*r.cross(rxv);
+}
+
+template<typename T>
 Eigen::Matrix<T,3,1> inverseRodriguezFormula(Eigen::Matrix<T,3,3> const& R) {
 
     T d =  0.5*(R(0,0) + R(1,1) + R(2,2) - 1);

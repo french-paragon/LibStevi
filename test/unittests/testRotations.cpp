@@ -7,16 +7,20 @@
 using namespace StereoVision::Geometry;
 
 Q_DECLARE_METATYPE(Eigen::Matrix3f)
+Q_DECLARE_METATYPE(Eigen::Vector3f)
 
 class TestGeometryLibRotation: public QObject
 {
 	Q_OBJECT
 private Q_SLOTS:
 
-	void initTestCase();
+    void initTestCase();
 
-	void testRodriguez_data();
-	void testRodriguez();
+    void testRodriguez_data();
+    void testRodriguez();
+
+    void testAngleAxisRotate_data();
+    void testAngleAxisRotate();
 
 	void testInverseRodriguez_data();
 	void testInverseRodriguez();
@@ -94,6 +98,46 @@ void TestGeometryLibRotation::testRodriguez() {
 	float mismatch = (S.transpose()*M - Eigen::Matrix3f::Identity()).norm();
 
 	QVERIFY2(mismatch < 1e-5, qPrintable(QString("Reconstructed rotation not correct (norm (RgtxRrc - I) = %1)").arg(mismatch)));
+
+}
+
+void TestGeometryLibRotation::testAngleAxisRotate_data() {
+
+    QTest::addColumn<Eigen::Vector3f>("rAxis");
+
+    QTest::newRow("90deg x axis") << Eigen::Vector3f(M_PI_2, 0, 0);
+    QTest::newRow("90deg y axis") << Eigen::Vector3f(0, M_PI_2, 0);
+    QTest::newRow("90deg z axis") << Eigen::Vector3f(0, 0, M_PI_2);
+
+    QTest::newRow("180deg x axis") << Eigen::Vector3f(M_PI, 0, 0);
+    QTest::newRow("180deg y axis") << Eigen::Vector3f(0, M_PI, 0);
+    QTest::newRow("180deg z axis") << Eigen::Vector3f(0, 0, M_PI);
+
+    QTest::newRow("Random axis 1") << Eigen::Vector3f(0.23, 2.14, -0.342);
+    QTest::newRow("Random axis 2") << Eigen::Vector3f(-1.234, 0.963, -0.726);
+    QTest::newRow("Random axis 3") << Eigen::Vector3f(7.562, -6.273, 21.23);
+
+}
+void TestGeometryLibRotation::testAngleAxisRotate() {
+
+    QFETCH(Eigen::Vector3f, rAxis);
+
+    Eigen::Matrix3f R = StereoVision::Geometry::rodriguezFormula(rAxis);
+
+    std::uniform_real_distribution<float> rd(-10, 10);
+
+    for (int i = 0; i < 42; i++) {
+        Eigen::Vector3f vec(rd(re), rd(re), rd(re));
+
+        Eigen::Vector3f Rvec = R*vec;
+        Eigen::Vector3f rvec = angleAxisRotate(rAxis, vec);
+
+        Eigen::Vector3f delta = Rvec - rvec;
+
+        float mismatch = delta.norm();
+
+        QVERIFY2(mismatch < 1e-5, qPrintable(QString("Rotated vector by angle axis is not the same as with rotation matrix! (mismatch = %1)").arg(mismatch)));
+    }
 
 }
 
