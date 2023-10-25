@@ -51,13 +51,14 @@ Eigen::Matrix<T,3,1> angleAxisRotate(Eigen::Matrix<T,3,1> const& r, Eigen::Matri
         return v + rxv + 0.5*r.cross(rxv);
     }
 
-    return v + sin(theta)/theta*rxv + (T(1) - cos(theta))/(theta*theta)*r.cross(rxv);
+    Eigen::Matrix<T,3,1> rotated = v + sin(theta)/theta*rxv + (T(1) - cos(theta))/(theta*theta)*r.cross(rxv);
+    return rotated;
 }
 
 template<typename T>
 Eigen::Matrix<T,3,1> inverseRodriguezFormula(Eigen::Matrix<T,3,3> const& R) {
 
-    T d =  0.5*(R(0,0) + R(1,1) + R(2,2) - 1);
+    T d =  0.5*(R(0,0) + R(1,1) + R(2,2) - T(1));
     Eigen::Matrix<T,3,1> omega;
 
     Eigen::Matrix<T,3,1> dR = unskew<T>(R - R.transpose());
@@ -71,12 +72,12 @@ Eigen::Matrix<T,3,1> inverseRodriguezFormula(Eigen::Matrix<T,3,3> const& R) {
     else if (nDr < 1e-3) {
         T theta = acos(d);
         Eigen::Matrix<T,3,1> d = R.diagonal();
-        omega = theta*(d - Eigen::Matrix<T,3,1>::Ones()*d.minCoeff())/(1 - d.minCoeff());
+        omega = theta*(d - Eigen::Matrix<T,3,1>::Ones()*d.minCoeff())/(T(1) - d.minCoeff());
     }
     else
     {
-      float theta = acos(d);
-      omega = theta/(2*sqrt(1-d*d))*dR;
+      T theta = acos(d);
+      omega = theta/(T(2)*sqrt(T(1)-d*d))*dR;
     }
 
     return omega;
