@@ -31,15 +31,20 @@ namespace ImageProcessing {
  */
 template<typename T>
 Eigen::Array<T, 2, Eigen::Dynamic> listPixPointsOnLine(Eigen::Matrix<T,2,1> const& pt1,
-													   Eigen::Matrix<T,2,1> const& pt2) {
+                                                       Eigen::Matrix<T,2,1> const& pt2,
+                                                       bool discret = false) {
+
+    if (pt1.array().isNaN().any() or pt2.array().isNaN().any()) {
+        return Eigen::Array<T, 2, Eigen::Dynamic>();
+    }
 
     static_assert (std::is_floating_point_v<T>, "Function requires a floating point value");
 
-    int px1_idx_x = static_cast<int>(std::round(pt1[0]));
-    int px2_idx_x = static_cast<int>(std::round(pt2[0]));
+    int px1_idx_x = static_cast<int>((pt1.x() < pt2.x()) ? std::floor(pt1[0]) : std::ceil(pt1[0]));
+    int px2_idx_x = static_cast<int>((pt2.x() < pt1.x()) ? std::floor(pt2[0]) : std::ceil(pt2[0]));
 
-    int px1_idx_y = static_cast<int>(std::round(pt1[1]));
-    int px2_idx_y = static_cast<int>(std::round(pt2[1]));
+    int px1_idx_y = static_cast<int>((pt1.y() < pt2.y()) ? std::floor(pt1[1]) : std::ceil(pt1[1]));
+    int px2_idx_y = static_cast<int>((pt2.y() < pt1.y()) ? std::floor(pt2[1]) : std::ceil(pt2[1]));
 
     int nPixX = std::abs(px2_idx_x - px1_idx_x)+1;
     int nPixY = std::abs(px2_idx_y - px1_idx_y)+1;
@@ -52,10 +57,11 @@ Eigen::Array<T, 2, Eigen::Dynamic> listPixPointsOnLine(Eigen::Matrix<T,2,1> cons
     Eigen::Array<T, 2, Eigen::Dynamic> ret;
     ret.resize(2, nPixels);
 
-	Eigen::Matrix<T,2,1> v0(x_incr*pt1[0], y_incr*pt1[1]);
-	Eigen::Matrix<T,2,1> v1(x_incr*pt2[0], y_incr*pt2[1]);
+    Eigen::Matrix<T,2,1> o(x_incr*px1_idx_x, y_incr*px1_idx_y);
+    Eigen::Matrix<T,2,1> v0(x_incr*pt1[0], y_incr*pt1[1]);
+    Eigen::Matrix<T,2,1> v1(x_incr*pt2[0], y_incr*pt2[1]);
 
-	Eigen::Matrix<T,2,1> v = v1 - v0;
+    Eigen::Matrix<T,2,1> v = v1 - v0;
 
     int dx = 0;
     int dy = 0;
@@ -64,13 +70,21 @@ Eigen::Array<T, 2, Eigen::Dynamic> listPixPointsOnLine(Eigen::Matrix<T,2,1> cons
 
     for (int i = 0; i < nPixels; i++) {
 
-		Eigen::Matrix<T,2,1> x(v0[0]+dx, v0[1]+dy);
-        T t = v.dot(x - v0)/vSquared;
+        Eigen::Matrix<T,2,1> x(o[0]+dx, o[1]+dy);
 
-		Eigen::Matrix<T,2,1> nearest = v0 + t*v;
+        //intersect the line y = -x + c passing through the current pixel. This line yield a fractional approximation garanteed to be within the pixel (for antialiasing).
+        T c = x[0] + x[1];
+        T t = (c - v0[0] - v0[1])/(v[0] + v[1]);
 
-        ret(0,i) = x_incr*nearest[0];
-        ret(1,i) = y_incr*nearest[1];
+        Eigen::Matrix<T,2,1> nearest = v0 + t*v;
+
+        if (discret) {
+            ret(0,i) = x_incr*x[0];
+            ret(1,i) = y_incr*x[1];
+        } else {
+            ret(0,i) = x_incr*nearest[0];
+            ret(1,i) = y_incr*nearest[1];
+        }
 
         T rdx = (std::ceil(nearest[0]+0.5) - (nearest[0]+0.5))*v[1];
         T rdy = (std::ceil(nearest[1]+0.5) - (nearest[1]+0.5))*v[0];
