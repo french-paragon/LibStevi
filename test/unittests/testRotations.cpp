@@ -22,6 +22,8 @@ private Q_SLOTS:
     void testAngleAxisRotate_data();
     void testAngleAxisRotate();
 
+    void testDiffAngleAxisRotate();
+
 	void testInverseRodriguez_data();
 	void testInverseRodriguez();
 
@@ -138,6 +140,34 @@ void TestGeometryLibRotation::testAngleAxisRotate() {
 
         QVERIFY2(mismatch < 1e-5, qPrintable(QString("Rotated vector by angle axis is not the same as with rotation matrix! (mismatch = %1)").arg(mismatch)));
     }
+
+}
+
+void TestGeometryLibRotation::testDiffAngleAxisRotate() {
+
+    std::uniform_real_distribution<double> rd(-10, 10);
+
+    double delta = 1e-5;
+
+    for (int i = 0; i < 42; i++) {
+        Eigen::Vector3d vec(rd(re), rd(re), rd(re));
+        Eigen::Vector3d randomRAxis(rd(re), rd(re), rd(re));
+
+        for (int axis = int(Axis::X); axis <= int(Axis::Z); axis++) {
+
+            Eigen::Vector3d deltaVec = Eigen::Vector3d::Zero();
+            deltaVec[axis] = delta;
+
+            Eigen::Vector3d numDiff = (angleAxisRotate<double>(randomRAxis + deltaVec, vec) - angleAxisRotate<double>(randomRAxis - deltaVec, vec))/(2*delta);
+            Eigen::Vector3d analDiff = diffAngleAxisRotate(randomRAxis, vec, Axis(axis));
+
+            for (int idx = 0; idx < 3; idx++) {
+                QCOMPARE(float(analDiff[idx]), float(numDiff[idx]));
+            }
+
+        }
+    }
+
 
 }
 

@@ -129,6 +129,41 @@ Eigen::Matrix<T,3,3> diffRodriguez(Eigen::Matrix<T,3,1> const& r, Axis direction
     return (r[i]*cross + skew<T>(cross*(eye - R.col(i))))/(theta*theta) * R;
 }
 
+/*!
+ * \brief diffAngleAxisRotate compute the derivative of the angle axis rotate function with respect to the rotation axis.
+ * \param r the rotation axis
+ * \param v the vector being rotated
+ * \param direction the entry in r the derivative is taken with respect to.
+ * \return the partial derivative of the function
+ */
+template<typename T>
+Eigen::Matrix<T,3,1> diffAngleAxisRotate(Eigen::Matrix<T,3,1> const& r, Eigen::Matrix<T,3,1> const& v, Axis direction) {
+
+    int axis = static_cast<int>(direction);
+
+    Eigen::Matrix<T,3,1> diffR = pathFromDiff(direction).cast<T>();
+
+    T theta = r.norm();
+    T diffTheta = r[axis]/theta;
+
+    Eigen::Matrix<T,3,1> rxv = r.cross(v);
+    Eigen::Matrix<T,3,1> diffRxv = diffR.cross(v);
+
+
+    Eigen::Matrix<T,3,1> diffRcrossRxv = r.cross(diffRxv) + diffR.cross(rxv);
+
+    if (theta < 1e-3) {
+        -r[axis]/3 * rxv + (1-theta*theta/6)*diffRxv +
+               -r[axis]/12 * rxv + (0.5 - theta*theta/24)*diffRcrossRxv;
+    } //Taylor approximation for small values of theta
+
+    //expansion
+    Eigen::Matrix<T,3,1> diffRotated = (cos(theta)/theta - sin(theta)/(theta*theta))*diffTheta*rxv + sin(theta)/theta*diffRxv +
+            ((sin(theta))/(theta*theta) - 2*(T(1) - cos(theta))/(theta*theta*theta))*diffTheta*r.cross(rxv) + (T(1) - cos(theta))/(theta*theta)*diffRcrossRxv;
+    return diffRotated;
+
+}
+
 template<typename T>
 class ShapePreservingTransform
 {
@@ -147,13 +182,17 @@ public:
     }
 
     Eigen::Matrix<T,3,1> operator*(Eigen::Matrix<T,3,1> const& pt) const {
-        return s*rodriguezFormula(r)*pt + t;
+        return s*angleAxisRotate(r,pt) + t;
     }
-    Eigen::Matrix<T,3,Eigen::Dynamic> operator*(Eigen::Matrix<T,3,Eigen::Dynamic> const& pts) const {
-        return applyOnto(pts.array()).matrix();
+
+    template <int nCols>
+    std::enable_if_t<nCols!=1, Eigen::Matrix<T,3,nCols>> operator*(Eigen::Matrix<T,3,nCols> const& pts) const {
+        return applyOnto<nCols>(pts.array()).matrix();
     }
+
+    template <int nCols>
     Eigen::Array<T,3,Eigen::Dynamic> operator*(Eigen::Array<T,3,Eigen::Dynamic> const& pts) const {
-        return applyOnto(pts);
+        return applyOnto<nCols>(pts);
     }
 
     ShapePreservingTransform<T> operator*(ShapePreservingTransform<T> const& other) const {
@@ -166,7 +205,7 @@ public:
         return AffineTransform<T>(s*rodriguezFormula(r), t);
     }
     ShapePreservingTransform<T> inverse() const {
-        return ShapePreservingTransform<T>(-r, - rodriguezFormula(r).transpose()*t/s, 1/s);
+        return ShapePreservingTransform<T>(-r, -angleAxisRotate<T>(-r, t/s), 1/s);
     }
 
     inline bool isFinite() const {
@@ -179,12 +218,13 @@ public:
 
 protected:
 
-    Eigen::Array<T,3,Eigen::Dynamic> applyOnto(Eigen::Array<T,3,Eigen::Dynamic> const& pts) const {
+    template <int nCols>
+    Eigen::Array<T,3,nCols> applyOnto(Eigen::Array<T,3,nCols> const& pts) const {
         Eigen::Array3Xf transformedPts;
         transformedPts.resize(3, pts.cols());
 
         for (int i = 0; i < transformedPts.cols(); i++) {
-            transformedPts.col(i) = s*rodriguezFormula(r)*(pts.col(i).matrix()) + t;
+            transformedPts.col(i) = s*angleAxisRotate<T>(r, pts.col(i).matrix()) + t;
         }
 
         return transformedPts;

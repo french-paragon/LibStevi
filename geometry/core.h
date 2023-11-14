@@ -40,21 +40,16 @@ Eigen::Matrix<T,3,1> unskew(Eigen::Matrix<T,3,3> const& m) {
 }
 
 enum class Axis : char {
-    X,
-    Y,
-    Z
+    X = 0,
+    Y = 1,
+    Z = 2
 };
 
 inline Eigen::Vector3f pathFromDiff(Axis dir) {
-    switch (dir) {
-    case Axis::X:
-        return Eigen::Vector3f(1.,0,0);
-    case Axis::Y:
-        return Eigen::Vector3f(0,1.,0);
-    case Axis::Z:
-    default:
-        return Eigen::Vector3f(0,0,1.);
-    }
+
+    Eigen::Vector3f ret = Eigen::Vector3f::Zero();
+    ret[static_cast<int>(dir)] = 1;
+    return ret;
 }
 
 
