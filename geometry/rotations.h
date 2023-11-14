@@ -164,6 +164,95 @@ Eigen::Matrix<T,3,1> diffAngleAxisRotate(Eigen::Matrix<T,3,1> const& r, Eigen::M
 
 }
 
+
+template<typename T>
+class RigidBodyTransform
+{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+    RigidBodyTransform(Eigen::Matrix<T,3,1> r, Eigen::Matrix<T,3,1> t) :
+        t(t), r(r)
+    {
+
+    }
+    RigidBodyTransform(Eigen::Matrix<T,6,1> p) :
+        t(p.template block<3,1>(3,0)), r(p.template block<3,1>(0,0))
+    {
+
+    }
+    RigidBodyTransform() :
+        t(Eigen::Matrix<T,3,1>::Zero()), r(Eigen::Matrix<T,3,1>::Zero())
+    {
+
+    }
+
+    Eigen::Matrix<T,3,1> operator*(Eigen::Matrix<T,3,1> const& pt) const {
+        return angleAxisRotate(r,pt) + t;
+    }
+
+    template <int nCols>
+    std::enable_if_t<nCols!=1, Eigen::Matrix<T,3,nCols>> operator*(Eigen::Matrix<T,3,nCols> const& pts) const {
+        return applyOnto<nCols>(pts.array()).matrix();
+    }
+
+    template <int nCols>
+    Eigen::Array<T,3,Eigen::Dynamic> operator*(Eigen::Array<T,3,Eigen::Dynamic> const& pts) const {
+        return applyOnto<nCols>(pts);
+    }
+
+    RigidBodyTransform<T> operator*(RigidBodyTransform<T> const& other) const {
+        Eigen::Matrix<T,3,3> R = rodriguezFormula(r);
+        Eigen::Matrix<T,3,3> Rc = R*rodriguezFormula(other.r);
+        return ShapePreservingTransform(inverseRodriguezFormula(Rc), R*other.t + t);
+    }
+
+    AffineTransform<T> toAffineTransform() const {
+        return AffineTransform<T>(rodriguezFormula(r), t);
+    }
+    RigidBodyTransform<T> inverse() const {
+        return RigidBodyTransform<T>(-r, -angleAxisRotate<T>(-r, t));
+    }
+
+    /*!
+     * \brief Jacobian compute the jacobian of the function Gamma*v, where Gamma is the shape preserving transform, with respect to the r, t and s parameters
+     * \param v the vector the jacobian should be evaluated at
+     * \return the jacobian
+     */
+    Eigen::Matrix<T,3,6> Jacobian(Eigen::Matrix<T,3,1> const& v) {
+        Eigen::Matrix<T,3,6> J;
+
+        J.template block<3,1>(0,0) = diffAngleAxisRotate(r, v, Axis::X);
+        J.template block<3,1>(0,1) = diffAngleAxisRotate(r, v, Axis::Y);
+        J.template block<3,1>(0,2) = diffAngleAxisRotate(r, v, Axis::Z);
+
+        J.template block<3,3>(0,3) = Eigen::Matrix<T,3,3>::Identity();
+
+        return J;
+    }
+
+    inline bool isFinite() const {
+        return t.array().isFinite().all() and r.array().isFinite().all();
+    }
+
+    Eigen::Matrix<T,3,1> t;
+    Eigen::Matrix<T,3,1> r;
+
+protected:
+
+    template <int nCols>
+    Eigen::Array<T,3,nCols> applyOnto(Eigen::Array<T,3,nCols> const& pts) const {
+        Eigen::Array3Xf transformedPts;
+        transformedPts.resize(3, pts.cols());
+
+        for (int i = 0; i < transformedPts.cols(); i++) {
+            transformedPts.col(i) = angleAxisRotate<T>(r, pts.col(i).matrix()) + t;
+        }
+
+        return transformedPts;
+    }
+};
+
 template<typename T>
 class ShapePreservingTransform
 {
@@ -172,6 +261,11 @@ public:
 
     ShapePreservingTransform(Eigen::Matrix<T,3,1> r, Eigen::Matrix<T,3,1> t, T s) :
         t(t), r(r), s(s)
+    {
+
+    }
+    ShapePreservingTransform(Eigen::Matrix<T,7,1> p) :
+        t(p.template block<3,1>(3,0)), r(p.template block<3,1>(0,0)), s(p[6])
     {
 
     }
@@ -206,6 +300,27 @@ public:
     }
     ShapePreservingTransform<T> inverse() const {
         return ShapePreservingTransform<T>(-r, -angleAxisRotate<T>(-r, t/s), 1/s);
+    }
+
+    /*!
+     * \brief Jacobian compute the jacobian of the function Gamma*v, where Gamma is the shape preserving transform, with respect to the r, t and s parameters
+     * \param v the vector the jacobian should be evaluated at
+     * \return the jacobian
+     */
+    Eigen::Matrix<T,3,7> Jacobian(Eigen::Matrix<T,3,1> const& v) {
+        Eigen::Matrix<T,3,7> J;
+
+        J.template block<3,1>(0,0) = diffAngleAxisRotate(r, v, Axis::X);
+        J.template block<3,1>(0,1) = diffAngleAxisRotate(r, v, Axis::Y);
+        J.template block<3,1>(0,2) = diffAngleAxisRotate(r, v, Axis::Z);
+
+        J.template block<3,3>(0,0) *= s;
+
+        J.template block<3,3>(0,3) = Eigen::Matrix<T,3,3>::Identity();
+
+        J.template block<3,1>(0,6) = angleAxisRotate(r,v);
+
+        return J;
     }
 
     inline bool isFinite() const {

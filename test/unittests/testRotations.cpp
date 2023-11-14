@@ -30,6 +30,9 @@ private Q_SLOTS:
 	void testDiffRodriguez_data();
 	void testDiffRodriguez();
 
+    void testDiffRigidBodyTransform();
+    void testDiffShapePreservingTransform();
+
 	void testDiffRigidTransformInverse();
 
     void testEulerRad2RMat();
@@ -259,6 +262,75 @@ void TestGeometryLibRotation::testDiffRodriguez() {
 	float mismatchZ = (dZ_numeric - dZ_analytic).norm();
 	QVERIFY2(mismatchZ < 2e1*epsilon, qPrintable(QString("Reconstructed diff rotation axis not correct (norm (dz_ranalitic - dz_rnumeric) = %1)").arg(mismatchZ)));
 
+}
+
+void TestGeometryLibRotation::testDiffRigidBodyTransform() {
+
+    constexpr int nRepeats = 42;
+
+    std::uniform_real_distribution<double> rd(-10, 10);
+
+    double delta = 1e-5;
+
+    for (int i = 0; i < nRepeats; i++) {
+        Eigen::Vector3d vec(rd(re), rd(re), rd(re));
+        Eigen::Matrix<double,6,1> randomTransform(rd(re), rd(re), rd(re), rd(re), rd(re), rd(re));
+
+        RigidBodyTransform transform(randomTransform);
+        Eigen::Matrix<double,3,6> Jac = transform.Jacobian(vec);
+
+        for (int axis = 0; axis < 6; axis++) {
+
+            Eigen::Matrix<double,6,1> deltaVec = Eigen::Matrix<double,6,1>::Zero();
+            deltaVec[axis] = delta;
+
+            RigidBodyTransform<double> prev(randomTransform-deltaVec);
+            RigidBodyTransform<double> next(randomTransform+deltaVec);
+
+            Eigen::Vector3d numDiff = (next*vec - prev*vec)/(2*delta);
+
+            for (int idx = 0; idx < 3; idx++) {
+                QCOMPARE(float(Jac(idx,axis)), float(numDiff[idx]));
+            }
+
+        }
+
+    }
+
+}
+void TestGeometryLibRotation::testDiffShapePreservingTransform() {
+
+    constexpr int nRepeats = 42;
+
+    std::uniform_real_distribution<double> rd(-10, 10);
+
+    double delta = 1e-5;
+
+    for (int i = 0; i < nRepeats; i++) {
+
+        Eigen::Vector3d vec(rd(re), rd(re), rd(re));
+        Eigen::Matrix<double,7,1> randomTransform(rd(re), rd(re), rd(re), rd(re), rd(re), rd(re), rd(re));
+
+        ShapePreservingTransform transform(randomTransform);
+        Eigen::Matrix<double,3,7> Jac = transform.Jacobian(vec);
+
+        for (int axis = 0; axis < 7; axis++) {
+
+            Eigen::Matrix<double,7,1> deltaVec = Eigen::Matrix<double,7,1>::Zero();
+            deltaVec[axis] = delta;
+
+            ShapePreservingTransform<double> prev(randomTransform-deltaVec);
+            ShapePreservingTransform<double> next(randomTransform+deltaVec);
+
+            Eigen::Vector3d numDiff = (next*vec - prev*vec)/(2*delta);
+
+            for (int idx = 0; idx < 3; idx++) {
+                QCOMPARE(float(Jac(idx,axis)), float(numDiff[idx]));
+            }
+
+        }
+
+    }
 }
 
 void TestGeometryLibRotation::testDiffRigidTransformInverse() {
