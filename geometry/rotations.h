@@ -164,6 +164,29 @@ Eigen::Matrix<T,3,1> diffAngleAxisRotate(Eigen::Matrix<T,3,1> const& r, Eigen::M
 
 }
 
+template<typename T>
+Eigen::Quaternion<T> axisAngleToQuaternion(Eigen::Matrix<T, 3,1> const& axisAngle) {
+    T normSquared = axisAngle[0]*axisAngle[0] + axisAngle[1]*axisAngle[1] + axisAngle[2]*axisAngle[2];
+    T norm = sqrt(normSquared);
+
+    if (norm < 1e-6) {
+
+        T scale = T(2)/sqrt(normSquared + T(1));
+
+        return Eigen::Quaternion<T>(scale, axisAngle[0]*scale*T(0.5), axisAngle[1]*scale*T(0.5), axisAngle[2]*scale*T(0.5));
+    }
+
+    Eigen::Matrix<T, 3,1> normalized = axisAngle/norm;
+
+    return Eigen::Quaternion<T>(Eigen::AngleAxis<T>(norm, normalized));
+}
+
+template<typename T>
+Eigen::Matrix<T, 3,1> quaternionToAxisAngle(Eigen::Quaternion<T> const& quaternion) {
+    Eigen::AngleAxis<T> angleAxis(quaternion);
+    return angleAxis.axis()*angleAxis.angle();
+}
+
 
 template<typename T>
 class RigidBodyTransform

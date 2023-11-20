@@ -37,6 +37,9 @@ private Q_SLOTS:
 
     void testEulerRad2RMat();
 
+    void testRAxis2Quat2RAxis_data();
+    void testRAxis2Quat2RAxis();
+
 private:
 	std::default_random_engine re;
 };
@@ -446,6 +449,71 @@ void TestGeometryLibRotation::testEulerRad2RMat() {
             QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 90 angle rotation around the Z axis (mismatch = %1)").arg(mismatch)));
         }
     }
+
+}
+
+void TestGeometryLibRotation::testRAxis2Quat2RAxis_data() {
+
+    QTest::addColumn<float>("rx");
+    QTest::addColumn<float>("ry");
+    QTest::addColumn<float>("rz");
+
+    QTest::newRow("Identity") << 0.0f << 0.0f << 0.0f;
+
+    QTest::newRow("Small") << 1.56e-8f << 5.32e-8f << -2.95e-8f;
+
+    QTest::newRow("x axis one") << 1.0f << 0.0f << 0.0f;
+    QTest::newRow("y axis one") << 0.0f << 1.0f << 0.0f;
+    QTest::newRow("z axis one") << 0.0f << 0.0f << 1.0f;
+
+    QTest::newRow("x axis pi") << static_cast<float>(M_PI) << 0.0f << 0.0f;
+    QTest::newRow("y axis pi") << 0.0f << static_cast<float>(M_PI) << 0.0f;
+    QTest::newRow("z axis pi") << 0.0f << 0.0f << static_cast<float>(M_PI);
+
+    std::uniform_real_distribution<float> dataGen(-2, 2);
+
+    QTest::newRow("Random 1") << dataGen(re) << dataGen(re) << dataGen(re);
+    QTest::newRow("Random 2") << dataGen(re) << dataGen(re) << dataGen(re);
+    QTest::newRow("Random 3") << dataGen(re) << dataGen(re) << dataGen(re);
+
+}
+void TestGeometryLibRotation::testRAxis2Quat2RAxis() {
+
+    QFETCH(float, rx);
+    QFETCH(float, ry);
+    QFETCH(float, rz);
+
+    Eigen::Vector3d rAxis(rx, ry, rz);
+
+    Eigen::Matrix3f rot = rodriguezFormula(rAxis).cast<float>();
+
+    Eigen::Quaterniond quat = axisAngleToQuaternion(rAxis);
+
+    Eigen::Matrix3f rotBack  = rodriguezFormula(quaternionToAxisAngle(quat)).cast<float>();
+
+
+    float epsilon = 1e-5;
+    float meanError = (rot.transpose()*rotBack - Eigen::Matrix3f::Identity()).array().abs().mean();
+
+    QVERIFY(meanError < epsilon);
+
+    constexpr int nTest = 42;
+
+    std::uniform_real_distribution<double> dataGen(-10, 10);
+
+    for (int i = 0; i < nTest; i++) {
+        Eigen::Vector3d vec(dataGen(re),dataGen(re),dataGen(re));
+
+        Eigen::Vector3f rotatedAxis = (angleAxisRotate(rAxis, vec)).cast<float>();
+        Eigen::Vector3f rotatedQuaternion = (quat*vec).cast<float>();
+
+        for (int d = 0; d < 3; d++) {
+
+            float misalignement = std::abs(rotatedQuaternion[d] - rotatedAxis[d]);
+            QVERIFY(misalignement < epsilon);
+        }
+    }
+
 
 }
 
