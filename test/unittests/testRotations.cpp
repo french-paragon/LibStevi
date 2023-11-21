@@ -40,6 +40,8 @@ private Q_SLOTS:
     void testRAxis2Quat2RAxis_data();
     void testRAxis2Quat2RAxis();
 
+    void testRAxis2QuatDiff();
+
 private:
 	std::default_random_engine re;
 };
@@ -514,6 +516,72 @@ void TestGeometryLibRotation::testRAxis2Quat2RAxis() {
         }
     }
 
+
+}
+
+void TestGeometryLibRotation::testRAxis2QuatDiff() {
+
+    constexpr double delta = 1e-8;
+    constexpr float tol = 1e-5;
+
+    constexpr int nTest = 42;
+
+
+    std::uniform_real_distribution<double> dataGen(-M_PI, M_PI);
+
+    for (int i = 0; i < nTest; i++) {
+        Eigen::Vector3d rAxis(dataGen(re),dataGen(re),dataGen(re));
+
+        Eigen::Matrix<double, 4, 3> NumJac;
+
+        for (int d = 0; d < 3; d++) {
+
+            Eigen::Vector3d deltaVec = Eigen::Vector3d::Zero();
+            deltaVec[d] = delta;
+
+            NumJac.col(d) = (axisAngleToQuaternion<double>(rAxis+deltaVec).coeffs() - axisAngleToQuaternion<double>(rAxis-deltaVec).coeffs())/(2*delta);
+        }
+
+
+        Eigen::Matrix<double, 4, 3> AnalJac = diffAxisAngleToQuaternion(rAxis);
+
+        Eigen::Array<double, 4, 3> error = (AnalJac - NumJac).array().abs();
+        double maxError = error.maxCoeff();
+
+        QVERIFY(maxError < tol);
+
+    }
+
+    constexpr float smoltol = 1e-7;
+
+
+    std::uniform_real_distribution<double> smolDataGen(-3e-6, 3e-6);
+
+    for (int i = 0; i < nTest; i++) {
+        Eigen::Vector3d rAxis(smolDataGen(re),smolDataGen(re),smolDataGen(re));
+
+        Eigen::Matrix<double, 4, 3> NumJac;
+
+        for (int d = 0; d < 3; d++) {
+
+            Eigen::Vector3d deltaVec = Eigen::Vector3d::Zero();
+            deltaVec[d] = delta;
+
+            NumJac.col(d) = (axisAngleToQuaternion<double>(rAxis+deltaVec).coeffs() - axisAngleToQuaternion<double>(rAxis-deltaVec).coeffs())/(2*delta);
+        }
+
+        if (NumJac(0,0) > 0.8) { //this mean numerical error
+            continue;
+        }
+
+        Eigen::Matrix<double, 4, 3> AnalJac = diffAxisAngleToQuaternion(rAxis);
+
+        Eigen::Array<double, 4, 3> error = (AnalJac - NumJac).array().abs();
+        double maxError = error.maxCoeff();
+
+        QVERIFY(maxError < smoltol);
+
+    }
 
 }
 

@@ -181,6 +181,53 @@ Eigen::Quaternion<T> axisAngleToQuaternion(Eigen::Matrix<T, 3,1> const& axisAngl
     return Eigen::Quaternion<T>(Eigen::AngleAxis<T>(norm, normalized));
 }
 
+
+/*!
+ * \brief diffAxisAngleToQuaternion compute the jacobian of computing a quaternion from an axis angle
+ * \param axisAngle the axis angle
+ * \return the Jacobian.
+ */
+template<typename T>
+Eigen::Matrix<T,4,3> diffAxisAngleToQuaternion(Eigen::Matrix<T, 3,1> const& axisAngle) {
+
+    T normSquared = axisAngle[0]*axisAngle[0] + axisAngle[1]*axisAngle[1] + axisAngle[2]*axisAngle[2];
+    T norm = sqrt(normSquared);
+
+    Eigen::Matrix<T,4,3> ret;
+
+    if (norm < 1e-5) {
+
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                ret(j,i) = axisAngle[j] * axisAngle[i] / 24;
+
+                if (i == j) {
+                    ret(j,i) += (0.5 - norm*norm/48);
+                }
+            }
+
+            ret(3,i) = -(0.5 - norm*norm/48) * axisAngle[i] / 2;
+        }
+
+        return ret;
+
+    }
+
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            ret(j,i) = axisAngle[j] * (cos(norm/2)/(2*norm) - sin(norm/2)/(norm*norm)) * axisAngle[i]/norm;
+
+            if (i == j) {
+                ret(j,i) += sin(norm/2)/norm;
+            }
+        }
+
+        ret(3,i) = -sin(norm/2) * axisAngle[i]/norm / 2;
+    }
+
+    return ret;
+}
+
 template<typename T>
 Eigen::Matrix<T, 3,1> quaternionToAxisAngle(Eigen::Quaternion<T> const& quaternion) {
     Eigen::AngleAxis<T> angleAxis(quaternion);
