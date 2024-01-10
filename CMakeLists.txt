@@ -129,6 +129,7 @@ set(LIB_SRC
         imageProcessing/convolutions.h
         imageProcessing/standardConvolutionFilters.h
         imageProcessing/pixelsLines.h
+        imageProcessing/pixelsTriangles.h
         imageProcessing/edgesDetection.h
         io/image_io.h
         sparseMatching/cornerDetectors.h
