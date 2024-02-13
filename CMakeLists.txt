@@ -9,6 +9,19 @@ if(hasParent)
 endif()
 project(lib${STEREOVISION_LIB} LANGUAGES CXX)
 
+#
+include(CMakePackageConfigHelpers)
+
+include(GNUInstallDirs)
+
+set(CMAKE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
+set(CMAKE_INSTALL_CMAKEDIR ${CMAKE_INSTALL_LIBDIR})
+set(CMAKE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME})
+set(CMAKE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
+
+set(STEREOVISION_NAME "StereoVision")
+set(STEREOVISION_EXPORTNAME "StereoVisionTargets")
+
 option(buildTests "Build the test suits for the library" ON)
 option(buildExamples "Build the examples for the library" ON)
 option(buildGui "Build some additional tools for building gui with Qt" OFF)
@@ -51,6 +64,8 @@ find_package(PNG)
 find_package(TIFF)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+
+set(CMAKE_DEBUG_POSTFIX d)
 
 add_subdirectory(submodules)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/submodules)
@@ -143,27 +158,35 @@ if (buildGui)
 endif(buildGui)
 
 add_library(
-    stevi
+    ${STEREOVISION_LIB}
     ${LIB_SRC}
 )
 
+target_compile_definitions(${STEREOVISION_LIB} PRIVATE LIBSTEREOVISION_BUILDING)
+
 if (JPEG_FOUND)
     message("Using native jpg library")
-    target_link_libraries(stevi PRIVATE JPEG::JPEG)
+    target_link_libraries(${STEREOVISION_LIB} PUBLIC JPEG::JPEG)
     target_compile_definitions(stevi PRIVATE STEVI_IO_USE_JPEG)
 endif (JPEG_FOUND)
 
 if (PNG_FOUND)
     message("Using native png library")
-    target_link_libraries(stevi PRIVATE PNG::PNG)
+    target_link_libraries(${STEREOVISION_LIB} PUBLIC PNG::PNG)
     target_compile_definitions(stevi PRIVATE STEVI_IO_USE_PNG)
 endif (PNG_FOUND)
 
 if (TIFF_FOUND)
     message("Using native tiff library")
-    target_link_libraries(stevi PRIVATE TIFF::TIFF)
+    target_link_libraries(${STEREOVISION_LIB} PUBLIC TIFF::TIFF)
     target_compile_definitions(stevi PRIVATE STEVI_IO_USE_TIFF)
 endif (TIFF_FOUND)
+
+if (buildGui)
+    find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets REQUIRED)
+    find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets REQUIRED)
+    target_link_libraries(stevi PUBLIC Qt${QT_VERSION_MAJOR}::Widgets)
+endif(buildGui)
 
 if (buildTests)
 
@@ -171,12 +194,6 @@ enable_testing()
 
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Test REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Test REQUIRED)
-
-if (buildGui)
-    find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets REQUIRED)
-    find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets REQUIRED)
-    target_link_libraries(stevi PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
-endif(buildGui)
 
 set(CMAKE_AUTOMOC ON)
 add_subdirectory(test)
@@ -193,3 +210,63 @@ if (buildExamples)
 add_subdirectory(examples)
 
 endif (buildExamples)
+
+
+install(TARGETS ${STEREOVISION_LIB}
+          EXPORT ${STEREOVISION_EXPORTNAME}
+          RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+          LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+          ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+      )
+
+if (buildGui)
+  install(TARGETS ${QIMAGEDISPLAYWIDGET_LIB}
+            EXPORT ${STEREOVISION_EXPORTNAME}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        )
+endif()
+
+foreach(FILE IN LISTS LIB_SRC)
+        if(FILE MATCHES "^((.*)/)?([^/]+)\\.h$")
+                install(FILES ${FILE} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${STEREOVISION_NAME}/${CMAKE_MATCH_2})
+        endif()
+endforeach()
+
+if (buildGui)
+    get_target_property(QDISPLAYWIDGET_SRC_LIST ${QIMAGEDISPLAYWIDGET_LIB} SOURCES)
+    get_target_property(QDISPLAYWIDGET_SOURCE_DIR ${QIMAGEDISPLAYWIDGET_LIB} SOURCE_DIR)
+    foreach(FILE IN LISTS QDISPLAYWIDGET_SRC_LIST)
+            if(FILE MATCHES "^((.*)/)?([^/]+)\\.h$")
+                    install(FILES ${QDISPLAYWIDGET_SOURCE_DIR}/${FILE} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${STEREOVISION_NAME}/QImageDisplayWidget)
+            endif()
+    endforeach()
+endif()
+
+
+install(
+  EXPORT ${STEREOVISION_EXPORTNAME}
+  DESTINATION ${CMAKE_INSTALL_CMAKEDIR}/cmake/${STEREOVISION_NAME}
+  NAMESPACE ${STEREOVISION_NAME}::
+  FILE ${STEREOVISION_NAME}Targets.cmake # ensure the name is different than the AlineConfig.cmake file
+  )
+
+configure_package_config_file(
+  "cmake/Config.cmake.in"
+  "${STEREOVISION_NAME}Config.cmake"
+  INSTALL_DESTINATION ${CMAKE_INSTALL_CMAKEDIR}/cmake/${STEREOVISION_NAME}
+  PATH_VARS
+    CMAKE_INSTALL_LIBDIR
+  )
+
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/${STEREOVISION_NAME}ConfigVersion.cmake"
+  VERSION "0.0"
+  COMPATIBILITY AnyNewerVersion
+)
+
+install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/${STEREOVISION_NAME}Config.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/${STEREOVISION_NAME}ConfigVersion.cmake
+        DESTINATION ${CMAKE_INSTALL_CMAKEDIR}/cmake/${STEREOVISION_NAME} )

@@ -3,7 +3,7 @@
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 
-Copyright (C) 2023  Paragon<french.paragon@gmail.com>
+Copyright (C) 2023-2024  Paragon<french.paragon@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,7 +19,11 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#ifdef LIBSTEREOVISION_BUILDING
 #include <qImageDisplayWidget/imageadapter.h>
+#else
+#include <StereoVision/QImageDisplayWidget/imageadapter.h>
+#endif
 
 #include <QPoint>
 #include <QSize>
