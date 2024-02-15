@@ -85,6 +85,7 @@ set(LIB_SRC
         geometry/stereorigrectifier.cpp
         geometry/stereorigrectifier.h
         graphs/graphs.h
+        graphs/doublyConnectedEdgeLists.h
         graphs/graph_flow.h
         graphs/graph_cut.h
         optimization/assignement_problems.h
