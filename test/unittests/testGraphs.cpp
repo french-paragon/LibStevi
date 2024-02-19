@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "graphs/graphs.h"
 #include "graphs/graph_cut.h"
 #include "graphs/graph_flow.h"
+#include "graphs/doublyConnectedEdgeLists.h"
 
 #include <MultidimArrays/MultidimArrays.h>
 
@@ -37,6 +38,14 @@ struct WeightedEdge {
 Q_DECLARE_METATYPE(WeightedEdge);
 
 using WeightedEdgeList = QVector<WeightedEdge>;
+
+struct TriangleFace {
+    int vert1;
+    int vert2;
+    int vert3;
+};
+
+Q_DECLARE_METATYPE(TriangleFace);
 
 Q_DECLARE_METATYPE(StereoVision::GraphProcessing::EdgeDirectedType);
 Q_DECLARE_METATYPE(StereoVision::GraphProcessing::GraphMovingDirection);
@@ -58,6 +67,9 @@ private Q_SLOTS:
 
 	void testMaxFlowMinCut_data();
 	void testMaxFlowMinCut();
+
+    void testDCELBuild_data();
+    void testDCELBuild();
 
 private:
 	std::default_random_engine re;
@@ -282,6 +294,82 @@ void TestGraphs::testMaxFlowMinCut() {
 	for (int i = 0; i < minCut.size(); i++) {
 		QCOMPARE(maxFlowMinCut.minCutEdgesIdxs[i], minCut[i]);
 	}
+}
+
+void TestGraphs::testDCELBuild_data() {
+
+    QTest::addColumn<int>("nVerts");
+    QTest::addColumn<QVector<TriangleFace>>("faces");
+
+    QTest::newRow("Triangle") << 3 << QVector<TriangleFace>{{0, 1, 2}};
+    QTest::newRow("Triforce") << 6 << QVector<TriangleFace>{{0, 1, 3}, {1, 2, 4}, {3, 4, 5}};
+    QTest::newRow("Full Triforce") << 6 << QVector<TriangleFace>{{0, 1, 3}, {1, 2, 4}, {3, 4, 5}, {3, 1, 4}};
+    QTest::newRow("Flower") << 7 << QVector<TriangleFace>{{0, 1, 6}, {6, 2, 3}, {5,6,4}};
+    QTest::newRow("Hexagone (indirect)") << 7 << QVector<TriangleFace>{{0,1,6}, {6,2,3}, {5,6,4}, {1,2,6}, {6,3,4}, {0,6,5}};
+    QTest::newRow("Hexagone (direct)") << 7 << QVector<TriangleFace>{{0,1,6}, {1,2,6}, {6,2,3}, {6,3,4}, {5,6,4}, {0,6,5}};
+    QTest::newRow("Splitted") << 6 << QVector<TriangleFace>{{0,1,2}, {3,5,4}};
+    QTest::newRow("Joint") << 6 << QVector<TriangleFace>{{0,1,2}, {3,5,4}, {2,1,3}, {2,3,4}};
+
+}
+void TestGraphs::testDCELBuild() {
+
+    QFETCH(int, nVerts);
+    QFETCH(QVector<TriangleFace>, faces);
+
+    constexpr auto FaceType = StereoVision::GraphProcessing::DCELFaceType::Triangle;
+
+    using VertexType = StereoVision::GraphProcessing::GenericDoublyConnectedEdgeList<FaceType>::VertexT;
+    using EdgeType = StereoVision::GraphProcessing::GenericDoublyConnectedEdgeList<FaceType>::EdgeT;
+
+    using FaceVertexList = StereoVision::GraphProcessing::GenericDoublyConnectedEdgeList<FaceType>::FaceVertexList;
+
+    StereoVision::GraphProcessing::GenericDoublyConnectedEdgeList<FaceType> graph(nVerts);
+
+    for (TriangleFace const& face : faces) {
+        FaceVertexList list = {face.vert1, face.vert2, face.vert3};
+
+        int faceId = graph.makeFace(list);
+
+        QVERIFY2(faceId >= 0, qPrintable(QString("Provided face (%1, %2, %3) was expected to be insertable in the graph").arg(face.vert1).arg(face.vert2).arg(face.vert3)));
+    }
+
+    QCOMPARE(graph.nFaces(), faces.size());
+
+    for (int i = 0; i < faces.size(); i++) {
+
+        TriangleFace const& face = faces[i];
+
+        std::optional<int> edgeId = graph.edgeBetweenVerticesId(face.vert1, face.vert2);
+
+        QVERIFY2(edgeId.has_value(), "Could not find expected half edge");
+        QVERIFY2(edgeId.value() >= 0 and edgeId.value() < graph.nEdges(), "Edge ID not in correct range");
+
+        EdgeType const& edge = graph.edge(edgeId.value());
+
+        QCOMPARE(edge.faceId(), i); //faces should have been created in order.
+
+        std::optional<int> reverseEdgeId = graph.edgeBetweenVerticesId(face.vert2, face.vert1);
+
+        QVERIFY2(reverseEdgeId.has_value(), "Could not find expected twin half edge");
+        QVERIFY2(reverseEdgeId.value() >= 0 and reverseEdgeId.value() < graph.nEdges(), "Twin edge ID not in correct range");
+
+        QCOMPARE(reverseEdgeId.value(), edge.twinHalfEdge()); //faces should have been created in order.
+
+        std::optional<int> nextEdgeId = graph.edgeBetweenVerticesId(face.vert2, face.vert3);
+
+        QVERIFY2(nextEdgeId.has_value(), "Could not find expected half edge");
+        QVERIFY2(nextEdgeId.value() >= 0 and nextEdgeId.value() < graph.nEdges(), "Edge ID not in correct range");
+
+        std::optional<int> previousEdgeId = graph.edgeBetweenVerticesId(face.vert3, face.vert1);
+
+        QVERIFY2(previousEdgeId.has_value(), "Could not find expected half edge");
+        QVERIFY2(previousEdgeId.value() >= 0 and previousEdgeId.value() < graph.nEdges(), "Edge ID not in correct range");
+
+        QCOMPARE(nextEdgeId.value(), edge.nextHalfEdge());
+        QCOMPARE(previousEdgeId.value(), edge.previousHalfEdge());
+
+    }
+
 }
 
 QTEST_MAIN(TestGraphs)

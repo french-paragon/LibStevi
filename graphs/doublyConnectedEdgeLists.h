@@ -26,7 +26,7 @@ namespace StereoVision {
 
 namespace GraphProcessing {
 
-enum DCELFaceType {
+enum class DCELFaceType {
     Triangle,
     NGon
 };
@@ -88,7 +88,7 @@ public:
     }
 
     inline int twinHalfEdge() const {
-        return _next_id;
+        return _twin_id;
     }
 
     inline void setTwinHalfEdge(int id) {
@@ -130,7 +130,7 @@ public:
     using VertexDataType = VD_T;
     using EdgeWeightType = void;
 
-    using FaceVertexList = std::conditional_t<F_T == Triangle, std::array<int,3>, std::vector<int>>;
+    using FaceVertexList = std::conditional_t<F_T == DCELFaceType::Triangle, std::array<int,3>, std::vector<int>>;
     using FaceEdgeList = FaceVertexList;
 
     struct FullFace {
@@ -153,6 +153,9 @@ public:
         for (int i = 0; i < nVertex; i++) {
             _vertices.emplace_back(i);
         }
+
+        _verticesOutEdge = std::vector<int>(nVertex);
+        std::fill(_verticesOutEdge.begin(), _verticesOutEdge.end(), -1);
     }
 
     template<typename pV_T>
@@ -162,6 +165,9 @@ public:
         for (int i = 0; i < _vertices.size(); i++) {
             _vertices.emplace_back(i,val);
         }
+
+        _verticesOutEdge = std::vector<int>(nVertex);
+        std::fill(_verticesOutEdge.begin(), _verticesOutEdge.end(), -1);
     }
 
     inline int nVertices() const {
@@ -227,6 +233,40 @@ public:
         return std::nullopt;
     }
 
+    /*!
+     * \brief getExternalEdgeLeavingFromVertex
+     * \param vId
+     * \return the index of an external edge (no face assigned) leaving from the vertex)
+     */
+    inline std::optional<int> getExternalEdgeLeavingFromVertex(int vId) {
+
+        int initialEdgeId = _verticesOutEdge[vId];
+        int currentEdgeId = initialEdgeId;
+
+        do {
+            if (currentEdgeId < 0 or currentEdgeId >= _edges.size()) {
+                break;
+            }
+
+            if (_edges[currentEdgeId].faceId() < 0) {
+                return currentEdgeId;
+            }
+
+            currentEdgeId = _edges[currentEdgeId].twinHalfEdge();
+
+            if (currentEdgeId < 0 or currentEdgeId >= _edges.size()) {
+                break;
+            }
+
+            currentEdgeId = _edges[currentEdgeId].nextHalfEdge();
+
+
+        } while (currentEdgeId != initialEdgeId);
+
+        return std::nullopt;
+
+    }
+
     std::optional<VertexLocalEdgeSequence> getExteriorEdgeForVertex(int vertexId) const {
 
         int initialEdgeId = _verticesOutEdge[vertexId];
@@ -277,15 +317,16 @@ public:
 
         FaceEdgeList externalEdges2ReconnectBack = emptyList; //edge from the exterior leaving the vertex which need to be reconnected.
         FaceEdgeList external2ReconnectFront = emptyList; // edges from the exterior entering the vertex which need to be reconnected.
-        FaceEdgeList edges4BackConnect = emptyList; //edges from the face that will be used for the reconnection of the leaving external edge.
-        FaceEdgeList edges4FrontConnect = emptyList; //edges from the face that will be used for the reconnection of the entering external edge.
+        FaceEdgeList externalLeaving = emptyList; //previous external leaving edges.
+        FaceEdgeList newExternalId = emptyList; //previous external leaving edges.
 
         //check the vertices, return an error before changing the structure if creating the face is not possible
         for (int i = 0; i < vertices.size(); i++) {
             int currentVertex = vertices[i];
             int nextVertex = vertices[(i+1)%vertices.size()];
 
-            edges2Integrate[i] = edgeBetweenVerticesId(currentVertex, nextVertex);
+            edges2Integrate[i] = edgeBetweenVerticesId(currentVertex, nextVertex).value_or(-1);
+            externalLeaving[i] = getExternalEdgeLeavingFromVertex(currentVertex).value_or(-1);
 
             if (edges2Integrate[i] >= 0) {
                 if (_edges[edges2Integrate[i]].faceId() >= 0) {
@@ -312,7 +353,7 @@ public:
                 externalEdges2ReconnectBack[(i+1)%vertices.size()] = _edges[edges2Integrate[i]].nextHalfEdge();
 
                 internalEdges2ReconnectBack[i] = edges2Integrate[i];
-                internal2ReconnectFront[i] = edges2Integrate[i];
+                internal2ReconnectFront[(i+1)%vertices.size()] = edges2Integrate[i];
 
                 if (i == 0) {
                     faceStartEdge = edges2Integrate[i];
@@ -337,6 +378,12 @@ public:
                 external2ReconnectFront[i] = twinId;
                 externalEdges2ReconnectBack[(i+1)%vertices.size()] = twinId;
 
+                newExternalId[i] = twinId;
+
+                if (_verticesOutEdge[vertices[i]] < 0) {
+                    _verticesOutEdge[vertices[i]] = edgeId;
+                }
+
                 if (i == 0) {
                     faceStartEdge = edgeId;
                 }
@@ -355,8 +402,24 @@ public:
                    (external2ReconnectFront[i] >= 0 and externalEdges2ReconnectBack[i] >= 0));
 
             if (external2ReconnectFront[i] >= 0 and externalEdges2ReconnectBack[i] >= 0) {
-                _edges[external2ReconnectFront[i]]._next_id = externalEdges2ReconnectBack[i];
-                _edges[externalEdges2ReconnectBack[i]]._previous_id = external2ReconnectFront[i];
+
+                if (externalLeaving[i] > 0 and
+                        external2ReconnectFront[i] == newExternalId[i] and
+                        externalEdges2ReconnectBack[i] == newExternalId[(i+vertices.size()-1)%vertices.size()]) {
+
+                    int externalEntering = _edges[externalLeaving[i]]._previous_id;
+
+                    _edges[externalLeaving[i]]._previous_id = external2ReconnectFront[i];
+                    _edges[externalEntering]._next_id = externalEdges2ReconnectBack[i];
+
+                    _edges[external2ReconnectFront[i]]._next_id = externalLeaving[i];
+                    _edges[externalEdges2ReconnectBack[i]]._previous_id = externalEntering;
+
+                } else {
+
+                    _edges[external2ReconnectFront[i]]._next_id = externalEdges2ReconnectBack[i];
+                    _edges[externalEdges2ReconnectBack[i]]._previous_id = external2ReconnectFront[i];
+                }
             }
 
             assert((internal2ReconnectFront[i] < 0 and internalEdges2ReconnectBack[i] < 0) or
@@ -371,6 +434,10 @@ public:
         _faces.push_back(faceStartEdge);
         return faceId;
 
+    }
+
+    inline int nFaces() const {
+        return _faces.size();
     }
 
 protected:
