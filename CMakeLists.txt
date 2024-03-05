@@ -184,7 +184,7 @@ if (TIFF_FOUND)
 endif (TIFF_FOUND)
 
 if (buildGui)
-    find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets REQUIRED)
+    find_package(QT NAMES Qt5 COMPONENTS Widgets REQUIRED)
     find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets REQUIRED)
     target_link_libraries(stevi PUBLIC Qt${QT_VERSION_MAJOR}::Widgets)
 endif(buildGui)
