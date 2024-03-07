@@ -148,6 +148,7 @@ set(LIB_SRC
         imageProcessing/pixelsTriangles.h
         imageProcessing/edgesDetection.h
         io/image_io.h
+        io/image_io.cpp
         sparseMatching/cornerDetectors.h
         sparseMatching/nonLocalMaximumPointSelection.h
         sparseMatching/pointsOrientation.h
