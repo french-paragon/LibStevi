@@ -67,40 +67,47 @@ class AffineTransform
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        AffineTransform(Eigen::Matrix<T,3,3> R, Eigen::Matrix<T,3,1> t):
-            t(t),
-            R(R) {
+    AffineTransform(Eigen::Matrix<T,3,3> R, Eigen::Matrix<T,3,1> t) :
+        t(t),
+        R(R) {
 
-        }
-        AffineTransform():
-            t(Eigen::Matrix<T,3,1>::Zero()),
-            R(Eigen::Matrix<T,3,3>::Identity()) {
+    }
 
-        }
+    AffineTransform():
+        t(Eigen::Matrix<T,3,1>::Zero()),
+        R(Eigen::Matrix<T,3,3>::Identity()) {
 
-        Eigen::Matrix<T,3,1> operator*(Eigen::Matrix<T,3,1> const& pt) const {
-            return R*pt + t;
-        }
+    }
 
-        template <int nCols>
-        std::enable_if_t<nCols!=1, Eigen::Matrix<T,3,nCols>> operator*(Eigen::Matrix<T,3,nCols> const& pts) const {
-            return applyOnto<nCols>(pts.array()).matrix();
-        }
+    Eigen::Matrix<T,3,1> operator*(Eigen::Matrix<T,3,1> const& pt) const {
+        return R*pt + t;
+    }
 
-        template <int nCols>
-        std::enable_if_t<nCols!=1, Eigen::Matrix<T,3,nCols>> operator*(Eigen::Array<T,3,nCols> const& pts) const {
-            return applyOnto<nCols>(pts);
-        }
-        AffineTransform<T> operator*(AffineTransform<T> const& other) const {
-            return AffineTransform<T>(R*other.R, R*other.t + t);
-        }
+    template <int nCols>
+    std::enable_if_t<nCols!=1, Eigen::Matrix<T,3,nCols>> operator*(Eigen::Matrix<T,3,nCols> const& pts) const {
+        return applyOnto<nCols>(pts.array()).matrix();
+    }
+
+    template <int nCols>
+    std::enable_if_t<nCols!=1, Eigen::Matrix<T,3,nCols>> operator*(Eigen::Array<T,3,nCols> const& pts) const {
+        return applyOnto<nCols>(pts);
+    }
+
+    AffineTransform<T> operator*(AffineTransform<T> const& other) const {
+        return AffineTransform<T>(R*other.R, R*other.t + t);
+    }
+
+    template <typename Tc>
+    AffineTransform<Tc> cast() {
+        return AffineTransform<Tc>(R.template cast<Tc>(), t.template cast<Tc>());
+    }
 
     inline bool isFinite() const {
         return t.array().isFinite().all() and R.array().isFinite().all();
     }
 
-        Eigen::Matrix<T,3,1> t;
-        Eigen::Matrix<T,3,3> R;
+    Eigen::Matrix<T,3,1> t;
+    Eigen::Matrix<T,3,3> R;
 
 protected:
 

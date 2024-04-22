@@ -257,6 +257,18 @@ public:
 
     }
 
+    /*!
+     * \brief RigidBodyTransform constructor from an AffineTransform
+     * \param affine the affine transform the RigidBodyTransform is constructed from
+     *
+     * The RigidBodyTransform is constructed by using inverseRodriguezFormula on the affine transform matrix to get an axis angle.
+     */
+    RigidBodyTransform(AffineTransform<T> const& affine) :
+        t(affine.t), r(inverseRodriguezFormula(affine.R))
+    {
+
+    }
+
     Eigen::Matrix<T,3,1> operator*(Eigen::Matrix<T,3,1> const& pt) const {
         return angleAxisRotate(r,pt) + t;
     }
@@ -271,10 +283,37 @@ public:
         return applyOnto<nCols>(pts);
     }
 
+    /*!
+     * \brief operator * compose two RigidBodyTransform
+     * \param other the other RigidBodyTransform to compose with
+     * \return the composed transform (equivalent to applying other, followed by this)
+     */
     RigidBodyTransform<T> operator*(RigidBodyTransform<T> const& other) const {
         Eigen::Matrix<T,3,3> R = rodriguezFormula(r);
         Eigen::Matrix<T,3,3> Rc = R*rodriguezFormula(other.r);
-        return ShapePreservingTransform(inverseRodriguezFormula(Rc), R*other.t + t);
+        return RigidBodyTransform(inverseRodriguezFormula(Rc), R*other.t + t);
+    }
+
+    /*!
+     * \brief operator * scale the transform with a scalar coefficient
+     * \param scale the scaling scalar coefficient
+     * \return the scaled transform
+     *
+     * This function is usefull when using RigidBodyTransforms for interpolation in se(3)
+     */
+    RigidBodyTransform<T> operator*(T const& scale) const {
+        return RigidBodyTransform(scale*r, scale*t);
+    }
+
+    /*!
+     * \brief operator + add two RigidBodyTransforms together, considering them as vectors in se(3).
+     * \param other the RigidBodyTransform to add
+     * \return the addition of two RigidBodyTransform
+     *
+     * This function is usefull when using RigidBodyTransforms for interpolation in se(3)
+     */
+    RigidBodyTransform<T> operator+(RigidBodyTransform<T> const& other) {
+        return RigidBodyTransform(other.r + r, other.t + t);
     }
 
     AffineTransform<T> toAffineTransform() const {
@@ -282,6 +321,11 @@ public:
     }
     RigidBodyTransform<T> inverse() const {
         return RigidBodyTransform<T>(-r, -angleAxisRotate<T>(-r, t));
+    }
+
+    template <typename Tc>
+    RigidBodyTransform<Tc> cast() {
+        return RigidBodyTransform<Tc>(r.template cast<Tc>(), t.template cast<Tc>());
     }
 
     /*!
@@ -322,6 +366,11 @@ protected:
         return transformedPts;
     }
 };
+
+template<typename T>
+RigidBodyTransform<T> operator*(T scale, RigidBodyTransform<T> transform) {
+    return transform.operator*(scale);
+}
 
 template<typename T>
 class ShapePreservingTransform
@@ -370,6 +419,11 @@ public:
     }
     ShapePreservingTransform<T> inverse() const {
         return ShapePreservingTransform<T>(-r, -angleAxisRotate<T>(-r, t/s), 1/s);
+    }
+
+    template <typename Tc>
+    ShapePreservingTransform<Tc> cast() {
+        return ShapePreservingTransform<Tc>(r.template cast<Tc>(), t.template cast<Tc>(), static_cast<Tc>(s));
     }
 
     /*!
