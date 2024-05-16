@@ -36,6 +36,7 @@ private Q_SLOTS:
 	void testDiffRigidTransformInverse();
 
     void testEulerRad2RMat();
+    void testRMat2EulerRad();
 
     void testRAxis2Quat2RAxis_data();
     void testRAxis2Quat2RAxis();
@@ -452,6 +453,56 @@ void TestGeometryLibRotation::testEulerRad2RMat() {
         }
     }
 
+}
+
+
+void TestGeometryLibRotation::testRMat2EulerRad() {
+
+    Eigen::Vector3d r0 = rMat2eulerRadxyz<double>(Eigen::Matrix3d::Identity());
+
+    float epsilon = 1e-5;
+
+    for (int i = 0; i < 3; i++) {
+
+        float target = 0;
+
+        float mismatch = std::abs(r0(i) - target);
+        QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 0 angle rotation (mismatch = %1)").arg(mismatch)));
+    }
+
+    Eigen::Matrix3d RX = eulerRadXYZToRotation<double>(M_PI_2,0,0);
+    Eigen::Matrix3d RY = eulerRadXYZToRotation<double>(0,M_PI_2,0);
+    Eigen::Matrix3d RZ = eulerRadXYZToRotation<double>(0,0,M_PI_2);
+
+    std::array<Eigen::Matrix3d, 3> axisMatrices = {RX, RY, RZ};
+
+    for (int axis = 0; axis < 3; axis++) {
+        Eigen::Matrix3d& R = axisMatrices[axis];
+
+        Eigen::Vector3d r = rMat2eulerRadxyz<double>(R);
+
+        for (int i = 0; i < 3; i++) {
+
+            float target = (i == axis) ? M_PI_2 : 0;
+
+            float mismatch = std::abs(r(i) - target);
+            QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a PI/2 angle rotation (mismatch = %1)").arg(mismatch)));
+        }
+
+    }
+
+    std::array<double, 3> targets{M_PI_2/4,M_PI_2/3,M_PI_2/2};
+    Eigen::Matrix3d RStrange = eulerRadXYZToRotation<double>(targets[0], targets[1], targets[2]);
+
+    Eigen::Vector3d rStrange = rMat2eulerRadxyz<double>(RStrange);
+
+    for (int i = 0; i < 3; i++) {
+
+        float target = targets[i];
+
+        float mismatch = std::abs(rStrange(i) - target);
+        QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 0 angle rotation (mismatch = %1)").arg(mismatch)));
+    }
 }
 
 void TestGeometryLibRotation::testRAxis2Quat2RAxis_data() {

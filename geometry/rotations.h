@@ -490,6 +490,49 @@ Eigen::Matrix<Scalar, 3, 3> eulerDegXYZToRotation(Scalar eulerX,
     return eulerRadXYZToRotation(Scalar(eulerX/180*M_PI), Scalar(eulerY/180*M_PI), Scalar(eulerZ/180*M_PI));
 }
 
+template <typename Scalar>
+Eigen::Matrix<Scalar, 3, 1> rMat2eulerRadxyz(Eigen::Matrix<Scalar, 3, 3> const& RMat) {
+    // assuming RMat = RMatx RMaty RMatz; Solution is:
+    //        [      cy cz            - cy sz         sy    ]
+    //        [                                             ]
+    //        [ cx sz + cz sx sy  cx cz - sx sy sz  - cy sx ]
+    //        [                                             ]
+    //        [ sx sz - cx cz sy  cx sy sz + cz sx   cx cy  ]
+
+    double sinY = RMat(0,2);
+    double cosY = sqrt(1 - sinY*sinY);
+
+    double sinZ = -RMat(0,1)/cosY;
+    double sinX = -RMat(1,2)/cosY;
+
+    if (!std::isfinite(sinZ) or ! std::isfinite(sinX)) {
+        //we have RMat =
+        //        [       0               0         +/-1]
+        //        [                                     ]
+        //        [ cx sz +/- cz sx  cx cz +/- sx sz   0]
+        //        [                                     ]
+        //        [ sx sz +/- cx cz  +/- cx sz + cz sx 0]
+
+        if (sinY > 0) {
+            sinY = 1;
+        } else {
+            sinY = -1;
+        }
+
+        double cosZ = RMat(1,1); //valid, if we assume X = 0, which we can
+
+        //acceptable, as any
+        sinX = 0;
+        sinZ = sqrt(1 - cosZ*cosZ);
+    }
+
+    double X = std::asin(sinX);
+    double Y = std::asin(sinY);
+    double Z = std::asin(sinZ);
+
+    return Eigen::Matrix<Scalar, 3, 1>(X,Y,Z);
+}
+
 } // namespace Geometry
 } //namespace StereoVision
 
