@@ -9,9 +9,12 @@
 #include <Eigen/IterativeLinearSolvers>
 #include <Eigen/SparseLU>
 #include <Eigen/SparseCholesky>
+#include <Eigen/QR>
 
 #include "./convolutions.h"
 #include "./edgesDetection.h"
+
+#include "../geometry/rotations.h"
 
 namespace StereoVision {
 namespace ImageProcessing {
@@ -761,6 +764,74 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 }
 
 template<typename ComputeType>
+Multidim::Array<ComputeType, 3> rectifyNormalMap(Multidim::Array<ComputeType, 3> const& normalmap, Multidim::Array<bool, 2> const& mask) {
+
+	using NormalT = Eigen::Matrix<ComputeType, 3, 1>;
+
+	NormalT sum = NormalT::Zero();
+
+	auto shape = normalmap.shape();
+
+	if (mask.shape()[0] != shape[0] or mask.shape()[1] != shape[1]) {
+		return Multidim::Array<ComputeType, 3>();
+	}
+
+	int nPixs = 0;
+
+	for (int i = 0; i < mask.shape()[0]; i++) {
+		for (int j = 0; j < mask.shape()[1]; j++) {
+
+			if (mask.valueUnchecked(i,j)) {
+				nPixs++;
+
+				NormalT normal;
+
+				normal[0] = normalmap.valueUnchecked(i,j,0);
+				normal[1] = normalmap.valueUnchecked(i,j,1);
+				normal[2] = normalmap.valueUnchecked(i,j,2);
+
+				sum += normal;
+			}
+
+		}
+	}
+
+	NormalT mean = sum / nPixs;
+
+	NormalT vertical(0,0,1);
+
+	NormalT dir = mean.cross(vertical);
+
+	double alpha = std::acos(mean.dot(vertical)/mean.norm());
+
+	NormalT axisAngle = alpha*dir.normalized();
+
+	Eigen::Matrix<ComputeType, 3, 3> R = Geometry::rodriguezFormula<ComputeType>(axisAngle);
+
+	Multidim::Array<ComputeType, 3> ret(shape);
+
+	for (int i = 0; i < mask.shape()[0]; i++) {
+		for (int j = 0; j < mask.shape()[1]; j++) {
+
+			NormalT normal;
+
+			normal[0] = normalmap.valueUnchecked(i,j,0);
+			normal[1] = normalmap.valueUnchecked(i,j,1);
+			normal[2] = normalmap.valueUnchecked(i,j,2);
+
+			NormalT recitifed = R*normal;
+
+			ret.atUnchecked(i,j,0) = recitifed[0];
+			ret.atUnchecked(i,j,1) = recitifed[1];
+			ret.atUnchecked(i,j,2) = recitifed[2];
+		}
+	}
+
+	return ret;
+
+}
+
+template<typename ComputeType>
 Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType, 3> const& normalmap, ComputeType maxDiff = 50.) {
 
 
@@ -798,6 +869,9 @@ Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType,
 			if (std::isnan(dy) or std::isinf(dy) or std::abs(dy) > maxDiff) {
 				dy = sy*maxDiff;
 			}
+
+			diffMap.atUnchecked(i,j,0) = dx;
+			diffMap.atUnchecked(i,j,1) = dy;
 		}
 	}
 
@@ -827,17 +901,18 @@ Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType,
 			int jM1 = outIdxs.getPseudoFlatIdFromIndex({outCenterIdx[0], xPosM1});
 			int jP1 = outIdxs.getPseudoFlatIdFromIndex({outCenterIdx[0], xPosP1});
 
-			A.coeffRef(i,jM1) = -1;
-			A.coeffRef(i,jP1) = 1;
+			A.coeffRef(i,jM1) += -1;
+			A.coeffRef(i,jP1) += 1;
+
 		} else if (idxIn[2] == 1) { //yDiff
-			int yPosM1 = (outCenterIdx[0] < shape[0]-1) ? outCenterIdx[0]+1 : shape[1]-1;
+			int yPosM1 = (outCenterIdx[0] < shape[0]-1) ? outCenterIdx[0]+1 : shape[0]-1;
 			int yPosP1 = (outCenterIdx[0] > 0) ? outCenterIdx[0]-1 : 0;
 
 			int jM1 = outIdxs.getPseudoFlatIdFromIndex({yPosM1, outCenterIdx[1]});
 			int jP1 = outIdxs.getPseudoFlatIdFromIndex({yPosP1, outCenterIdx[1]});
 
-			A.coeffRef(i,jM1) = -1;
-			A.coeffRef(i,jP1) = 1;
+			A.coeffRef(i,jM1) += -1;
+			A.coeffRef(i,jP1) += 1;
 		}
 
 		b[i] = diffMap.valueUnchecked(idxIn);
@@ -856,7 +931,6 @@ Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType,
 
 	VectorSolType solution = solver.solve(b);
 
-
 	Multidim::Array<ComputeType, 2> ret(shape);
 
 	for (int i = 0; i < outIdxs.numberOfPossibleIndices(); i++) {
@@ -866,6 +940,94 @@ Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType,
 	}
 
 	return ret;
+}
+
+template<typename ComputeType>
+Multidim::Array<ComputeType, 2> flattenHeightMapInAreaOfInterest(Multidim::Array<ComputeType, 2> const& baseHeightMap, Multidim::Array<bool, 2> const& mask) {
+
+	using MatAT = Eigen::Matrix<ComputeType, Eigen::Dynamic, 3>;
+	using VecbT = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
+	using VecSolT = Eigen::Matrix<ComputeType, 3, 1>;
+
+	auto shape = baseHeightMap.shape();
+
+	if (mask.shape() != shape) {
+		return Multidim::Array<ComputeType, 2>();
+	}
+
+	int nPixs = 0;
+
+	for (int i = 0; i < mask.shape()[0]; i++) {
+		for (int j = 0; j < mask.shape()[1]; j++) {
+
+			if (mask.valueUnchecked(i,j)) {
+				nPixs++;
+			}
+
+		}
+	}
+
+	MatAT A;
+	A.resize(nPixs, 3);
+
+	VecbT b;
+	b.resize(nPixs);
+
+	int r = 0;
+
+	for (int i = 0; i < mask.shape()[0]; i++) {
+		for (int j = 0; j < mask.shape()[1]; j++) {
+
+			if (mask.valueUnchecked(i,j)) {
+
+				A(r,0) = i;
+				A(r,1) = j;
+				A(r,2) = 1;
+
+				b[r] = baseHeightMap.valueUnchecked(i,j);
+
+				r++;
+			}
+
+		}
+	}
+
+	VecSolT coeffs = A.colPivHouseholderQr().solve(b); //least square approximation
+
+	Multidim::Array<ComputeType, 2> ret(shape);
+
+	ComputeType minVal = std::numeric_limits<ComputeType>::max();
+
+	for (int i = 0; i < mask.shape()[0]; i++) {
+		for (int j = 0; j < mask.shape()[1]; j++) {
+
+			if (mask.valueUnchecked(i,j)) {
+				ComputeType trend = i*coeffs[0] + j*coeffs[1] + coeffs[2];
+				ComputeType val = baseHeightMap.valueUnchecked(i,j) - trend;
+				ret.atUnchecked(i,j) = val;
+
+				if (minVal > val) {
+					minVal = val;
+				}
+			}
+
+		}
+	}
+
+	for (int i = 0; i < mask.shape()[0]; i++) {
+		for (int j = 0; j < mask.shape()[1]; j++) {
+
+			if (mask.valueUnchecked(i,j)) {
+				ret.atUnchecked(i,j) -= minVal;
+			} else {
+				ret.atUnchecked(i,j) = 0;
+			}
+
+		}
+	}
+
+	return ret;
+
 }
 
 } // namespace ImageProcessing
