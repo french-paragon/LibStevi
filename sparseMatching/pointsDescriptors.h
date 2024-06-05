@@ -138,6 +138,39 @@ std::vector<ComparisonPair<nDim+1>> generateRandomComparisonPairs(int nSamples, 
 
 }
 
+/*!
+ * \brief generateDensePatchCoordinates generate a set of dense coordinates delta for
+ * \param shape
+ * \return
+ */
+template<int nDim>
+std::vector<std::array<int,nDim>> generateDensePatchCoordinates(std::array<int,nDim> const& shape) {
+
+    int nElements = 1;
+    std::array<int,nDim> delta;
+
+    for (int i = 0; i < nDim; i++) {
+        nElements *= shape[i];
+        delta[i] = shape[i]/2;
+    }
+
+    std::vector<std::array<int,nDim>> ret(nElements);
+
+    Multidim::IndexConverter<nDim> idxCvrt(shape);
+
+    for (int i = 0; i < idxCvrt.numberOfPossibleIndices(); i++) {
+        std::array<int,nDim> idx = idxCvrt.getIndexFromPseudoFlatId(i);
+
+        for (int j = 0; j < nDim; j++) {
+            idx[j] -= delta[j];
+        }
+
+        ret[i] = idx;
+    }
+
+    return ret;
+}
+
 template <bool hasFeatureAxis = true, int nDim, typename T, Multidim::ArrayDataAccessConstness constNess>
 std::vector<pointFeatures<nDim, std::vector<uint32_t>>> BriefDescriptor(std::vector<orientedCoordinate<nDim>> const& coords,
                                                                         Multidim::Array<T, (hasFeatureAxis) ? nDim+1 : nDim, constNess> const& img,
@@ -217,7 +250,83 @@ std::vector<pointFeatures<nDim, std::vector<uint32_t>>> BriefDescriptor(std::vec
 
 }
 
+template <int nDim, int fDims, typename T, Multidim::ArrayDataAccessConstness constNess>
+std::vector<pointFeatures<nDim, std::vector<float>>> WhitenedPixelsDescriptor(std::vector<orientedCoordinate<nDim>> const& coords,
+                                                                              Multidim::Array<T, fDims, constNess> const& img,
+                                                                              std::vector<std::array<int,std::size_t(fDims)>> const& patchCoordinates,
+                                                                              int featureAxis = nDim) {
 
+    static_assert (fDims == nDim or fDims == nDim+1, "image dimension should be equal (grayscale) or one more (color) than coordinates dimensions");
+
+    constexpr bool hasFeatureAxis = fDims == nDim+1;
+
+    std::vector<pointFeatures<nDim, std::vector<float>>> ret;
+    ret.reserve(coords.size());
+
+    for (orientedCoordinate<nDim> const& coord : coords) {
+
+        std::vector<float> feature(patchCoordinates.size());
+        int f = 0;
+
+        std::array<int, fDims> center;
+
+        for (int i = 0; i < fDims; i++) {
+
+            if (hasFeatureAxis and i == featureAxis) {
+                center[i] = 0;
+                break;
+            }
+
+            int idx = (i < featureAxis or !hasFeatureAxis) ? coord.coord[i] : coord.coord[i-1];
+            center[i] = idx;
+        }
+
+        std::array<int, fDims> idxs;
+
+        for (std::array<int,fDims> const& pCoord : patchCoordinates) {
+
+
+            for (int i = 0; i < fDims; i++) {
+                idxs[i] = center[i] + pCoord[i];
+            }
+
+            feature[f] = img.valueOrAlt(idxs, 0);
+            f++;
+        }
+
+        //whitening of the features
+        float mean = 0;
+
+        for (float const& val : feature) {
+            mean += val;
+        }
+
+        mean /= feature.size();
+
+        for (float & val : feature) {
+            val -= mean;
+        }
+
+        float norm = 0;
+
+        for (float const& val : feature) {
+            norm += val*val;
+        }
+
+        norm /= feature.size();
+        norm = std::sqrt(norm);
+
+        for (float & val : feature) {
+            val /= norm;
+        }
+
+        ret.emplace_back(coord.coord, feature);
+
+    }
+
+    return ret;
+
+}
 
 } // namespace SparseMatching
 } // namespace StereoVision

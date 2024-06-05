@@ -31,20 +31,20 @@ namespace Interpolation {
 
 template<typename T>
 T unidimensionalPyramidFunction(T const& v) {
-	T out = -std::abs(v) + 1;
-	if (out < 0) {
-		out = 0;
-	}
-	return out;
+    T out = -std::abs(v) + 1;
+    if (out < 0) {
+        out = 0;
+    }
+    return out;
 }
 
 template<typename T, int inDIM>
 T pyramidFunction(std::array<T,inDIM> const& pos) {
-	T out = 1;
-	for (int i = 0; i < inDIM; i++) {
-		out *= unidimensionalPyramidFunction(pos[i]);
-	}
-	return out;
+    T out = 1;
+    for (int i = 0; i < inDIM; i++) {
+        out *= unidimensionalPyramidFunction(pos[i]);
+    }
+    return out;
 }
 
 template <int inDIM, typename T, T(kernel)(std::array<T,inDIM> const&), int kernelRadius>
@@ -97,7 +97,7 @@ inline T interpolateValue(Multidim::Array<T, inDIM> const& input,
 
         CoordIn kernelCoordinate;
         for (int i = 0; i < inDIM; i++) {
-            kernelCoordinate[i] = kernelRadius + c[i] - filterCoordinate[i];
+            kernelCoordinate[i] = imgCoordinate[i] - c[i];
         }
 
         v += kernel(kernelCoordinate) * input.valueUnchecked(imgCoordinate);
@@ -110,32 +110,32 @@ inline T interpolateValue(Multidim::Array<T, inDIM> const& input,
 
 template <int inDIM, int outDIM, typename T, T(kernel)(std::array<T,inDIM> const&), int kernelRadius>
 Multidim::Array<T, outDIM> interpolate(Multidim::Array<T, inDIM> const& input,
-									   Multidim::Array<T, outDIM + 1> const& coordinates) {
+                                       Multidim::Array<T, outDIM + 1> const& coordinates) {
 
-	using ShapeIn = typename Multidim::Array<T, inDIM>::ShapeBlock;
-	using ShapeOut = typename Multidim::Array<T, outDIM>::ShapeBlock;
-	using ShapeCoord = typename Multidim::Array<T, outDIM + 1>::ShapeBlock;
+    using ShapeIn = typename Multidim::Array<T, inDIM>::ShapeBlock;
+    using ShapeOut = typename Multidim::Array<T, outDIM>::ShapeBlock;
+    using ShapeCoord = typename Multidim::Array<T, outDIM + 1>::ShapeBlock;
 
-	using IndexIn = typename Multidim::Array<T, inDIM>::IndexBlock;
-	using IndexOut = typename Multidim::Array<T, outDIM>::IndexBlock;
-	using IndexCoord = typename Multidim::Array<T, outDIM + 1>::IndexBlock;
+    using IndexIn = typename Multidim::Array<T, inDIM>::IndexBlock;
+    using IndexOut = typename Multidim::Array<T, outDIM>::IndexBlock;
+    using IndexCoord = typename Multidim::Array<T, outDIM + 1>::IndexBlock;
 
-	using CoordIn = std::array<T, inDIM>;
+    using CoordIn = std::array<T, inDIM>;
 
-	assert(coordinates.shape().back() == inDIM);
+    assert(coordinates.shape().back() == inDIM);
 
-	ShapeCoord s = coordinates.shape();
+    ShapeCoord s = coordinates.shape();
 
-	ShapeOut s_o;
-	for (int i = 0; i < outDIM; i++) {
-		s_o[i] = s[i];
-	}
+    ShapeOut s_o;
+    for (int i = 0; i < outDIM; i++) {
+        s_o[i] = s[i];
+    }
 
     Multidim::Array<T, outDIM> out(s_o);
 
-	ShapeIn s_i = input.shape();
+    ShapeIn s_i = input.shape();
 
-	int n = out.flatLenght();
+    int n = out.flatLenght();
 
     Multidim::DimsExclusionSet<outDIM+1> dimExclSet(outDIM);
     Multidim::IndexConverter<outDIM+1> gridIdxConverter(coordinates.shape(), dimExclSet);
@@ -150,30 +150,30 @@ Multidim::Array<T, outDIM> interpolate(Multidim::Array<T, inDIM> const& input,
             b_o[d] = b[d];
         }
 
-		CoordIn c;
-		IndexIn w_min;
-		IndexIn w_max;
+        CoordIn c;
+        IndexIn w_min;
+        IndexIn w_max;
 
-		IndexIn i_o;
+        IndexIn i_o;
         i_o.fill(0);
 
-		for (int i = 0; i < inDIM; i++) {
-			b.back() = i;
-			ShapeCoord& pos = b;
+        for (int i = 0; i < inDIM; i++) {
+            b.back() = i;
+            ShapeCoord& pos = b;
             c[i] = coordinates.valueUnchecked(pos);
         }
 
         T v = interpolateValue<2,T,kernel,kernelRadius>(input, c);
 
         out.atUnchecked(b_o) = v;
-	}
+    }
 
-	return out;
+    return out;
 
 }
 
 ImageArray interpolateImage(ImageArray const& imInput,
-							ImageArray const& coordinates);
+                            ImageArray const& coordinates);
 
 } // namespace Interpolation
 } // namespace StereoVision
