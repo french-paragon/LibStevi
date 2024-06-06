@@ -162,7 +162,6 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 		}
 	}
 
-
 	//global texture constraint
 
 	constexpr int searchRadius = 1;
@@ -212,6 +211,7 @@ IntrinsicImageDecomposition<ComputeType, 3> retinexWithNonLocalTextureConstraint
 																					  &featureVolumeR90,
 																					  &featureVolumeR180,
 																					  &featureVolumeR270};
+
 
 
 	//compute the groups
