@@ -82,6 +82,7 @@ set(LIB_SRC
 	geometry/pointcloudalignment.cpp
         geometry/pointcloudalignment.h
         geometry/rotations.h
+        geometry/posesmath.h
         geometry/stereorigrectifier.cpp
         geometry/stereorigrectifier.h
         graphs/graphs.h
