@@ -7,4 +7,5 @@
  if (buildGui)
      add_subdirectory(stevimg_viewer)
      add_subdirectory(data_img_viewer)
+     add_subdirectory(tie_points_checker)
  endif(buildGui)

@@ -169,6 +169,10 @@ public:
         _white_level = whiteLevel;
     }
 
+    void imageDataUpdated() {
+        Q_EMIT imageDataChanged();
+    }
+
 protected:
 
     using ComputeType = TypesManipulations::accumulation_extended_t<Array_T>;
