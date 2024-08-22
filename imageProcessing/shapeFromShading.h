@@ -529,11 +529,11 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 
 	//Constraint Gradient N = 0
     MatrixAType Dx;
-    Dx.resize(2*VectorNlen, VectorNlen);
+    Dx.resize(VectorNlen, VectorNlen);
     Dx.reserve(Eigen::VectorXi::Constant(VectorNlen, 4));
 
     MatrixAType Dy;
-    Dy.resize(2*VectorNlen, VectorNlen);
+    Dy.resize(VectorNlen, VectorNlen);
     Dy.reserve(Eigen::VectorXi::Constant(VectorNlen, 4));
 
     for (int i = 0; i < idxConverterOut.numberOfPossibleIndices(); i++) {
@@ -552,7 +552,7 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
             Dx.coeffRef(i,j) += 1;
         }
 
-        if (idxOut[0]+1 < outSize[0]) {
+        /*if (idxOut[0]+1 < outSize[0]) {
             idxOutP1[0] += 1;
 
             int j = idxConverterOut.getPseudoFlatIdFromIndex(idxOut);
@@ -560,7 +560,7 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 
             j = idxConverterOut.getPseudoFlatIdFromIndex(idxOutP1);
             Dx.coeffRef(i+VectorNlen,j) += 1;
-        }
+        }*/
 
         idxOutM1 = idxOut;
         idxOutP1 = idxOut;
@@ -575,7 +575,7 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
             Dy.coeffRef(i,j) += 1;
         }
 
-        if (idxOut[1]+1 < outSize[1]) {
+        /*if (idxOut[1]+1 < outSize[1]) {
             idxOutP1[1] += 1;
 
             int j = idxConverterOut.getPseudoFlatIdFromIndex(idxOut);
@@ -583,7 +583,7 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 
             j = idxConverterOut.getPseudoFlatIdFromIndex(idxOutP1);
             Dy.coeffRef(i+VectorNlen,j) += 1;
-        }
+        }*/
     }
 
     //Constraint H(||\nabla R||-c)\dotprod{S\nabla R}{N} = 0
@@ -839,7 +839,9 @@ Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType,
 	using VectorBType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
 	using VectorSolType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
 
-	using SolverType = Eigen::LeastSquaresConjugateGradient<MatrixAType, Eigen::LeastSquareDiagonalPreconditioner<ComputeType>>;
+    //TODO: check why CG takes so long...
+    //using SolverType = Eigen::LeastSquaresConjugateGradient<MatrixAType, Eigen::LeastSquareDiagonalPreconditioner<ComputeType>>;
+    using SolverType = Eigen::SparseLU<MatrixAType, Eigen::COLAMDOrdering<int> >;
 
 	if (normalmap.shape()[2] != 3) {
 		return Multidim::Array<ComputeType, 2>();
@@ -855,8 +857,8 @@ Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType,
 			ComputeType ny = normalmap.valueUnchecked(i,j,1);
 			ComputeType nz = normalmap.valueUnchecked(i,j,2);
 
-			ComputeType sx = (nx > 0) ? 1 : (sx < 0) ? -1 : 0;
-			ComputeType sy = (ny > 0) ? 1 : (sx < 0) ? -1 : 0;
+            ComputeType sx = (nx > 0) ? 1 : (nx < 0) ? -1 : 0;
+            ComputeType sy = (ny > 0) ? 1 : (nx < 0) ? -1 : 0;
 
 			ComputeType dx = nx/nz;
 
@@ -876,10 +878,17 @@ Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType,
 	}
 
 	Multidim::IndexConverter<2> outIdxs(shape);
-	Multidim::IndexConverter<3> inIdxs(diffMap.shape());
+    std::array<int,2> obsXMapShape = {diffMap.shape()[0], diffMap.shape()[1]};
+    std::array<int,2> obsYMapShape = {diffMap.shape()[0], diffMap.shape()[1]};
+    obsXMapShape[1] -= 1;
+    obsYMapShape[0] -= 1;
+    Multidim::IndexConverter<2> obsXIdxs(obsXMapShape);
+    Multidim::IndexConverter<2> obsYIdxs(obsYMapShape);
 
-	int nObs = inIdxs.numberOfPossibleIndices() + 1;
-	int nVars = outIdxs.numberOfPossibleIndices();
+    int xObsDelta = obsXIdxs.numberOfPossibleIndices();
+
+    int nObs = xObsDelta + obsYIdxs.numberOfPossibleIndices() + 1; //2 observations (forward and backward) per obs idx, and one observation to fix the integration constant.
+    int nVars = outIdxs.numberOfPossibleIndices();
 
 	MatrixAType A;
 
@@ -889,47 +898,64 @@ Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType,
 	VectorBType b;
 	b.resize(nObs);
 
-	for (int i = 0; i < inIdxs.numberOfPossibleIndices(); i++) {
+    for (int i = 0; i < obsXIdxs.numberOfPossibleIndices(); i++) {
 
-		std::array<int,3> idxIn = inIdxs.getIndexFromPseudoFlatId(i);
-		std::array<int,2> outCenterIdx = {idxIn[0], idxIn[1]};
+        std::array<int,2> outCenterIdx = obsXIdxs.getIndexFromPseudoFlatId(i);;
+        std::array<int,3> idxObs = {outCenterIdx[0], outCenterIdx[1], 0};
+        std::array<int,3> idxInBack = idxObs;
+        std::array<int,3> idxInFront = idxObs;
 
-		if (idxIn[2] == 0) { //xDiff
-			int xPosM1 = (outCenterIdx[1] > 0) ? outCenterIdx[1]-1 : 0;
-			int xPosP1 = (outCenterIdx[1] < shape[1]-1) ? outCenterIdx[1]+1 : shape[1]-1;
+        int xPosBack = outCenterIdx[1];
+        int xPosFront = outCenterIdx[1]+1;
 
-			int jM1 = outIdxs.getPseudoFlatIdFromIndex({outCenterIdx[0], xPosM1});
-			int jP1 = outIdxs.getPseudoFlatIdFromIndex({outCenterIdx[0], xPosP1});
+        idxInFront[1] += 1;
 
-			A.coeffRef(i,jM1) += -1;
-			A.coeffRef(i,jP1) += 1;
+        int jBack = outIdxs.getPseudoFlatIdFromIndex({outCenterIdx[0], xPosBack});
+        int jFront = outIdxs.getPseudoFlatIdFromIndex({outCenterIdx[0], xPosFront});
 
-		} else if (idxIn[2] == 1) { //yDiff
-			int yPosM1 = (outCenterIdx[0] < shape[0]-1) ? outCenterIdx[0]+1 : shape[0]-1;
-			int yPosP1 = (outCenterIdx[0] > 0) ? outCenterIdx[0]-1 : 0;
+        A.coeffRef(i,jBack) += -1;
+        A.coeffRef(i,jFront) += 1;
 
-			int jM1 = outIdxs.getPseudoFlatIdFromIndex({yPosM1, outCenterIdx[1]});
-			int jP1 = outIdxs.getPseudoFlatIdFromIndex({yPosP1, outCenterIdx[1]});
-
-			A.coeffRef(i,jM1) += -1;
-			A.coeffRef(i,jP1) += 1;
-		}
-
-		b[i] = diffMap.valueUnchecked(idxIn);
-
+        b[i] = (diffMap.valueUnchecked(idxInBack) + diffMap.valueUnchecked(idxInFront))/2; //mean gradient
 	}
 
-	int zeroPosIdx = outIdxs.getPseudoFlatIdFromIndex({0,0});
+    for (int i = 0; i < obsYIdxs.numberOfPossibleIndices(); i++) {
+
+        std::array<int,2> outCenterIdx = obsYIdxs.getIndexFromPseudoFlatId(i);
+        std::array<int,3> idxObs = {outCenterIdx[0], outCenterIdx[1], 1};
+        std::array<int,3> idxInBack = idxObs;
+        std::array<int,3> idxInFront = idxObs;
+
+        int yPosBack = outCenterIdx[0];
+        int yPosFront = outCenterIdx[0]+1;
+
+        idxInFront[0] += 1;
+
+        int jBack = outIdxs.getPseudoFlatIdFromIndex({yPosBack, outCenterIdx[1]});
+        int jFront = outIdxs.getPseudoFlatIdFromIndex({yPosFront, outCenterIdx[1]});
+
+        A.coeffRef(i+xObsDelta,jBack) += -1;
+        A.coeffRef(i+xObsDelta,jFront) += 1;
+
+        b[i+xObsDelta] = (diffMap.valueUnchecked(idxInBack) + diffMap.valueUnchecked(idxInFront))/2; //mean gradient
+    }
+
+    int zeroPosIdx = outIdxs.getPseudoFlatIdFromIndex({0,0});
 
 	A.coeffRef(nObs-1,zeroPosIdx) = 1;
 	b[nObs-1] = 0;
 
-	A.makeCompressed();
+    MatrixAType AtA = A.transpose()*A;
+
+    AtA.makeCompressed();
 
 	SolverType solver;
-	solver.compute(A);
 
-	VectorSolType solution = solver.solve(b);
+    solver.analyzePattern(AtA);
+    solver.factorize(AtA);
+    //solver.compute(AtA);
+
+    VectorSolType solution = solver.solve(A.transpose()*b);
 
 	Multidim::Array<ComputeType, 2> ret(shape);
 
