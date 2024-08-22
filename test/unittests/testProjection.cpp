@@ -3,6 +3,7 @@
 #include "geometry/alignement.h"
 #include "geometry/rotations.h"
 #include "geometry/geometricexception.h"
+#include "geometry/genericraysalignement.h"
 
 #include <random>
 #include <iostream>
@@ -10,6 +11,48 @@
 #include <eigen3/Eigen/Geometry>
 
 using namespace StereoVision::Geometry;
+
+struct GenericRayAlignementProblem {
+    RigidBodyTransform<double> frame1toframe2;
+    std::vector<RayInfos<double>> frame1Rays;
+    std::vector<RayInfos<double>> frame2Rays;
+};
+
+GenericRayAlignementProblem generateRayAlignmentProblemPushBroom(int nRays) {
+
+    GenericRayAlignementProblem ret;
+    ret.frame1toframe2 = RigidBodyTransform<double>(Eigen::Vector3d::Random(), Eigen::Vector3d::Random());
+
+    ret.frame1Rays.reserve(nRays);
+    ret.frame2Rays.reserve(nRays);
+
+    for (int i = 0; i < nRays; i++) {
+
+        Eigen::Vector3d f1pos = Eigen::Vector3d::Random();
+        Eigen::Vector3d f1ray = Eigen::Vector3d::Random();
+        f1ray.normalize();
+
+        ret.frame1Rays.emplace_back(f1pos, f1ray);
+
+        double rDist = Eigen::Vector3d::Random().sum();
+
+        Eigen::Vector3d pPos = f1pos + rDist*f1ray;
+
+        Eigen::Vector3d rPos = Eigen::Vector3d::Random();
+        Eigen::Vector3d rPosFrame2 = ret.frame1toframe2*rPos;
+
+        Eigen::Vector3d ray = pPos - rPos;
+        ray.normalize();
+
+        Eigen::Vector3d rayFrame2 = angleAxisRotate(ret.frame1toframe2.r, ray);
+
+        ret.frame2Rays.emplace_back(rPosFrame2, rayFrame2);
+
+    }
+
+    return ret;
+
+}
 
 Eigen::Array3Xf generateRandomPoints(int nPoints, float distance = 3.0, float spread = 2.0, float v_spread = 1.0) {
 
@@ -80,6 +123,8 @@ private Q_SLOTS:
 
     void testPnP_data();
     void testPnP();
+
+    void testGenericRaysAlignment();
 };
 
 void TestReprojectionMethods::initTestCase() {
@@ -360,6 +405,21 @@ void TestReprojectionMethods::testPnP() {
 		missalignement = tdelta.norm();
 		QVERIFY2(missalignement < 1e-3, qPrintable(QString("Reconstructed rotation not correct (norm (tgt + Rrcxtrc) = %1)").arg(missalignement)));
 	}
+}
+
+void TestReprojectionMethods::testGenericRaysAlignment() {
+
+    auto problem = generateRayAlignmentProblemPushBroom(10);
+
+    auto solution = alignRaysSets(problem.frame1Rays, problem.frame2Rays, problem.frame1toframe2);
+
+    QVERIFY2(solution.convergence() == StereoVision::ConvergenceType::Converged, "Solution did not converge");
+
+    for (int i = 0; i < 3; i++) {
+        QCOMPARE(solution.value().r[i], problem.frame1toframe2.r[i]);
+        QCOMPARE(solution.value().t[i], problem.frame1toframe2.t[i]);
+    }
+
 }
 
 QTEST_MAIN(TestReprojectionMethods)

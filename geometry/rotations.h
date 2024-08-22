@@ -153,7 +153,7 @@ Eigen::Matrix<T,3,1> diffAngleAxisRotate(Eigen::Matrix<T,3,1> const& r, Eigen::M
     Eigen::Matrix<T,3,1> diffRcrossRxv = r.cross(diffRxv) + diffR.cross(rxv);
 
     if (theta < 1e-3) {
-        -r[axis]/3 * rxv + (1-theta*theta/6)*diffRxv +
+        return -r[axis]/3 * rxv + (1-theta*theta/6)*diffRxv +
                -r[axis]/12 * rxv + (0.5 - theta*theta/24)*diffRcrossRxv;
     } //Taylor approximation for small values of theta
 

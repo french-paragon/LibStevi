@@ -81,6 +81,7 @@ set(LIB_SRC
 	geometry/lensdistortion.h
 	geometry/pointcloudalignment.cpp
         geometry/pointcloudalignment.h
+        geometry/genericraysalignement.h
         geometry/rotations.h
         geometry/posesmath.h
         geometry/stereorigrectifier.cpp
@@ -116,10 +117,12 @@ set(LIB_SRC
         optimization/l0optimization.h
         optimization/l1optimization.h
         optimization/l2optimization.h
+        optimization/huber_kernel.h
         optimization/leastmedianoptimization.h
         optimization/sphericaloptimization.h
         optimization/affine_utils.h
         optimization/principalComponentsAnalysis.h
+        optimization/gaussnewtownproblem.h
         utils/contiguity.h
         utils/margins.h
         utils/indexers.h
@@ -130,6 +133,7 @@ set(LIB_SRC
         utils/array_utils.h
         utils/stevimath.h
         utils/hash_utils.h
+        utils/iterative_numerical_algorithm_output.h
         statistics/stereo_covering.h
         imageProcessing/colorConversions.h
         imageProcessing/histogram.h

@@ -3,6 +3,7 @@
  add_subdirectory(normal_map_estimation)
  add_subdirectory(checkboard_detection)
  add_subdirectory(bg_fg_stereo)
+ add_subdirectory(generic_ray_alignement_evaluation)
 
  if (buildGui)
      add_subdirectory(stevimg_viewer)
