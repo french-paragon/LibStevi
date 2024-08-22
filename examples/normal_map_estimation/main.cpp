@@ -24,6 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <QApplication>
 
 #include <qImageDisplayWidget/imagewindow.h>
+#define LIBSTEREOVISION_BUILDING //get the QImageWidgets headers from the right place at build time
 #include "gui/arraydisplayadapter.h"
 
 #endif
