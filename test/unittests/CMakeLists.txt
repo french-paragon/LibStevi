@@ -139,5 +139,9 @@ add_executable(testInterpolation testInterpolation.cpp)
 target_link_libraries(testInterpolation ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestInterpolation testInterpolation)
 
+add_executable(testPartitionTrees testPartitionTrees.cpp)
+target_link_libraries(testPartitionTrees ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestPartitionTrees testPartitionTrees)
+
 
 
