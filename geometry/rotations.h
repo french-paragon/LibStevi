@@ -59,6 +59,11 @@ template<typename T>
 Eigen::Matrix<T,3,1> inverseRodriguezFormula(Eigen::Matrix<T,3,3> const& R) {
 
     T d =  0.5*(R(0,0) + R(1,1) + R(2,2) - T(1));
+
+    if (d < T(-1)) { //necessary for numerical stability.
+        d = T(-1);
+    }
+
     Eigen::Matrix<T,3,1> omega;
 
     Eigen::Matrix<T,3,1> dR = unskew<T>(R - R.transpose());
