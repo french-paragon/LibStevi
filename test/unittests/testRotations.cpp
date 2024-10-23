@@ -95,6 +95,19 @@ void TestGeometryLibRotation::testRodriguez_data() {
 		 0,-1, 0,
 		 0, 0, 1;
 	QTest::newRow("180deg z axis") << 0.0f << 0.0f << static_cast<float>(M_PI) << M;
+
+
+    //failure cases that have been encountered during devellopement
+    //TODO: check if we want to use a different test protocol for these ones
+
+    /*Eigen::Matrix3d Md;
+    Md << 0.55796742,  0.82778577,  0.05867651,
+            0.82778694, -0.56017673,  0.03115715,
+            0.05866066,  0.03118697, -0.99779071;
+    M = Md.cast<float>();
+    Eigen::Vector3f axis = inverseRodriguezFormula<double>(Md).cast<float>();
+
+    QTest::newRow("Failure case 1") << axis.x() << axis.y() << axis.z() << M;*/
 }
 
 void TestGeometryLibRotation::testRodriguez() {

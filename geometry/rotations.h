@@ -22,6 +22,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../geometry/core.h"
 #include <Eigen/Geometry>
 
+#include "../utils/types_manipulations.h"
+
 namespace StereoVision {
 namespace Geometry {
 
@@ -70,6 +72,9 @@ Eigen::Matrix<T,3,1> inverseRodriguezFormula(Eigen::Matrix<T,3,3> const& R) {
     Eigen::Matrix<T,3,1> dR = unskew<T>(R - R.transpose());
 
     T nDr = dR.norm();
+
+    double d_threshold = (TypesManipulations::typeExceedFloat32Precision<T>()) ? 0.999999 : 0.999;
+    double nDr_threshold = (TypesManipulations::typeExceedFloat32Precision<T>()) ? 1e-6 : 1e-3;
 
     if (d>0.999)
     {
