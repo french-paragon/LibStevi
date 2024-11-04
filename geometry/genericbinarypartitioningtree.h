@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <limits>
 #include <array>
 #include <cmath>
+#include <vector>
 
 namespace StereoVision {
 namespace Geometry {
@@ -165,6 +166,20 @@ public:
     }
 
     /*!
+     * \brief elementsInRange return all the elements in a given range
+     * \param min the element which coordinates correspond to all min coordinates in the range
+     * \param max the element which coordinates correspond to all max coordinates in the range
+     * \return a vector containing all the elements which coordinates are in between min and max ccordinates.
+     */
+    std::vector<T> elementsInRange(T const& min, T const& max) const {
+        WrapperT wMin(min);
+        WrapperT wMax(max);
+        RangeLimits range(wMin, wMax);
+
+        return findElementsInRange(range, _data.cbegin(), _data.cend());
+    }
+
+    /*!
      * \brief indexRange give the infos about the full range of points
      * \return the range convering the full tree
      */
@@ -211,6 +226,15 @@ protected:
             }
         }
 
+        RangeLimits(WrapperT const& pt1, WrapperT const& pt2) {
+            for (int i = 0; i < nDims; i++) {
+                PosT v1 = pt1[i];
+                PosT v2 = pt2[i];
+                lowLimits[i] = (v1 < v2) ? v1 : v2;
+                highLimits[i] = (v1 < v2) ? v2 : v1;
+            }
+        }
+
         RangeLimits(RangeLimits const& other) :
             lowLimits(other.lowLimits),
             highLimits(other.highLimits)
@@ -218,7 +242,7 @@ protected:
 
         }
 
-        inline bool pointInRange(WrapperT const& pt) {
+        inline bool pointInRange(WrapperT const& pt) const {
             for (int i = 0; i < nDims; i++) {
                 if (pt[i] < lowLimits[i]) {
                     return false;
@@ -230,7 +254,7 @@ protected:
             return true;
         }
 
-        inline bool circleIntersectRange(WrapperT const& center, WrapperT const& side) {
+        inline bool circleIntersectRange(WrapperT const& center, WrapperT const& side) const {
             bool centerInRange = pointInRange(center);
 
             if (centerInRange) {
@@ -259,7 +283,7 @@ protected:
             return sqrDist < sqrRad;
         }
 
-        inline bool circleIntersectRange(WrapperT const& center, PosT const& radiusSquared) {
+        inline bool circleIntersectRange(WrapperT const& center, PosT const& radiusSquared) const {
             bool centerInRange = pointInRange(center);
 
             if (centerInRange) {
@@ -527,6 +551,34 @@ protected:
         }
 
         return cand;
+
+    }
+
+    template< class RandomIt>
+    std::vector<T> findElementsInRange(RangeLimits const& range, RandomIt start, RandomIt end, int level = 0) {
+
+        int dim = getCurrentDim(level);
+
+        int len = std::distance(start, end);
+        int n = getRangeCutIdx(len);
+
+        RandomIt nth = start;
+        std::advance(nth, n);
+        WrapperT wNode(*nth);
+
+        bool nodeInRange = range.pointInRange(wNode);
+
+        std::vector<T> low;
+        std::vector<T> high;
+
+        RandomIt nthp1 = nth;
+        nthp1++;
+
+        if (start != nth and nth != end) {
+            if (range.lowLimits[dim] < wNode[dim]) {
+                low = findElementsInRange(range, start, nth, level+1);
+            }
+        }
 
     }
 
