@@ -376,7 +376,7 @@ public:
     {
         _iterator = _point_cloud->begin();
     };
-    inline virtual ~PointCloudPointAccessInterface() {};
+    inline virtual ~GenericPointCloudPointAccessInterface() {};
 
     virtual PtGeometry<PointCloudGenericAttribute> getPointPosition() const override {
         PtGeometry<PointCloudGenericAttribute> ret;
