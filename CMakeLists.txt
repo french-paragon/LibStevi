@@ -71,21 +71,22 @@ add_subdirectory(submodules)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/submodules)
 include_directories(${MODULES_INCLUDE_DIRECTORIES})
 
-set(LIB_SRC 
+set(LIB_SRC
         stevi_global.h
-	geometry/core.h
-	geometry/geometricexception.cpp
+        geometry/core.h
+        geometry/geometricexception.cpp
         geometry/geometricexception.h
         geometry/alignement.h
         geometry/imagecoordinates.h
-	geometry/lensdistortion.h
-	geometry/pointcloudalignment.cpp
+        geometry/lensdistortion.h
+        geometry/pointcloudalignment.cpp
         geometry/pointcloudalignment.h
         geometry/genericraysalignement.h
         geometry/rotations.h
         geometry/posesmath.h
         geometry/stereorigrectifier.cpp
         geometry/stereorigrectifier.h
+        geometry/genericbinarypartitioningtree.h
         graphs/graphs.h
         graphs/doublyConnectedEdgeLists.h
         graphs/graph_flow.h
@@ -154,6 +155,8 @@ set(LIB_SRC
         imageProcessing/edgesDetection.h
         io/image_io.h
         io/image_io.cpp
+        io/pointcloud_io.h
+        io/pointcloud_io.cpp
         sparseMatching/cornerDetectors.h
         sparseMatching/nonLocalMaximumPointSelection.h
         sparseMatching/pointsOrientation.h
