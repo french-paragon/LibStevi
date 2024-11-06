@@ -160,6 +160,8 @@ set(LIB_SRC
         io/read_exr.h
         io/pointcloud_io.h
         io/pointcloud_io.cpp
+        io/sdc_pointcloud_io.h
+        io/sdc_pointcloud_io.cpp
 		io/read_flo.h
         sparseMatching/cornerDetectors.h
         sparseMatching/nonLocalMaximumPointSelection.h
