@@ -3,6 +3,8 @@
 
 #include "pointcloud_io.h"
 #include <filesystem>
+#include <array>
+#include <numeric>
 
 namespace StereoVision
 {
@@ -12,7 +14,7 @@ namespace IO
 class SdcPointCloudPoint : public PointCloudPointAccessInterface
 {
 public:
-    SdcPointCloudPoint(std::unique_ptr<std::ifstream>&& reader, uint16_t majorVersion, uint16_t minorVersion);
+    SdcPointCloudPoint(std::unique_ptr<std::ifstream> reader, uint16_t majorVersion, uint16_t minorVersion);
 private:
     double time;
     float range;
@@ -44,6 +46,12 @@ private:
     const std::unique_ptr<std::ifstream> reader;
 
     size_t recordByteSize; // number of bytes in a sdc point record
+
+    static constexpr std::array fieldByteSize = {sizeof(time), sizeof(range), sizeof(theta), sizeof(x), sizeof(y),
+        sizeof(z), sizeof(amplitude), sizeof(width), sizeof(targettype), sizeof(target), sizeof(numtarget),
+        sizeof(rgindex), sizeof(channeldesc), sizeof(classid), sizeof(rho), sizeof(reflectance)};
+
+    std::array<size_t, fieldByteSize.size()> fieldOffset; // can be constexrp in c++20
 
 public:
     PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;

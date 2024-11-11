@@ -2,16 +2,20 @@
 #include <optional>
 #include <iostream>
 #include <fstream>
+#include <numeric>
 #include "sdc_pointcloud_io.h"
 #include "pointcloud_io.h"
 
 namespace StereoVision {
 namespace IO {
-SdcPointCloudPoint::SdcPointCloudPoint(std::unique_ptr<std::ifstream> &&reader, uint16_t majorVersion, uint16_t minorVersion):
+SdcPointCloudPoint::SdcPointCloudPoint(std::unique_ptr<std::ifstream> reader, uint16_t majorVersion, uint16_t minorVersion):
     majorVersion{majorVersion}, minorVersion{minorVersion}, reader{std::move(reader)}
 {
-    // compute the size of a sdc point record
-    recordByteSize = sizeof(time) + sizeof(range) + sizeof(theta) + sizeof(x) + sizeof(y) + sizeof(z) + sizeof(amplitude) + sizeof(width) + sizeof(targettype) + sizeof(target) + sizeof(numtarget) + sizeof(rgindex) + sizeof(channeldesc);
+    // compute the offsets
+    std::exclusive_scan(fieldByteSize.begin(), fieldByteSize.end(), fieldOffset.begin(), 0);
+
+    // compute the size of a sdc point record by summing the field sizes
+    recordByteSize = std::reduce(fieldByteSize.begin(), fieldByteSize.end() - 3);
     
     // depending on the version, we have different attributes for the point cloud
     attributeNames = {"time", "range", "theta", "x", "y", "z", "amplitude", "width", "targettype", "target", "numtarget", "rgindex", "channeldesc"};
@@ -97,6 +101,8 @@ std::vector<std::string> SdcPointCloudPoint::attributeList() const {
 }
 
 bool SdcPointCloudPoint::gotoNext() {
+    static_assert(sizeof(float) == 4); // check if float is 4 bytes, should be true on most systems
+    static_assert(sizeof(double) == 8); // check if double is 8 bytes
     // try to read a record
      std::vector<char> buffer(recordByteSize);
     reader->read(buffer.data(), recordByteSize);
@@ -104,45 +110,29 @@ bool SdcPointCloudPoint::gotoNext() {
         return false; // end of file or read error
     }
     // read the data
-    size_t offset = 0; // offset in bytes
-    time = *reinterpret_cast<double*>(buffer.data() + offset);
-    offset += sizeof(time);
-    range = *reinterpret_cast<float*>(buffer.data() + offset);
-    offset += sizeof(range);
-    theta = *reinterpret_cast<float*>(buffer.data() + offset);
-    offset += sizeof(theta);
-    x = *reinterpret_cast<float*>(buffer.data() + offset);
-    offset += sizeof(x);
-    y = *reinterpret_cast<float*>(buffer.data() + offset);
-    offset += sizeof(y);
-    z = *reinterpret_cast<float*>(buffer.data() + offset);
-    offset += sizeof(z);
-    amplitude = *reinterpret_cast<uint16_t*>(buffer.data() + offset);
-    offset += sizeof(amplitude);
-    width = *reinterpret_cast<uint16_t*>(buffer.data() + offset);
-    offset += sizeof(width);
-    targettype = *reinterpret_cast<uint8_t*>(buffer.data() + offset);
-    offset += sizeof(targettype);
-    target = *reinterpret_cast<uint8_t*>(buffer.data() + offset);
-    offset += sizeof(target);
-    numtarget = *reinterpret_cast<uint8_t*>(buffer.data() + offset);
-    offset += sizeof(numtarget);
-    rgindex = *reinterpret_cast<uint16_t*>(buffer.data() + offset);
-    offset += sizeof(rgindex);
-    channeldesc = *reinterpret_cast<uint8_t*>(buffer.data() + offset);
-    offset += sizeof(channeldesc);
+    time = *reinterpret_cast<double*>(buffer.data() + fieldOffset[0]);
+    range = *reinterpret_cast<float*>(buffer.data() + fieldOffset[1]);
+    theta = *reinterpret_cast<float*>(buffer.data() + fieldOffset[2]);
+    x = *reinterpret_cast<float*>(buffer.data() + fieldOffset[3]);
+    y = *reinterpret_cast<float*>(buffer.data() + fieldOffset[4]);
+    z = *reinterpret_cast<float*>(buffer.data() + fieldOffset[5]);
+    amplitude = *reinterpret_cast<uint16_t*>(buffer.data() + fieldOffset[6]);
+    width = *reinterpret_cast<uint16_t*>(buffer.data() + fieldOffset[7]);
+    targettype = *reinterpret_cast<uint8_t*>(buffer.data() + fieldOffset[8]);
+    target = *reinterpret_cast<uint8_t*>(buffer.data() + fieldOffset[9]);
+    numtarget = *reinterpret_cast<uint8_t*>(buffer.data() + fieldOffset[10]);
+    rgindex = *reinterpret_cast<uint16_t*>(buffer.data() + fieldOffset[11]);
+    channeldesc = *reinterpret_cast<uint8_t*>(buffer.data() + fieldOffset[12]);
+    // depending on the version, we have different attributes for the point cloud
     if (majorVersion >= 5) {
         if (minorVersion >= 2) { // version 5.2
-            classid = *reinterpret_cast<uint8_t*>(buffer.data() + offset);
-            offset += sizeof(classid);
+            classid = *reinterpret_cast<uint8_t*>(buffer.data() + fieldOffset[13]);
         }
         if (minorVersion >= 3) { // version 5.3
-            rho = *reinterpret_cast<float*>(buffer.data() + offset);
-            offset += sizeof(rho);
+            rho = *reinterpret_cast<float*>(buffer.data() + fieldOffset[14]);
         }
         if (minorVersion >= 4) { // version 5.4
-            reflectance = *reinterpret_cast<int16_t*>(buffer.data() + offset);
-            offset += sizeof(reflectance);
+            reflectance = *reinterpret_cast<int16_t*>(buffer.data() + fieldOffset[15]);
         }
     }
     return true;
