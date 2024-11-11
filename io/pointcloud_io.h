@@ -53,7 +53,23 @@ struct PtColor<void>{
 };
 
 using PointCloudGenericAttribute =
-std::variant<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, float, double, std::string>;
+std::variant<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, float, double, std::string,
+std::vector<int8_t>, std::vector<uint8_t>, std::vector<int16_t>, std::vector<uint16_t>, std::vector<int32_t>,
+std::vector<uint32_t>, std::vector<int64_t>, std::vector<uint64_t>, std::vector<float>, std::vector<double>, std::vector<std::string>>;
+
+inline bool isAttributeList(PointCloudGenericAttribute const& val) {
+    return std::holds_alternative<std::vector<int8_t>>(val) or
+           std::holds_alternative<std::vector<uint8_t>>(val) or
+           std::holds_alternative<std::vector<int16_t>>(val) or
+           std::holds_alternative<std::vector<uint16_t>>(val) or
+           std::holds_alternative<std::vector<int32_t>>(val) or
+           std::holds_alternative<std::vector<uint32_t>>(val) or
+           std::holds_alternative<std::vector<int64_t>>(val) or
+           std::holds_alternative<std::vector<uint64_t>>(val) or
+           std::holds_alternative<std::vector<float>>(val) or
+           std::holds_alternative<std::vector<double>>(val) or
+           std::holds_alternative<std::vector<std::string>>(val);
+}
 
 template<typename T>
 T castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
