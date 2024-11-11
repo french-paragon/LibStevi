@@ -17,6 +17,9 @@ int main(int argc, char const *argv[]) {
 		return 1;
 	}
 
+	// start timer
+	auto startTime = std::chrono::high_resolution_clock::now();
+
     auto fullAccessOpt = StereoVision::IO::openPointCloudSdc(sdcFilePath);
 
     if (!fullAccessOpt) {
@@ -49,8 +52,10 @@ int main(int argc, char const *argv[]) {
 
     std::cout << "\n\n";
 
+	size_t pointCount = 1;
     for (int i = 0; i < 10; i++)
     {
+		pointCount++;
         std::cout << "--------------- point " << i << " ---------------\n";
         std::cout << "time: " << std::get<double>(cloudpoint->getAttributeByName("time").value_or(double{})) << '\n';
         std::cout << "range: " << std::get<float>(cloudpoint->getAttributeByName("range").value_or(float{})) << '\n';
@@ -71,6 +76,19 @@ int main(int argc, char const *argv[]) {
         if (!cloudpoint->gotoNext()) break;
     }
         std::cout << "-------------------------------------------------\n";
+
+		while (cloudpoint->gotoNext())
+		{
+			pointCount++;
+		}
+		
+		std::cout << "Total number of points: " << pointCount << '\n';
+
+		// stop the timer
+		auto endTime = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double> elapsed = endTime - startTime;
+		std::cout << "Elapsed time: " << elapsed.count() << " s\n";
+		std::cout << "-------------------------------------------------\n";
 
     return 0;
 }
