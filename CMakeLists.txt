@@ -159,6 +159,8 @@ set(LIB_SRC
         io/pointcloud_io.cpp
         io/sdc_pointcloud_io.h
         io/sdc_pointcloud_io.cpp
+        io/pcd_pointcloud_io.h
+        io/pcd_pointcloud_io.cpp
         sparseMatching/cornerDetectors.h
         sparseMatching/nonLocalMaximumPointSelection.h
         sparseMatching/pointsOrientation.h
