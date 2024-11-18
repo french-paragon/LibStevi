@@ -72,29 +72,56 @@ inline bool isAttributeList(PointCloudGenericAttribute const& val) {
 }
 
 template<typename T>
+T castedPointCloudAttribute(PointCloudGenericAttribute const& val);
+
+template<typename T>
+std::vector<T> castedPointCloudAttributeList(PointCloudGenericAttribute const& val);
+
+template <class T>
+std::ostream &operator<<(std::ostream &os, const std::vector<T> &c) {
+    for (size_t i = 0; i < c.size(); ++i) {
+        os << c[i];
+        if (i < c.size() - 1) {
+            os << " ";
+        }
+    }
+    return os;
+}
+
+template<typename T>
 T castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
-
-    static_assert (std::is_integral_v<T> or std::is_floating_point_v<T> or std::is_same_v<std::string, T>,
-            "Target type must be a supported type!");
-
     if (std::holds_alternative<T>(val)) {
         return std::get<T>(val);
     }
 
-    if (std::is_same_v<T, std::string>) {
-        std::stringstream strs;
-        std::visit([&strs] (auto&& arg) {strs << arg;}, val);
-        return strs.str();
+    if constexpr (std::is_same_v<std::string, T> || std::is_integral_v<T> || std::is_floating_point_v<T>) {
+        if constexpr (std::is_same_v<T, std::string>) {
+            std::stringstream strs;
+            std::visit([&strs] (auto&& arg) {strs << arg;}, val);
+            return strs.str();
+        }
+        T ret = std::visit([] (auto&& arg) {
+            if constexpr(std::is_convertible_v<std::remove_cv_t<std::remove_reference_t<decltype(arg)>>, T>) {
+                return static_cast<T>(arg);
+            } else {
+                // this should not happen
+                return T{};
+            }
+        }, val);
+        return ret;
+    } else { // return a list
+        using U = typename T::value_type;
+        if(!isAttributeList(val)) return U{castedPointCloudAttribute<U>(val)}; // vector of size 1
+        U ret;
+        std::visit([&ret] (auto&& arg) {
+            ret.reserve(arg.size());
+            std::for_each(arg.begin(), arg.end(), [&ret] (auto&& val) {
+                ret.push_back(static_cast<T>(val));
+            });
+        }, val);
+            
+        return ret;
     }
-
-    if (std::holds_alternative<std::string>(val)) {
-        double tmp = std::stod(std::get<std::string>(val));
-        return static_cast<T>(tmp);
-    }
-
-    T ret = std::visit([] (auto&& arg) {return static_cast<T>(arg);}, val);
-    return ret;
-
 }
 
 class PointCloudHeaderInterface {
