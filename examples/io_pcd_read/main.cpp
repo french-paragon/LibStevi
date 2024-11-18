@@ -75,7 +75,14 @@ int main(int argc, char const *argv[]) {
         for (auto& att : cloudpoint->attributeList()) {
             std::cout << att << ": " << StereoVision::IO::castedPointCloudAttribute<std::string>(cloudpoint->getAttributeByName(att.c_str()).value_or(std::string{})) << '\n';
         }
-        std::cout << '\n';
+        // point
+        auto pointGeo = cloudpoint->castedPointGeometry<double>();
+        std::cout << "point geometry: " << pointGeo.x << ' ' << pointGeo.y << ' ' << pointGeo.z << '\n';
+        auto pointColor = cloudpoint->castedPointColor<double>();
+        if (pointColor.has_value())
+        {
+            std::cout << "point color: " << pointColor->r << ' ' << pointColor->g << ' ' << pointColor->b << '\n';
+        }
         if (!cloudpoint->gotoNext()) break;
     }
         std::cout << "-------------------------------------------------\n";

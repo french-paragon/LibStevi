@@ -74,9 +74,6 @@ inline bool isAttributeList(PointCloudGenericAttribute const& val) {
 template<typename T>
 T castedPointCloudAttribute(PointCloudGenericAttribute const& val);
 
-template<typename T>
-std::vector<T> castedPointCloudAttributeList(PointCloudGenericAttribute const& val);
-
 template <class T>
 std::ostream &operator<<(std::ostream &os, const std::vector<T> &c) {
     for (size_t i = 0; i < c.size(); ++i) {
@@ -192,7 +189,7 @@ public:
     }
 
     template<typename Color_T>
-    std::optional<PtGeometry<Color_T>> castedPointColor() const {
+    std::optional<PtColor<Color_T>> castedPointColor() const {
         static_assert (std::is_integral_v<Color_T> or std::is_floating_point_v<Color_T>, "Color type needs to be an integral or floating point type");
 
         std::optional<PtColor<PointCloudGenericAttribute>> raw_opt = getPointColor();

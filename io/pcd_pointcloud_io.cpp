@@ -93,7 +93,8 @@ std::optional<PtColor<PointCloudGenericAttribute>> PcdPointCloudPoint::getPointC
     if (!rgba_opt.has_value()) {
         return std::nullopt;
     }
-    uint32_t rgba = std::get<uint32_t>(rgba_opt.value());
+    const float rgba_float = std::get<float>(rgba_opt.value());
+    const uint32_t rgba = *reinterpret_cast<const uint32_t*>(&rgba_float);
     const uint8_t a = (rgba >> 24)  & 0x000000FF;
     const uint8_t r = (rgba >> 16)  & 0x000000FF;
     const uint8_t g = (rgba >> 8)   & 0x000000FF;
@@ -214,9 +215,8 @@ bool PcdPointCloudPoint::gotoNextAscii()
                 return false;
             }
         }
-        return true;
     }
-    return false;
+    return true;
 }  
 
 bool PcdPointCloudPoint::gotoNextBinary()
