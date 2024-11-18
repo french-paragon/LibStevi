@@ -33,8 +33,6 @@ SdcPointCloudPoint::SdcPointCloudPoint(std::unique_ptr<std::ifstream> reader, ui
             recordByteSize += sizeof(reflectance);
         }
     }
-    // read the first cloudPoint
-    gotoNext();
 }
 
 PtGeometry<PointCloudGenericAttribute> SdcPointCloudPoint::getPointPosition() const {
@@ -207,10 +205,17 @@ std::optional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesy
     // next headerSize - 8 bytes are the header informations
     std::string headerInformation{bufferHeader.data() + 4, headerSize - 4};
 
-    PointCloudHeaderInterface* header = new SdcPointCloudHeader(headerSize, majorVersion, minorVersion, headerInformation);
-    PointCloudPointAccessInterface* cloudpoint = new SdcPointCloudPoint(std::move(inputFile), majorVersion, minorVersion);
-
-    return FullPointCloudAccessInterface(header, cloudpoint);
+    auto header = std::make_unique<SdcPointCloudHeader>(headerSize, majorVersion, minorVersion, headerInformation);
+    auto cloudpoint = std::make_unique<SdcPointCloudPoint>(std::move(inputFile), majorVersion, minorVersion);
+    
+    FullPointCloudAccessInterface fullPointInterface;
+    // read the first point
+    if (cloudpoint->gotoNext()) {
+        fullPointInterface.headerAccess = std::move(header);
+        fullPointInterface.pointAccess = std::move(cloudpoint);
+        return fullPointInterface;
+    }
+    return std::nullopt;
 }
 
 } // namespace IO
