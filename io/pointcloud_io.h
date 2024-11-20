@@ -85,38 +85,128 @@ std::ostream &operator<<(std::ostream &os, const std::vector<T> &c) {
     return os;
 }
 
+// template to check if a type is a vector
+template <typename T>
+struct is_vector : std::false_type {};
+
+template <typename T, typename Alloc>
+struct is_vector<std::vector<T, Alloc>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_vector_v = is_vector<T>::value;
+
 template<typename T>
 T castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
+
+    constexpr bool isSimpleReturnType = std::is_integral_v<T> || std::is_floating_point_v<T> || std::is_same_v<std::string, T>;
+    constexpr bool isVectorReturnType = is_vector_v<T>;
+
+    static_assert(isSimpleReturnType or isVectorReturnType, "Target type must be a supported type!");
+
     if (std::holds_alternative<T>(val)) {
         return std::get<T>(val);
     }
 
-    if constexpr (std::is_same_v<std::string, T> || std::is_integral_v<T> || std::is_floating_point_v<T>) {
-        if constexpr (std::is_same_v<T, std::string>) {
-            std::stringstream strs;
-            std::visit([&strs] (auto&& arg) {strs << arg;}, val);
-            return strs.str();
-        }
+    if constexpr (std::is_same_v<T, std::string>) {
+        std::stringstream strs;
+        std::visit([&strs] (auto&& arg) {strs << arg;}, val);
+        return strs.str();
+    } else {
+        // redundant assertion in case we add other types
+        static_assert(std::is_integral_v<T> || std::is_floating_point_v<T> || isVectorReturnType,
+            "Target type should be an integral, a floating point number or a vector at this stage");
+
         T ret = std::visit([] (auto&& arg) {
-            if constexpr(std::is_convertible_v<std::remove_cv_t<std::remove_reference_t<decltype(arg)>>, T>) {
-                return static_cast<T>(arg);
+            using variantHeld_t = std::decay_t<decltype(arg)>; // the type inside the alternative
+            constexpr bool isSimpleHeldType = std::is_integral_v<variantHeld_t> || std::is_floating_point_v<variantHeld_t>
+                || std::is_same_v<std::string, variantHeld_t>;
+            const bool isVectorHeldType = is_vector_v<variantHeld_t>;
+            if constexpr (isSimpleHeldType && isSimpleReturnType) { //* simple type => simple type conversion
+                if constexpr (std::is_same_v<std::string, variantHeld_t>) {
+                    double tmp = std::stod(arg);
+                    return static_cast<T>(tmp);
+                } else {
+                    return static_cast<T>(arg);
+                }
+            } else if constexpr (isSimpleHeldType && isVectorReturnType) { //* simple type => vector conversion
+                using returnVectorValue_t = typename T::value_type;
+                if constexpr (std::is_same_v<std::string, variantHeld_t>) {
+                    // try to interpret it as a vector
+                    T vec;
+                    std::stringstream ss(arg);
+                    std::string token;
+                    while (ss >> token) {
+                        if (ss.fail()) {
+                            return T{};
+                        }
+                        if constexpr (std::is_same_v<returnVectorValue_t, std::string>) {
+                            vec.push_back(token);
+                        } else {
+                            double tmp = std::stod(token);
+                            vec.push_back(static_cast<returnVectorValue_t>(tmp));
+                        }
+                    }
+                    return vec;
+                } else if constexpr (std::is_same_v<returnVectorValue_t, std::string>) {
+                    std::stringstream strs;
+                    strs << arg;
+                    return T{strs.str()};
+                } else if constexpr (std::is_convertible_v<variantHeld_t, returnVectorValue_t>) { // try to wrap it
+                        return T{static_cast<returnVectorValue_t>(arg)};
+                } else if constexpr(std::is_convertible_v<variantHeld_t, T>) {
+                    return static_cast<T>(arg);
+                } else {
+                    return T{};
+                }
+            } else if constexpr (isVectorHeldType && isVectorReturnType) { //* vector => vector conversion
+                using returnVectorValue_t = typename T::value_type;
+                using variantVectorValue_t = std::remove_cv_t<std::remove_reference_t<typename variantHeld_t::value_type>>;
+                if constexpr(std::is_convertible_v<variantVectorValue_t, returnVectorValue_t>) {
+                    T vec;
+                    vec.reserve(arg.size());
+                    for(auto&& e: arg) {
+                        vec.push_back(static_cast<returnVectorValue_t>(e));
+                    }
+                    return vec;
+                } else if constexpr (std::is_same_v<returnVectorValue_t, std::string>) {
+                    T vec;
+                    vec.reserve(arg.size());
+                    for(auto&& e: arg) {
+                        std::stringstream strs;
+                        strs << e;
+                        vec.push_back(strs.str());
+                    }
+                    return vec;
+                } else if constexpr (std::is_same_v<std::string, variantVectorValue_t>) {
+                    T vec;
+                    vec.reserve(arg.size());
+                    for (auto&& e : arg) {
+                        double tmp = std::stod(e);
+                        vec.push_back(static_cast<returnVectorValue_t>(tmp));
+                    }
+                    return vec;
+                } else {
+                    return T{}; // empty vector
+                }
+            } else if constexpr (isVectorHeldType && isSimpleReturnType) { //* vector => simple type conversion
+                // case vector => string is already handled above
+                using variantVectorValue_t = std::remove_cv_t<std::remove_reference_t<typename variantHeld_t::value_type>>;
+                // it might be possible to convert it by taking the first element
+                if constexpr (std::is_same_v<std::string, variantVectorValue_t>) {
+                    // vector => number
+                    double tmp = std::stod(arg[0]);
+                    return static_cast<T>(tmp);
+                } else if constexpr (std::is_convertible_v<variantVectorValue_t, T>) {
+                    return static_cast<T>(arg[0]);
+                } else {
+                    return T{};
+                }
             } else {
                 // this should not happen
-                return T{};
+                static_assert(false, "Not all possible types are accepted by the visitor.");
             }
+            return T{};
         }, val);
-        return ret;
-    } else { // return a list
-        using U = typename T::value_type;
-        if(!isAttributeList(val)) return U{castedPointCloudAttribute<U>(val)}; // vector of size 1
-        U ret;
-        std::visit([&ret] (auto&& arg) {
-            ret.reserve(arg.size());
-            std::for_each(arg.begin(), arg.end(), [&ret] (auto&& val) {
-                ret.push_back(static_cast<T>(val));
-            });
-        }, val);
-            
         return ret;
     }
 }

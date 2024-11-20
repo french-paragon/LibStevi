@@ -59,6 +59,9 @@ int main(int argc, char const *argv[]) {
     for (auto& att : header->attributeList()) {
         std::cout << att << ": " << StereoVision::IO::castedPointCloudAttribute<std::string>(header->getAttributeByName(att.c_str()).value_or(std::string{})) << '\n';
     }
+    // get the viewpoint
+    auto viewpoint = StereoVision::IO::castedPointCloudAttribute<std::vector<double>>(header->getAttributeByName("viewpoint").value_or(std::vector<double>{1}));
+    std::cout << "viewpoint sss: " << viewpoint << '\n';
 
     std::cout << "Point cloud attributes: ";
     for (auto& att : cloudpoint->attributeList()) {
@@ -99,6 +102,11 @@ int main(int argc, char const *argv[]) {
 		std::chrono::duration<double> elapsed = endTime - startTime;
 		std::cout << "Elapsed time: " << elapsed.count() << " s\n";
 		std::cout << "-------------------------------------------------\n";
+
+        // write the point cloud to a pcd file
+        std::filesystem::path pcdFilePathOut = pcdFilePath;
+        pcdFilePathOut.replace_extension("out.pcd");
+        StereoVision::IO::writePointCloudPcd(pcdFilePathOut, fullAccess);
 
     return 0;
 }

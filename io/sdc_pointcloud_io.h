@@ -14,7 +14,7 @@ namespace IO
 class SdcPointCloudPoint : public PointCloudPointAccessInterface
 {
 public:
-    SdcPointCloudPoint(std::unique_ptr<std::ifstream> reader, uint16_t majorVersion, uint16_t minorVersion);
+    SdcPointCloudPoint(std::unique_ptr<std::istream> reader, uint16_t majorVersion, uint16_t minorVersion);
 private:
     double time;
     float range;
@@ -43,7 +43,7 @@ private:
 
     std::vector<std::string> attributeNames;
     // reader "head"
-    const std::unique_ptr<std::ifstream> reader;
+    const std::unique_ptr<std::istream> reader;
 
     size_t recordByteSize; // number of bytes in a sdc point record
 

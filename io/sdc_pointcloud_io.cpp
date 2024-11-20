@@ -8,7 +8,7 @@
 
 namespace StereoVision {
 namespace IO {
-SdcPointCloudPoint::SdcPointCloudPoint(std::unique_ptr<std::ifstream> reader, uint16_t majorVersion, uint16_t minorVersion):
+SdcPointCloudPoint::SdcPointCloudPoint(std::unique_ptr<std::istream> reader, uint16_t majorVersion, uint16_t minorVersion):
     majorVersion{majorVersion}, minorVersion{minorVersion}, reader{std::move(reader)}
 {
     // compute the offsets
@@ -138,8 +138,6 @@ bool SdcPointCloudPoint::gotoNext() {
 
 SdcPointCloudPoint::~SdcPointCloudPoint()
 {
-    // close the file
-    reader->close();
 }
 
 SdcPointCloudHeader::SdcPointCloudHeader(const uint32_t headerSize, const uint16_t majorVersion, const uint16_t minorVersion, const std::string& headerInformation)

@@ -16,12 +16,12 @@ namespace IO {
 
     static std::ostream &operator<<(std::ostream &os, const PcdDataStorageType &data);
     static std::istream &operator>>(std::istream &is, PcdDataStorageType &data);
-    template <class ContainerT>
-    static std::string joinToString(const ContainerT& c);
-    static std::unique_ptr<PcdPointCloudHeader> readPcdHeader(std::ifstream& reader);
-    static bool getNextHeaderLine(std::ifstream& reader, std::string& line, std::vector<std::string>& lineSplit, std::stringstream& lineStream);
+    static std::unique_ptr<PcdPointCloudHeader> readPcdHeader(std::istream& reader);
+    static bool getNextHeaderLine(std::istream& reader, std::string& line, std::vector<std::string>& lineSplit, std::stringstream& lineStream);
+    static bool writePcdHeader(std::ostream& writer, const PointCloudHeaderInterface& header, 
+                               std::streampos& headerWidthPos, std::streampos& headerHeightPos, std::streampos& headerPointsPos);
 
-PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::ifstream> reader,
+PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::istream> reader,
     const std::vector<std::string>& attributeNames, const std::vector<size_t>& fieldByteSize,
     const std::vector<uint8_t>& fieldType, const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType):
     attributeNames{attributeNames}, fieldByteSize{fieldByteSize},
@@ -234,7 +234,6 @@ bool PcdPointCloudPoint::gotoNextBinaryCompressed()
 
 PcdPointCloudPoint::~PcdPointCloudPoint()
 {
-    reader->close();
 }
 
 /**
@@ -365,61 +364,152 @@ std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesy
     return std::nullopt;
 }
 
+bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloudAccessInterface &pointCloud)
+{
+   // open the file
+    auto writer = std::make_unique<std::fstream>(pcdFilePath, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
+    if (!writer->is_open()) return false;
+    
+    // position of some header elements that might change
+    std::streampos headerWidthPos;
+    std::streampos headerHeightPos;
+    std::streampos headerPointsPos;
+
+    PcdPointCloudHeaderAdapter pcdHeaderAccessAdapter{pointCloud.headerAccess.get()};
+    
+    // TODO: use adapter header here
+
+    // write the header
+    if (!writePcdHeader(*writer, *pointCloud.headerAccess, headerWidthPos, headerHeightPos, headerPointsPos)) {
+        return false;
+    }
+
+    // write the points
+    PcdPointCloudPointAdapter pcdPointAccessAdapter(pointCloud.pointAccess.get(), pcdHeaderAccessAdapter.fields,
+        pcdHeaderAccessAdapter.size, pcdHeaderAccessAdapter.type, pcdHeaderAccessAdapter.count,
+        pcdHeaderAccessAdapter.data);
+
+    return true;
+}
+
+PcdPointCloudPointAdapter::PcdPointCloudPointAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface,
+    const std::vector<std::string> &attributeNames, const std::vector<size_t> &fieldByteSize,
+    const std::vector<uint8_t> &fieldType, const std::vector<size_t> &fieldCount, PcdDataStorageType dataStorageType) :
+    PcdPointCloudPoint(nullptr, attributeNames, fieldByteSize, fieldType, fieldCount, dataStorageType),
+    pointCloudPointAccessInterface(pointCloudPointAccessInterface)
+{
+    adaptInternalState(); // set the internal state for the first time
+}
+
+bool PcdPointCloudPointAdapter::gotoNext()
+{
+    auto success = pointCloudPointAccessInterface->gotoNext();
+    if (success) {
+        success  = adaptInternalState();
+    }
+    return success;
+}
+
+PcdPointCloudPointAdapter::~PcdPointCloudPointAdapter()
+{
+}
+
+bool PcdPointCloudPointAdapter::adaptInternalState()
+{
+    static_assert(sizeof(float) == 4 && sizeof(double) == 8);
+
+    isStateValid_v = false;
+
+    if (pointCloudPointAccessInterface == nullptr) return false;
+
+    auto convertAndCopy = [](auto data, auto* dataPtr, auto size) {
+        std::memcpy(dataPtr, &data, size);
+    };
+
+    auto convertAndCopyVector = [](const auto& vector, auto* dataPtr, auto elementByteSize) {
+        std::memcpy(dataPtr, vector.data(), vector.size() * elementByteSize);
+    };
+
+    for (size_t fieldIt = 0; fieldIt < fieldByteSize.size(); fieldIt++) {
+        auto count = fieldCount[fieldIt];
+        auto size = fieldByteSize[fieldIt];
+        auto type = fieldType[fieldIt];
+
+        // try to get the attribute
+        auto attrOpt = pointCloudPointAccessInterface->getAttributeById(fieldIt);
+        if (!attrOpt.has_value()) return false;
+        const auto& attr = attrOpt.value();
+
+            auto* position = dataBuffer.data() + fieldOffset[fieldIt];
+            try {
+                if (!isAttributeList(attr)) {
+                    if (count != 1) return false; // should not happen
+                    // test the type and size
+                    if (type == 'F') {
+                        if (size == 4) convertAndCopy(castedPointCloudAttribute<float>(attr), position, size);
+                        if (size == 8) convertAndCopy(castedPointCloudAttribute<double>(attr), position, size);
+                    } else if (type == 'I') {
+                        if (size == 1) convertAndCopy(castedPointCloudAttribute<int8_t>(attr), position, size);
+                        if (size == 2) convertAndCopy(castedPointCloudAttribute<int16_t>(attr), position, size);
+                        if (size == 4) convertAndCopy(castedPointCloudAttribute<int32_t>(attr), position, size);
+                        if (size == 8) convertAndCopy(castedPointCloudAttribute<int64_t>(attr), position, size);
+                    } else if (type == 'U') {
+                        if (size == 1) convertAndCopy(castedPointCloudAttribute<uint8_t>(attr), position, size);
+                        if (size == 2) convertAndCopy(castedPointCloudAttribute<uint16_t>(attr), position, size);
+                        if (size == 4) convertAndCopy(castedPointCloudAttribute<uint32_t>(attr), position, size);
+                        if (size == 8) convertAndCopy(castedPointCloudAttribute<uint64_t>(attr), position, size);
+                    } else {
+                        return false;
+                    }
+                } else { // same thing but with vectors
+                    if (type == 'F') {
+                        if (size == 4) convertAndCopyVector(castedPointCloudAttribute<std::vector<float>>(attr), position, size);
+                        if (size == 8) convertAndCopyVector(castedPointCloudAttribute<std::vector<double>>(attr), position, size);
+                    } else if (type == 'I') {
+                        if (size == 1) convertAndCopyVector(castedPointCloudAttribute<std::vector<int8_t>>(attr), position, size);
+                        if (size == 2) convertAndCopyVector(castedPointCloudAttribute<std::vector<int16_t>>(attr), position, size);
+                        if (size == 4) convertAndCopyVector(castedPointCloudAttribute<std::vector<int32_t>>(attr), position, size);
+                        if (size == 8) convertAndCopyVector(castedPointCloudAttribute<std::vector<int64_t>>(attr), position, size);
+                    } else if (type == 'U') {
+                        if (size == 1) convertAndCopyVector(castedPointCloudAttribute<std::vector<uint8_t>>(attr), position, size);
+                        if (size == 2) convertAndCopyVector(castedPointCloudAttribute<std::vector<uint16_t>>(attr), position, size);
+                        if (size == 4) convertAndCopyVector(castedPointCloudAttribute<std::vector<uint32_t>>(attr), position, size);
+                        if (size == 8) convertAndCopyVector(castedPointCloudAttribute<std::vector<uint64_t>>(attr), position, size);
+                    } else {
+                        return false;
+                    }
+                }
+            } catch (...) {
+                return false;
+            }
+            
+    }
+    isStateValid_v = true;
+    return true;
+}
+
+PcdPointCloudHeaderAdapter::PcdPointCloudHeaderAdapter(PointCloudHeaderInterface *pointCloudHeaderInterface) :
+    PcdPointCloudHeader(0, {}, {}, {}, {}, 0, 0, {}, 0, PcdDataStorageType::ascii)
+{
+    this->pointCloudHeaderInterface = pointCloudHeaderInterface;
+
+    // try to adapt the header
+    adaptInternalState();
+}
+
+PcdPointCloudHeaderAdapter::~PcdPointCloudHeaderAdapter()
+{
+}
+
+bool PcdPointCloudHeaderAdapter::adaptInternalState()
+{
+    return false;
+}
+
 /***************************       PRIVATE FUNCTIONS      ************************************/
 
-// joins the elements of a vector/array to a string
-template <class ContainerT>
-static std::string joinToString(const ContainerT& c) {
-    std::ostringstream oss;
-    try {
-    for (size_t i = 0; i < c.size(); ++i) {
-        oss << c[i];
-        if (i < c.size() - 1) {
-            oss << " ";
-        }
-    }
-    if (oss.fail()) {
-        return "";
-    }
-    } catch (...) {
-        return "";
-    }
-    return oss.str();
-}
-
-// return a vector of T from a string
-template <typename T>
-static std::vector<T> splitFromString(const std::string& str) {
-    std::vector<T> vec;
-    std::stringstream ss(str);
-    T val;
-    while (ss >> val) {
-        if (ss.fail()) {
-            return {};
-        }
-        vec.push_back(val);
-    }
-    return vec;
-}
-
-// return an std::array from a string
-template <typename T, size_t N>
-static std::array<T, N> splitFromString(const std::string& str) {
-    std::array<T, N> arr;
-    std::stringstream ss(str);
-    T val;
-    for (size_t i = 0; i < N; ++i) {
-        ss >> val;
-        if (ss.fail()) {
-            return {};
-        }
-        arr[i] = val;
-    }
-    return arr;
-}
-
-// read the header of the PCD file
-static std::unique_ptr<PcdPointCloudHeader> readPcdHeader(std::ifstream& reader) {
+// read the header of the PCD filead
+static std::unique_ptr<PcdPointCloudHeader> readPcdHeader(std::istream& reader) {
     
     // data for the header
     double version;
@@ -560,7 +650,7 @@ static std::unique_ptr<PcdPointCloudHeader> readPcdHeader(std::ifstream& reader)
     return std::make_unique<PcdPointCloudHeader>(version, fields, size, type, count, width, height, viewpoint, points, data);
 }
 
-static bool getNextHeaderLine(std::ifstream& reader, std::string& line, std::vector<std::string>& lineSplit, std::stringstream& lineStream) {
+static bool getNextHeaderLine(std::istream& reader, std::string& line, std::vector<std::string>& lineSplit, std::stringstream& lineStream) {
     try {
         while(reader.good()) { // If no error occurs, the while loop should not reach the exit condition.
             // read a line
@@ -598,6 +688,56 @@ static bool getNextHeaderLine(std::ifstream& reader, std::string& line, std::vec
         return false;
     }
     return false;
+}
+
+bool writePcdHeader(std::ostream &writer, const PointCloudHeaderInterface &header, std::streampos &headerWidthPos,
+                    std::streampos &headerHeightPos, std::streampos &headerPointsPos)
+{
+    if (!writer.good()) return false;
+
+    std::cout << "writing header" << std::endl;
+
+    std::vector<std::string> pcdAttributes = {"version", "fields", "size", "type", "count", "width", "height", "viewpoint", "points", "data"};
+
+    // convert the bigest size_t to a string and get its length
+    std::string maxSizeStr = std::to_string(std::numeric_limits<size_t>::max());
+
+    // try to get the header data
+    for (auto attribute : pcdAttributes) {
+        std::cout << "attribute: " << attribute << std::endl;
+        auto attrOpt = header.getAttributeByName(attribute.c_str());
+        if (!attrOpt.has_value()) return false;
+
+        const auto& attr = attrOpt.value();
+        // cast to string
+        std::string attrStr = castedPointCloudAttribute<std::string>(attr);
+
+        std::string attributeNameCap = attribute;
+        // attribute name to upper case
+        std::transform(attributeNameCap.begin(), attributeNameCap.end(), attributeNameCap.begin(), [](unsigned char c) {   
+            return std::toupper(c);
+        });
+        std::cout << "attrStr: " << attrStr << std::endl;
+        // write the attribute name
+        writer << attributeNameCap << " ";
+
+        // if the attribute is either points, width or height, resize it to the length of maxSizeStr
+        // we need to do this because we will maybe modify the attribute later
+        if (attribute == "width") {
+            attrStr.resize(maxSizeStr.length(), ' ');
+            headerWidthPos = writer.tellp();
+        } else if (attribute == "height") {
+            attrStr.resize(maxSizeStr.length(), ' ');
+            headerHeightPos = writer.tellp();
+        } else if (attribute == "points") {
+            attrStr.resize(maxSizeStr.length(), ' ');
+            headerPointsPos = writer.tellp();
+        }
+
+        // write the attribute value
+        writer << attrStr << std::endl;
+    }
+    return true;
 }
 
 } // namespace IO
