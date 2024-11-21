@@ -58,7 +58,11 @@ public:
     std::vector<std::string> attributeList() const override;
 
     bool gotoNext() override;
-    
+
+    static bool writePoint(std::ostream& writer, const PcdPointCloudPoint& point, PcdDataStorageType dataStorageType);
+    static bool writePointAscii(std::ostream& writer, const PcdPointCloudPoint& point);
+    static bool writePointBinary(std::ostream& writer, const PcdPointCloudPoint& point);
+
     // destructor
     ~PcdPointCloudPoint() override;
 private:
@@ -75,8 +79,13 @@ protected:
 private:
     // true if the state of the adapter is valid
     bool isStateValid_v = false;
-public:
-    PcdPointCloudPointAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface,
+public:    
+    /**
+     * @brief Factory method to create a PcdPointCloudPointAdapter. We use a shared_ptr because if the given iterface
+     * is already a PcdPointCloudPointAdapter, we don't want to create a new one. We will directly use the given interface
+     * and we don't have the ownerhip.
+     */
+    static std::shared_ptr<PcdPointCloudPointAdapter> create(PointCloudPointAccessInterface* pointCloudPointAccessInterface,
         const std::vector<std::string>& attributeNames, const std::vector<size_t>& fieldByteSize,
         const std::vector<uint8_t>& fieldType, const std::vector<size_t>& fieldCount,
         PcdDataStorageType dataStorageType);
@@ -93,7 +102,12 @@ public:
     // destructor
     ~PcdPointCloudPointAdapter() override;
 
-private:
+protected:
+    PcdPointCloudPointAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface,
+        const std::vector<std::string>& attributeNames, const std::vector<size_t>& fieldByteSize,
+        const std::vector<uint8_t>& fieldType, const std::vector<size_t>& fieldCount,
+        PcdDataStorageType dataStorageType);
+
     /**
      * @brief fill the internal data buffer with the values of the attributes of the current point.
      * 
@@ -117,7 +131,7 @@ public:
     size_t points;
     PcdDataStorageType data;
 
-private:
+protected:
     // attribute names for the header
     std::vector<std::string> attributeNames = {"version", "fields", "size", "type", "count", "width", "height", "viewpoint", "points", "data"};
 public:
@@ -132,6 +146,13 @@ public:
     std::optional<PointCloudGenericAttribute> getAttributeByName(const char* attributeName) const override;
 
     std::vector<std::string> attributeList() const override;
+
+    static std::unique_ptr<PcdPointCloudHeader> readHeader(std::istream& reader);
+
+    static bool getNextHeaderLine(std::istream& reader, std::string& line, std::vector<std::string>& lineSplit, std::stringstream& lineStream);
+
+    static bool writeHeader(std::ostream& writer, const PcdPointCloudHeader& header, 
+                               std::streampos& headerWidthPos, std::streampos& headerHeightPos, std::streampos& headerPointsPos);
 };
 
 /// @brief adapter class to obtain a PcdPointCloudHeader from any PointCloudHeaderInterface
@@ -182,12 +203,14 @@ std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesy
  * 
  * Write a point cloud to a pcd file.
  * 
- * @param pcdFilePath The path to the pcd file to write
- * @param pointCloud The point cloud to write to the pcd file
+ * @param pcdFilePath The path to the pcd file to write.
+ * @param pointCloud The point cloud to write to the pcd file.
+ * @param dataStorageType The data storage type to use. If not specified, the data storage type defined in the header will be used
  * 
  * @return True if the point cloud was written to the pcd file, false otherwise
  */
-bool writePointCloudPcd(const std::filesystem::path& pcdFilePath, FullPointCloudAccessInterface& pointCloud);
+bool writePointCloudPcd(const std::filesystem::path& pcdFilePath, FullPointCloudAccessInterface& pointCloud,
+    std::optional<PcdDataStorageType> dataStorageType = std::nullopt);
 
 } // namespace IO
 } // namespace StereoVision

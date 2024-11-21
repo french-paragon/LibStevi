@@ -7,6 +7,7 @@
 #include <iostream>
 #include <fstream>
 #include <algorithm>
+#include <memory>
 #include "pcd_pointcloud_io.h"
 #include "pointcloud_io.h"
 
@@ -16,10 +17,6 @@ namespace IO {
 
     static std::ostream &operator<<(std::ostream &os, const PcdDataStorageType &data);
     static std::istream &operator>>(std::istream &is, PcdDataStorageType &data);
-    static std::unique_ptr<PcdPointCloudHeader> readPcdHeader(std::istream& reader);
-    static bool getNextHeaderLine(std::istream& reader, std::string& line, std::vector<std::string>& lineSplit, std::stringstream& lineStream);
-    static bool writePcdHeader(std::ostream& writer, const PointCloudHeaderInterface& header, 
-                               std::streampos& headerWidthPos, std::streampos& headerHeightPos, std::streampos& headerPointsPos);
 
 PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::istream> reader,
     const std::vector<std::string>& attributeNames, const std::vector<size_t>& fieldByteSize,
@@ -28,6 +25,7 @@ PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::istream> reader,
     fieldOffset(fieldByteSize.size()), fieldType{fieldType}, fieldCount{fieldCount},
     dataStorageType{dataStorageType}, reader{std::move(reader)}
 {
+    // compute the offsets
     const auto* fieldCountPtr = fieldCount.data();
     const auto* fieldByteSizePtr = fieldByteSize.data();
     // compute the offsets with transform_exclusive_scan
@@ -36,9 +34,10 @@ PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::istream> reader,
         auto i = std::distance(fieldByteSizePtr, &size);
         return fieldCountPtr[i] * size;
     });
-
     // compute the size of a "record", which is the last offset + the last size times the last count
-    recordByteSize = fieldOffset.back() + fieldCount.back() * fieldByteSize.back();
+    if (!(fieldOffset.empty() || fieldCount.empty() || fieldByteSize.empty())) {
+        recordByteSize = fieldOffset.back() + fieldCount.back() * fieldByteSize.back();
+    }
     // resize the data
     dataBuffer.resize(recordByteSize);
 
@@ -178,7 +177,7 @@ bool PcdPointCloudPoint::gotoNextAscii()
     // read a line
     std::string line;
     std::getline(*reader, line);
-    if (!reader->good()) return false;
+    if (reader->fail() || line.empty()) return false;
     // parse the line
     std::stringstream ss(line);
     std::string token;
@@ -294,6 +293,222 @@ std::optional<PointCloudGenericAttribute> PcdPointCloudHeader::getAttributeByNam
     return std::nullopt;
 }
 
+// read the header of the PCD filead
+std::unique_ptr<PcdPointCloudHeader> PcdPointCloudHeader::readHeader(std::istream& reader) {
+    
+    // data for the header
+    double version;
+    std::vector<std::string> fields;
+    std::vector<size_t> size;
+    std::vector<uint8_t> type;
+    std::vector<size_t> count;
+    size_t width;
+    size_t height;
+    std::vector<double> viewpoint{0, 0, 0, 1, 0, 0, 0}; // translation (tx ty tz) + quaternion (qw qx qy qz)
+    size_t points;
+    PcdDataStorageType data = PcdDataStorageType::ascii; // default data type is ascii
+    
+    try {
+        std::string line;
+        std::vector<std::string> lineSplit; // variable holding the split line data
+        std::stringstream lineStream; // we will also use this stream to easily convert the data to the correct type
+
+        std::string headerEntryName;
+        size_t nbFields;
+
+        if (!PcdPointCloudHeader::getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
+        
+        //* --------- version ----------------
+        lineStream >> headerEntryName;
+        if (headerEntryName == "VERSION") {
+            lineStream >> version;
+            if (lineStream.fail()) return nullptr;
+            if (!PcdPointCloudHeader::getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
+        }
+
+        //* --------- fields ----------------
+        lineStream >> headerEntryName;
+        if (headerEntryName == "FIELDS") {
+            fields = std::vector<std::string>(lineSplit.begin()+1, lineSplit.end());
+            if (!PcdPointCloudHeader::getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
+        } else {
+            // error if fields is not defined properly
+            return nullptr;
+        }
+        // set the data according to the nimber of fields
+        nbFields = fields.size();
+        size = std::vector<size_t>(nbFields, 4); // default size is 4 bytes
+        type = std::vector<uint8_t>(nbFields, 'F'); // default type is float
+        count = std::vector<size_t>(nbFields, 1); // default count is 1
+
+        //* --------- size ----------------
+        lineStream >> headerEntryName;
+        if (headerEntryName == "SIZE") {
+            if (lineSplit.size()-1 != nbFields) return nullptr; // error if size is not defined properly
+            for (size_t i = 0; i < nbFields; ++i) {
+                lineStream >> size[i];
+            }
+            if (lineStream.fail()) return nullptr;
+            if (!PcdPointCloudHeader::getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
+        } else {
+            // error if size is not defined properly
+            return nullptr;
+        }
+
+        //* --------- type ----------------
+        lineStream >> headerEntryName;
+        if (headerEntryName == "TYPE") {
+            if (lineSplit.size()-1 != nbFields) return nullptr; // error if type is not defined properly
+            for (size_t i = 0; i < nbFields; ++i) {
+                lineStream >> type[i];
+            }
+            if (lineStream.fail()) return nullptr;
+            if (!PcdPointCloudHeader::getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
+        } else {
+            // error if type is not defined properly
+            return nullptr;
+        }
+        
+        //* --------- count ----------------
+        lineStream >> headerEntryName;
+        if (headerEntryName == "COUNT") {
+            if (lineSplit.size()-1 != nbFields) return nullptr; // error if count is not defined properly
+            for (size_t i = 0; i < nbFields; ++i) {
+                lineStream >> count[i];
+            }
+            if (lineStream.fail()) return nullptr;
+            if (!PcdPointCloudHeader::getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
+        }
+
+        //* --------- width ----------------
+        lineStream >> headerEntryName;
+        if (headerEntryName == "WIDTH") {
+            lineStream >> width;
+            if (lineStream.fail()) return nullptr;
+            if (!PcdPointCloudHeader::getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
+        } else {
+            // error if width is not defined properly
+            return nullptr;
+        }
+
+        //* --------- height ----------------
+        lineStream >> headerEntryName;
+        if (headerEntryName == "HEIGHT") {
+            lineStream >> height;
+            if (lineStream.fail()) return nullptr;
+            if (!PcdPointCloudHeader::getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
+        } else {
+            // error if height is not defined properly
+            return nullptr;
+        }
+
+        //* --------- viewpoint ----------------
+        lineStream >> headerEntryName;
+        if (headerEntryName == "VIEWPOINT") {
+            for (size_t i = 0; i < viewpoint.size(); ++i) {
+                lineStream >> viewpoint[i];
+            }
+            if (lineStream.fail()) return nullptr;
+            if (!PcdPointCloudHeader::getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
+        }
+
+        //* --------- points ----------------
+        lineStream >> headerEntryName;
+        if (headerEntryName == "POINTS") {
+            lineStream >> points;
+            if (lineStream.fail()) return nullptr;
+            if (!PcdPointCloudHeader::getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
+        } else {
+            points = width * height;
+        }
+
+        //* --------- data ----------------
+        lineStream >> headerEntryName;
+        if (headerEntryName == "DATA") {
+            lineStream >> data;
+            if (lineStream.fail()) return nullptr;
+        }
+    } catch(const std::exception& e) {
+        return nullptr;
+    }
+
+    return std::make_unique<PcdPointCloudHeader>(version, fields, size, type, count, width, height, viewpoint, points, data);
+}
+
+bool PcdPointCloudHeader::getNextHeaderLine(std::istream& reader, std::string& line, std::vector<std::string>& lineSplit, std::stringstream& lineStream) {
+    try {
+        while(reader.good()) { // If no error occurs, the while loop should not reach the exit condition.
+            // read a line
+            std::getline(reader, line);
+
+            //* ignore empty lines */
+            // if the line is empty, skip it
+            if (line.empty()) {
+                continue;
+            }
+
+            // split the line into tokens
+            lineStream.str(line);
+            lineStream.clear(); // reset the error state
+
+            std::string token;
+
+            lineSplit.clear();
+            while (lineStream >> token) {
+                lineSplit.push_back(token);
+            }
+
+            //* ignore comments */
+            if (lineSplit[0][0] == '#') {
+                continue;
+            }
+
+            // reset the lineStream to the beginning of the line
+            lineStream.clear(); // reset the error state
+            lineStream.seekg(0, std::ios::beg);
+
+            return true; // return true if the line is not empty
+        }
+    } catch(const std::exception& e) {
+        return false;
+    }
+    return false;
+}
+
+bool PcdPointCloudHeader::writeHeader(std::ostream &writer, const PcdPointCloudHeader &header, std::streampos &headerWidthPos,
+                    std::streampos &headerHeightPos, std::streampos &headerPointsPos)
+{
+    if (!writer.good()) return false;
+
+    // convert the bigest size_t to a string and get its length
+    std::string maxSizeStr = std::to_string(std::numeric_limits<size_t>::max());
+
+    // resize the width, height and points attributes to the length of maxSizeStr
+    std::string widthStr = std::to_string(header.width);
+    std::string heightStr = std::to_string(header.height);
+    std::string pointsStr = std::to_string(header.points);
+    widthStr.resize(maxSizeStr.length(), ' ');
+    heightStr.resize(maxSizeStr.length(), ' ');
+    pointsStr.resize(maxSizeStr.length(), ' ');
+
+    // write the data
+    writer << "VERSION" << " " << header.version << std::endl
+           << "FIELDS" << " " << header.fields << std::endl
+           << "SIZE" << " " << header.size << std::endl
+           << "TYPE" << " " << header.type << std::endl
+           << "COUNT" << " " << header.count << std::endl;
+    headerWidthPos = writer.tellp();
+    writer<< "WIDTH" << " " << widthStr << std::endl;
+    headerHeightPos = writer.tellp();
+    writer << "HEIGHT" << " " << heightStr << std::endl
+           << "VIEWPOINT" << " " << header.viewpoint << std::endl;
+    headerPointsPos = writer.tellp();
+    writer << "POINTS" << " " << pointsStr << std::endl
+           << "DATA" << " " << header.data << std::endl;
+
+    return true;
+}
+
 std::vector<std::string> PcdPointCloudHeader::attributeList() const
 {
     return attributeNames;
@@ -344,7 +559,7 @@ std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesy
     if (!reader->is_open()) return std::nullopt;
 
     // read the header
-    auto header = readPcdHeader(*reader);
+    auto header = PcdPointCloudHeader::readHeader(*reader);
     // test if header ptr is not null
     if (header == nullptr) {
         return std::nullopt;
@@ -364,7 +579,8 @@ std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesy
     return std::nullopt;
 }
 
-bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloudAccessInterface &pointCloud)
+bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloudAccessInterface &pointCloud,
+    std::optional<PcdDataStorageType> dataStorageType)
 {
    // open the file
     auto writer = std::make_unique<std::fstream>(pcdFilePath, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
@@ -375,20 +591,36 @@ bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloud
     std::streampos headerHeightPos;
     std::streampos headerPointsPos;
 
-    PcdPointCloudHeaderAdapter pcdHeaderAccessAdapter{pointCloud.headerAccess.get()};
-    
-    // TODO: use adapter header here
+    PcdPointCloudHeaderAdapter* pcdHeaderAccessAdapter = new PcdPointCloudHeaderAdapter{pointCloud.headerAccess.get()};
 
-    // write the header
-    if (!writePcdHeader(*writer, *pointCloud.headerAccess, headerWidthPos, headerHeightPos, headerPointsPos)) {
+    if (!pcdHeaderAccessAdapter->isStateValid()) {
         return false;
     }
 
-    // write the points
-    PcdPointCloudPointAdapter pcdPointAccessAdapter(pointCloud.pointAccess.get(), pcdHeaderAccessAdapter.fields,
-        pcdHeaderAccessAdapter.size, pcdHeaderAccessAdapter.type, pcdHeaderAccessAdapter.count,
-        pcdHeaderAccessAdapter.data);
+    // set the data storage type
+    if (dataStorageType.has_value()) {
+        pcdHeaderAccessAdapter->data = dataStorageType.value();
+    }
 
+    // write the header
+    if (!PcdPointCloudHeader::writeHeader(*writer, *pcdHeaderAccessAdapter, headerWidthPos, headerHeightPos, headerPointsPos)) {
+        return false;
+    }
+
+    // get the adapter
+    auto pcdPointAccessAdapter = PcdPointCloudPointAdapter::create(pointCloud.pointAccess.get(),
+        pcdHeaderAccessAdapter->fields, pcdHeaderAccessAdapter->size, pcdHeaderAccessAdapter->type,
+        pcdHeaderAccessAdapter->count, pcdHeaderAccessAdapter->data);
+    
+    if (!(pcdPointAccessAdapter && pcdPointAccessAdapter->isStateValid())) {
+        return false;
+    }
+
+    // write the point cloud
+    do {
+        if (!pcdPointAccessAdapter->writePoint(*writer, *pcdPointAccessAdapter, pcdHeaderAccessAdapter->data)) return false;
+    } while (pcdPointAccessAdapter->gotoNext());
+    
     return true;
 }
 
@@ -401,13 +633,26 @@ PcdPointCloudPointAdapter::PcdPointCloudPointAdapter(PointCloudPointAccessInterf
     adaptInternalState(); // set the internal state for the first time
 }
 
+std::shared_ptr<PcdPointCloudPointAdapter> PcdPointCloudPointAdapter::create(
+    PointCloudPointAccessInterface *pointCloudPointAccessInterface, const std::vector<std::string> &attributeNames,
+    const std::vector<size_t> &fieldByteSize, const std::vector<uint8_t> &fieldType,
+    const std::vector<size_t> &fieldCount, PcdDataStorageType dataStorageType)
+{
+    // we test if the interface is already a PcdPointCloudPointAdapter with a dynamic cast
+    PcdPointCloudPointAdapter* pcdPointAdapter = dynamic_cast<PcdPointCloudPointAdapter*>(pointCloudPointAccessInterface);
+    if (pcdPointAdapter != nullptr) {
+        // if it is already a PcdPointCloudPointAdapter, we return a shared pointer with no ownership
+        return std::shared_ptr<PcdPointCloudPointAdapter>{std::shared_ptr<PcdPointCloudPointAdapter>{}, pcdPointAdapter};
+    } else {
+        // create a new PcdPointCloudPointAdapter
+        return std::shared_ptr<PcdPointCloudPointAdapter>(new PcdPointCloudPointAdapter{pointCloudPointAccessInterface,
+            attributeNames, fieldByteSize, fieldType, fieldCount, dataStorageType});
+    }
+}
+
 bool PcdPointCloudPointAdapter::gotoNext()
 {
-    auto success = pointCloudPointAccessInterface->gotoNext();
-    if (success) {
-        success  = adaptInternalState();
-    }
-    return success;
+    return pointCloudPointAccessInterface->gotoNext() && adaptInternalState();
 }
 
 PcdPointCloudPointAdapter::~PcdPointCloudPointAdapter()
@@ -503,241 +748,105 @@ PcdPointCloudHeaderAdapter::~PcdPointCloudHeaderAdapter()
 
 bool PcdPointCloudHeaderAdapter::adaptInternalState()
 {
-    return false;
-}
-
-/***************************       PRIVATE FUNCTIONS      ************************************/
-
-// read the header of the PCD filead
-static std::unique_ptr<PcdPointCloudHeader> readPcdHeader(std::istream& reader) {
-    
-    // data for the header
-    double version;
-    std::vector<std::string> fields;
-    std::vector<size_t> size;
-    std::vector<uint8_t> type;
-    std::vector<size_t> count;
-    size_t width;
-    size_t height;
-    std::vector<double> viewpoint{0, 0, 0, 1, 0, 0, 0}; // translation (tx ty tz) + quaternion (qw qx qy qz)
-    size_t points;
-    PcdDataStorageType data = PcdDataStorageType::ascii; // default data type is ascii
-    
-    try {
-        std::string line;
-        std::vector<std::string> lineSplit; // variable holding the split line data
-        std::stringstream lineStream; // we will also use this stream to easily convert the data to the correct type
-
-        std::string headerEntryName;
-        size_t nbFields;
-
-        if (!getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
-        
-        //* --------- version ----------------
-        lineStream >> headerEntryName;
-        if (headerEntryName == "VERSION") {
-            lineStream >> version;
-            if (lineStream.fail()) return nullptr;
-            if (!getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
-        }
-
-        //* --------- fields ----------------
-        lineStream >> headerEntryName;
-        if (headerEntryName == "FIELDS") {
-            fields = std::vector<std::string>(lineSplit.begin()+1, lineSplit.end());
-            if (!getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
-        } else {
-            // error if fields is not defined properly
-            return nullptr;
-        }
-        // set the data according to the nimber of fields
-        nbFields = fields.size();
-        size = std::vector<size_t>(nbFields, 4); // default size is 4 bytes
-        type = std::vector<uint8_t>(nbFields, 'F'); // default type is float
-        count = std::vector<size_t>(nbFields, 1); // default count is 1
-
-        //* --------- size ----------------
-        lineStream >> headerEntryName;
-        if (headerEntryName == "SIZE") {
-            if (lineSplit.size()-1 != nbFields) return nullptr; // error if size is not defined properly
-            for (size_t i = 0; i < nbFields; ++i) {
-                lineStream >> size[i];
-            }
-            if (lineStream.fail()) return nullptr;
-            if (!getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
-        } else {
-            // error if size is not defined properly
-            return nullptr;
-        }
-
-        //* --------- type ----------------
-        lineStream >> headerEntryName;
-        if (headerEntryName == "TYPE") {
-            if (lineSplit.size()-1 != nbFields) return nullptr; // error if type is not defined properly
-            for (size_t i = 0; i < nbFields; ++i) {
-                lineStream >> type[i];
-            }
-            if (lineStream.fail()) return nullptr;
-            if (!getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
-        } else {
-            // error if type is not defined properly
-            return nullptr;
-        }
-        
-        //* --------- count ----------------
-        lineStream >> headerEntryName;
-        if (headerEntryName == "COUNT") {
-            if (lineSplit.size()-1 != nbFields) return nullptr; // error if count is not defined properly
-            for (size_t i = 0; i < nbFields; ++i) {
-                lineStream >> count[i];
-            }
-            if (lineStream.fail()) return nullptr;
-            if (!getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
-        }
-
-        //* --------- width ----------------
-        lineStream >> headerEntryName;
-        if (headerEntryName == "WIDTH") {
-            lineStream >> width;
-            if (lineStream.fail()) return nullptr;
-            if (!getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
-        } else {
-            // error if width is not defined properly
-            return nullptr;
-        }
-
-        //* --------- height ----------------
-        lineStream >> headerEntryName;
-        if (headerEntryName == "HEIGHT") {
-            lineStream >> height;
-            if (lineStream.fail()) return nullptr;
-            if (!getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
-        } else {
-            // error if height is not defined properly
-            return nullptr;
-        }
-
-        //* --------- viewpoint ----------------
-        lineStream >> headerEntryName;
-        if (headerEntryName == "VIEWPOINT") {
-            for (size_t i = 0; i < 6; ++i) {
-                lineStream >> viewpoint[i];
-            }
-            if (lineStream.fail()) return nullptr;
-            if (!getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
-        }
-
-        //* --------- points ----------------
-        lineStream >> headerEntryName;
-        if (headerEntryName == "POINTS") {
-            lineStream >> points;
-            if (lineStream.fail()) return nullptr;
-            if (!getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
-        } else {
-            points = width * height;
-        }
-
-        //* --------- data ----------------
-        lineStream >> headerEntryName;
-        if (headerEntryName == "DATA") {
-            lineStream >> data;
-            if (lineStream.fail()) return nullptr;
-        }
-    } catch(const std::exception& e) {
-        return nullptr;
-    }
-
-    return std::make_unique<PcdPointCloudHeader>(version, fields, size, type, count, width, height, viewpoint, points, data);
-}
-
-static bool getNextHeaderLine(std::istream& reader, std::string& line, std::vector<std::string>& lineSplit, std::stringstream& lineStream) {
-    try {
-        while(reader.good()) { // If no error occurs, the while loop should not reach the exit condition.
-            // read a line
-            std::getline(reader, line);
-
-            //* ignore empty lines */
-            // if the line is empty, skip it
-            if (line.empty()) {
-                continue;
-            }
-
-            // split the line into tokens
-            lineStream.str(line);
-            lineStream.clear(); // reset the error state
-
-            std::string token;
-
-            lineSplit.clear();
-            while (lineStream >> token) {
-                lineSplit.push_back(token);
-            }
-
-            //* ignore comments */
-            if (lineSplit[0][0] == '#') {
-                continue;
-            }
-
-            // reset the lineStream to the beginning of the line
-            lineStream.clear(); // reset the error state
-            lineStream.seekg(0, std::ios::beg);
-
-            return true; // return true if the line is not empty
-        }
-    } catch(const std::exception& e) {
-        return false;
-    }
-    return false;
-}
-
-bool writePcdHeader(std::ostream &writer, const PointCloudHeaderInterface &header, std::streampos &headerWidthPos,
-                    std::streampos &headerHeightPos, std::streampos &headerPointsPos)
-{
-    if (!writer.good()) return false;
-
-    std::cout << "writing header" << std::endl;
-
-    std::vector<std::string> pcdAttributes = {"version", "fields", "size", "type", "count", "width", "height", "viewpoint", "points", "data"};
+    isStateValid_v = false;
 
     // convert the bigest size_t to a string and get its length
     std::string maxSizeStr = std::to_string(std::numeric_limits<size_t>::max());
 
-    // try to get the header data
-    for (auto attribute : pcdAttributes) {
-        std::cout << "attribute: " << attribute << std::endl;
-        auto attrOpt = header.getAttributeByName(attribute.c_str());
-        if (!attrOpt.has_value()) return false;
+    // try to get each attribute
+    // version
+    auto versionOpt = pointCloudHeaderInterface->getAttributeByName("version");
+    if (!versionOpt.has_value()) return false;
+    version = castedPointCloudAttribute<double>(versionOpt.value());
+    // fields
+    auto fieldsOpt = pointCloudHeaderInterface->getAttributeByName("fields");
+    if (!fieldsOpt.has_value()) return false;
+    fields = castedPointCloudAttribute<std::vector<std::string>>(fieldsOpt.value());
+    // size
+    auto sizeOpt = pointCloudHeaderInterface->getAttributeByName("size");
+    if (!sizeOpt.has_value()) return false;
+    size = castedPointCloudAttribute<std::vector<size_t>>(sizeOpt.value());
+    // type
+    auto typeOpt = pointCloudHeaderInterface->getAttributeByName("type");
+    if (!typeOpt.has_value()) return false;
+    type = castedPointCloudAttribute<std::vector<uint8_t>>(typeOpt.value());
+    // count
+    auto countOpt = pointCloudHeaderInterface->getAttributeByName("count");
+    if (!countOpt.has_value()) return false;
+    count = castedPointCloudAttribute<std::vector<size_t>>(countOpt.value());
+    // width
+    auto widthOpt = pointCloudHeaderInterface->getAttributeByName("width");
+    if (!widthOpt.has_value()) return false;
+    width = castedPointCloudAttribute<size_t>(widthOpt.value());
+    // height
+    auto heightOpt = pointCloudHeaderInterface->getAttributeByName("height");
+    if (!heightOpt.has_value()) return false;
+    height = castedPointCloudAttribute<size_t>(heightOpt.value());
+    // viewpoint
+    auto viewpointOpt = pointCloudHeaderInterface->getAttributeByName("viewpoint");
+    if (!viewpointOpt.has_value()) return false;
+    viewpoint = castedPointCloudAttribute<std::vector<double>>(viewpointOpt.value());
+    // points
+    auto pointsOpt = pointCloudHeaderInterface->getAttributeByName("points");
+    if (!pointsOpt.has_value()) return false;
+    points = castedPointCloudAttribute<size_t>(pointsOpt.value());
+    // data
+    auto dataOpt = pointCloudHeaderInterface->getAttributeByName("data");
+    if (!dataOpt.has_value()) return false;
+        std::istringstream(castedPointCloudAttribute<std::string>(dataOpt.value())) >> data;
 
-        const auto& attr = attrOpt.value();
-        // cast to string
-        std::string attrStr = castedPointCloudAttribute<std::string>(attr);
-
-        std::string attributeNameCap = attribute;
-        // attribute name to upper case
-        std::transform(attributeNameCap.begin(), attributeNameCap.end(), attributeNameCap.begin(), [](unsigned char c) {   
-            return std::toupper(c);
-        });
-        std::cout << "attrStr: " << attrStr << std::endl;
-        // write the attribute name
-        writer << attributeNameCap << " ";
-
-        // if the attribute is either points, width or height, resize it to the length of maxSizeStr
-        // we need to do this because we will maybe modify the attribute later
-        if (attribute == "width") {
-            attrStr.resize(maxSizeStr.length(), ' ');
-            headerWidthPos = writer.tellp();
-        } else if (attribute == "height") {
-            attrStr.resize(maxSizeStr.length(), ' ');
-            headerHeightPos = writer.tellp();
-        } else if (attribute == "points") {
-            attrStr.resize(maxSizeStr.length(), ' ');
-            headerPointsPos = writer.tellp();
-        }
-
-        // write the attribute value
-        writer << attrStr << std::endl;
+    // do some tests
+    // the size of the fields should match
+    size_t nbFields = fields.size();
+    if (nbFields == 0 || size.size() != nbFields || type.size() != nbFields || count.size() != nbFields) {
+        return false;
     }
+
+    // the number of points should match the width * height
+    if (width * height != points) {
+        return false;
+    }
+
+    // the size of the viewpoint should be 7
+    if (viewpoint.size() != 7) {
+        return false;
+    }
+
+    isStateValid_v = true;
     return true;
+}
+
+bool PcdPointCloudPoint::writePoint(std::ostream &writer, const PcdPointCloudPoint &point, PcdDataStorageType dataStorageType )
+{
+    switch (point.dataStorageType) {
+        case PcdDataStorageType::ascii:
+            return writePointAscii(writer, point);
+        case PcdDataStorageType::binary:
+            return writePointBinary(writer, point);
+        case PcdDataStorageType::binary_compressed:
+            return false;
+        default:
+            return false;
+    }
+}
+
+bool PcdPointCloudPoint::writePointBinary(std::ostream &writer, const PcdPointCloudPoint &point)
+{
+    // simply write the bytes
+    writer.write(reinterpret_cast<const char*>(point.dataBuffer.data()), point.dataBuffer.size());
+    if (!writer.good()) return false;
+    return true;
+}
+
+bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointCloudPoint &point)
+{
+    // write each field
+    for (size_t i = 0; i < point.fieldCount.size() - 1; i++) {
+        writer << castedPointCloudAttribute<std::string>(point.getAttributeById(i).value()) << " ";
+    }
+    writer << castedPointCloudAttribute<std::string>(point.getAttributeById(point.fieldCount.size() - 1).value())
+           << std::endl;
+    return writer.good();
 }
 
 } // namespace IO
