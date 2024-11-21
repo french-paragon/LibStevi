@@ -61,7 +61,7 @@ int main(int argc, char const *argv[]) {
     }
     // get the viewpoint
     auto viewpoint = StereoVision::IO::castedPointCloudAttribute<std::vector<double>>(header->getAttributeByName("viewpoint").value_or(std::vector<double>{1}));
-    std::cout << "viewpoint sss: " << viewpoint << '\n';
+    std::cout << "viewpoint: " << viewpoint << '\n';
 
     std::cout << "Point cloud attributes: ";
     for (auto& att : cloudpoint->attributeList()) {
@@ -88,25 +88,33 @@ int main(int argc, char const *argv[]) {
         }
         if (!cloudpoint->gotoNext()) break;
     }
-        std::cout << "-------------------------------------------------\n";
+    std::cout << "-------------------------------------------------\n";
 
-		while (cloudpoint->gotoNext())
-		{
-			pointCount++;
-		}
-		
-		std::cout << "Total number of points: " << pointCount << '\n';
+    while (cloudpoint->gotoNext())
+    {
+        pointCount++;
+    }
+    
+    std::cout << "Total number of points: " << pointCount << '\n';
 
-		// stop the timer
-		auto endTime = std::chrono::high_resolution_clock::now();
-		std::chrono::duration<double> elapsed = endTime - startTime;
-		std::cout << "Elapsed time: " << elapsed.count() << " s\n";
-		std::cout << "-------------------------------------------------\n";
+    // stop the timer
+    auto endTime = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = endTime - startTime;
+    std::cout << "Elapsed time: " << elapsed.count() << " s\n";
+    std::cout << "-------------------------------------------------\n";
 
-        // write the point cloud to a pcd file
-        std::filesystem::path pcdFilePathOut = pcdFilePath;
-        pcdFilePathOut.replace_extension("out.pcd");
-        StereoVision::IO::writePointCloudPcd(pcdFilePathOut, fullAccess);
+    // write the point cloud to a pcd file
+
+    // reopen the file
+    auto fullAccessWriteOpt = StereoVision::IO::openPointCloudPcd(pcdFilePath);
+    if (!fullAccessWriteOpt) {
+        std::cout << "Could not open the pcd file, check the path" << std::endl;
+        return 1;
+    }
+    auto& fullAccessWrite = *fullAccessWriteOpt;
+    std::filesystem::path pcdFilePathOut = pcdFilePath;
+    pcdFilePathOut.replace_extension("out.pcd");
+    StereoVision::IO::writePointCloudPcd(pcdFilePathOut, fullAccessWrite, StereoVision::IO::PcdDataStorageType::ascii);
 
     return 0;
 }
