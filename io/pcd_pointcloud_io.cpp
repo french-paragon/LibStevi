@@ -481,15 +481,15 @@ bool PcdPointCloudHeader::writeHeader(std::ostream &writer, const PcdPointCloudH
     if (!writer.good()) return false;
 
     // convert the bigest size_t to a string and get its length
-    std::string maxSizeStr = std::to_string(std::numeric_limits<size_t>::max());
+    static const size_t maxSizeStr = std::to_string(std::numeric_limits<size_t>::max()).length();
 
     // resize the width, height and points attributes to the length of maxSizeStr
     std::string widthStr = std::to_string(header.width);
     std::string heightStr = std::to_string(header.height);
     std::string pointsStr = std::to_string(header.points);
-    widthStr.resize(maxSizeStr.length(), ' ');
-    heightStr.resize(maxSizeStr.length(), ' ');
-    pointsStr.resize(maxSizeStr.length(), ' ');
+    widthStr.resize(maxSizeStr, ' ');
+    heightStr.resize(maxSizeStr, ' ');
+    pointsStr.resize(maxSizeStr, ' ');
 
     // write the data
     writer << "VERSION" << " " << header.version << std::endl
@@ -616,11 +616,61 @@ bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloud
         return false;
     }
 
-    // write the point cloud
-    do {
-        if (!pcdPointAccessAdapter->writePoint(*writer, *pcdPointAccessAdapter, pcdHeaderAccessAdapter->data)) return false;
-    } while (pcdPointAccessAdapter->gotoNext());
-    
+    size_t nbPoints = 0;
+    // write the points
+    switch (pcdHeaderAccessAdapter->data) {
+        case PcdDataStorageType::ascii:
+            do {
+                if (!PcdPointCloudPointAdapter::writePointAscii(*writer, *pcdPointAccessAdapter)) return false;
+                nbPoints++;
+            } while (pcdPointAccessAdapter->gotoNext());
+            break;
+        case PcdDataStorageType::binary:
+            do {
+                if (!PcdPointCloudPointAdapter::writePointBinary(*writer, *pcdPointAccessAdapter)) return false;
+                nbPoints++;
+            } while (pcdPointAccessAdapter->gotoNext());
+            break;
+        case PcdDataStorageType::binary_compressed:
+            return false;
+            break;
+        default:
+            return false;
+            break;
+    }
+
+    // convert the bigest size_t to a string and get its length
+    static const size_t maxSizeStr = std::to_string(std::numeric_limits<size_t>::max()).length();
+    // test if the number of points is the same as the number of points in the header. Otherwise, we have to modify it
+    // in the header
+    if (nbPoints != pcdHeaderAccessAdapter->points) {
+        
+        pcdHeaderAccessAdapter->points = nbPoints;
+        // we cannot guess the width and height if the size of the point cloud has changed. Therefore, we have to
+        // set the width to nbPoints and the height to 1
+        pcdHeaderAccessAdapter->width = nbPoints;
+        pcdHeaderAccessAdapter->height = 1;
+
+        // convert everything to a string
+        std::string pointsStr = std::to_string(nbPoints);
+        std::string widthStr = pointsStr;
+        std::string heightStr = std::to_string(1);
+        // modify the length of the string to the maximum length
+        pointsStr.resize(maxSizeStr, ' ');
+        widthStr.resize(maxSizeStr, ' ');
+        heightStr.resize(maxSizeStr, ' ');
+        // rewrite them
+        writer->seekp(headerPointsPos);
+        writer->write(pointsStr.c_str(), maxSizeStr);
+        writer->seekp(headerWidthPos);
+        writer->write(widthStr.c_str(), maxSizeStr);
+        writer->seekp(headerHeightPos);
+        writer->write(heightStr.c_str(), maxSizeStr);
+        // seek to the end of the file
+        writer->seekp(0, std::ios_base::end);
+
+    }
+
     return true;
 }
 
@@ -750,9 +800,6 @@ bool PcdPointCloudHeaderAdapter::adaptInternalState()
 {
     isStateValid_v = false;
 
-    // convert the bigest size_t to a string and get its length
-    std::string maxSizeStr = std::to_string(std::numeric_limits<size_t>::max());
-
     // try to get each attribute
     // version
     auto versionOpt = pointCloudHeaderInterface->getAttributeByName("version");
@@ -818,7 +865,7 @@ bool PcdPointCloudHeaderAdapter::adaptInternalState()
 
 bool PcdPointCloudPoint::writePoint(std::ostream &writer, const PcdPointCloudPoint &point, PcdDataStorageType dataStorageType )
 {
-    switch (point.dataStorageType) {
+    switch (dataStorageType) {
         case PcdDataStorageType::ascii:
             return writePointAscii(writer, point);
         case PcdDataStorageType::binary:
@@ -829,6 +876,7 @@ bool PcdPointCloudPoint::writePoint(std::ostream &writer, const PcdPointCloudPoi
             return false;
     }
 }
+
 
 bool PcdPointCloudPoint::writePointBinary(std::ostream &writer, const PcdPointCloudPoint &point)
 {
