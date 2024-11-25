@@ -383,6 +383,9 @@ std::unique_ptr<PcdPointCloudHeader> PcdPointCloudHeader::readHeader(std::istrea
         std::string headerEntryName;
         size_t nbFields;
 
+        constexpr auto maxPrecision{std::numeric_limits<long double>::max_digits10 + 1};
+        lineStream << std::setprecision(maxPrecision);
+
         if (!PcdPointCloudHeader::getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
         
         //* --------- version ----------------
@@ -558,19 +561,32 @@ bool PcdPointCloudHeader::writeHeader(std::ostream &writer, const PcdPointCloudH
     heightStr.resize(maxSizeStr, ' ');
     pointsStr.resize(maxSizeStr, ' ');
 
+    // vector to string
+    auto vectorToString = [](auto&& c) {
+        std::stringstream ss;
+        using U = std::decay_t<decltype(c)>;
+        if constexpr (std::is_floating_point_v<U>) {
+            constexpr auto maxPrecision{std::numeric_limits<U>::digits10 + 1};
+            ss << std::setprecision(maxPrecision); // write with max precision
+        }
+        for (size_t i = 0; i < c.size() - 1; ++i) {ss << c[i] << " ";}
+        if (c.size() > 0) {ss << c[c.size() - 1];}
+        return ss.str();
+    };
+
     // write the data
     writer << "VERSION" << " " << header.version << std::endl
-           << "FIELDS" << " " << header.fields << std::endl
-           << "SIZE" << " " << header.size << std::endl
-           << "TYPE" << " " << header.type << std::endl
-           << "COUNT" << " " << header.count << std::endl
+           << "FIELDS" << " " << vectorToString(header.fields) << std::endl
+           << "SIZE" << " " << vectorToString(header.size) << std::endl
+           << "TYPE" << " " << vectorToString(header.type) << std::endl
+           << "COUNT" << " " << vectorToString(header.count) << std::endl
            << "WIDTH" << " ";
     headerWidthPos = writer.tellp();
     writer << widthStr << std::endl
             << "HEIGHT" << " "; 
     headerHeightPos = writer.tellp();
     writer << heightStr << std::endl
-           << "VIEWPOINT" << " " << header.viewpoint << std::endl
+           << "VIEWPOINT" << " " << vectorToString(header.viewpoint) << std::endl
            << "POINTS" << " ";
     headerPointsPos = writer.tellp();
     writer << pointsStr << std::endl
@@ -1037,12 +1053,51 @@ bool PcdPointCloudPoint::writePointBinary(std::ostream &writer, const PcdPointCl
 
 bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointCloudPoint &point)
 {
+    // visit the variant and write each field as a string
+    auto visitor = [&writer](auto&& attr) {
+        using T = std::decay_t<decltype(attr)>;
+        if constexpr (std::is_same_v<T, std::string>) {
+            writer << attr;
+        } else if constexpr (std::is_floating_point_v<T>) {
+            constexpr auto maxPrecision{std::numeric_limits<T>::digits10 + 1};
+            writer << std::setprecision(maxPrecision) << attr; // write with max precision
+        } else if constexpr (std::is_integral_v<T>) {
+            if constexpr (std::is_signed_v<T>) { // convert to bigger type to display char type as a number
+                writer << static_cast<intmax_t>(attr);
+            } else {
+                writer << static_cast<uintmax_t>(attr);
+            }
+        } else if constexpr (is_vector_v<T>) {
+            using value_type = typename T::value_type;
+            if constexpr (std::is_same_v<value_type, std::string>) {
+                for (size_t i = 0; i < attr.size()-1; i++) { writer << attr[i] << " "; }
+                if (attr.size() > 0) { writer << attr[attr.size()-1]; }
+            } else if constexpr (std::is_floating_point_v<value_type>) {
+                constexpr auto maxPrecision{std::numeric_limits<value_type>::digits10 + 1};
+                for (size_t i = 0; i < attr.size()-1; i++) { writer << std::setprecision(maxPrecision) << attr[i] << " "; }
+                if (attr.size() > 0) { writer << std::setprecision(maxPrecision) << attr[attr.size()-1]; }
+            } else if constexpr (std::is_integral_v<value_type>) {
+                if constexpr (std::is_signed_v<value_type>) { // convert to bigger type to display char type as a number
+                    for (size_t i = 0; i < attr.size()-1; i++) { writer << static_cast<intmax_t>(attr[i]) << " "; }
+                    if (attr.size() > 0) { writer << static_cast<intmax_t>(attr[attr.size()-1]); }
+                } else {
+                    for (size_t i = 0; i < attr.size()-1; i++) { writer << static_cast<uintmax_t>(attr[i]) << " "; }
+                    if (attr.size() > 0) { writer << static_cast<uintmax_t>(attr[attr.size()-1]); }
+                }
+            } else {
+                static_assert(false, "Unsupported vector type");
+            }
+        } else {
+            static_assert(false, "Unsupported type");
+        }
+    };
     // write each field
-    for (size_t i = 0; i < point.fieldCount.size() - 1; i++) {
-        writer << castedPointCloudAttribute<std::string>(point.getAttributeById(i).value()) << " ";
+    for (size_t i = 0; i < point.fieldCount.size()-1; i++) {
+        std::visit(visitor, point.getAttributeById(i).value());
+        writer << " ";
     }
-    writer << castedPointCloudAttribute<std::string>(point.getAttributeById(point.fieldCount.size() - 1).value())
-           << std::endl;
+    std::visit(visitor, point.getAttributeById(point.fieldCount.size() - 1).value()); // last field
+    writer << std::endl;
     return writer.good();
 }
 
