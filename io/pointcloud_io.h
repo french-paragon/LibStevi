@@ -29,6 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <memory>
 #include <algorithm>
 #include <type_traits>
+#include <filesystem>
 
 namespace StereoVision {
 namespace IO {
@@ -74,17 +75,6 @@ inline bool isAttributeList(PointCloudGenericAttribute const& val) {
 template<typename T>
 T castedPointCloudAttribute(PointCloudGenericAttribute const& val);
 
-template <class T>
-std::ostream &operator<<(std::ostream &os, const std::vector<T> &c) {
-    for (size_t i = 0; i < c.size(); ++i) {
-        os << c[i];
-        if (i < c.size() - 1) {
-            os << " ";
-        }
-    }
-    return os;
-}
-
 // template to check if a type is a vector
 template <typename T>
 struct is_vector : std::false_type {};
@@ -107,16 +97,56 @@ T castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
         return std::get<T>(val);
     }
 
-    if constexpr (std::is_same_v<T, std::string>) {
+    // to string visitor
+    // any supported type can be converted to string
+    auto toString = [](auto&& attr) {
         std::stringstream strs;
-        std::visit([&strs] (auto&& arg) {strs << arg;}, val);
+        using U = std::decay_t<decltype(attr)>;
+        if constexpr (std::is_same_v<U, std::string>) {
+            strs << attr;
+        } else if constexpr (std::is_floating_point_v<U>) {
+            constexpr auto maxPrecision{std::numeric_limits<U>::digits10 + 1};
+            strs << std::setprecision(maxPrecision) << attr; // write with max precision
+        } else if constexpr (std::is_integral_v<U>) {
+            if constexpr (std::is_signed_v<U>) { // convert to bigger type to display char type as a number
+                strs << static_cast<intmax_t>(attr);
+            } else {
+                strs << static_cast<uintmax_t>(attr);
+            }
+        } else if constexpr (is_vector_v<U>) {
+            using value_type = typename U::value_type;
+            if constexpr (std::is_same_v<value_type, std::string>) {
+                for (size_t i = 0; i < attr.size()-1; i++) { strs << attr[i] << " "; }
+                if (attr.size() > 0) { strs << attr[attr.size()-1]; }
+            } else if constexpr (std::is_floating_point_v<value_type>) {
+                constexpr auto maxPrecision{std::numeric_limits<value_type>::digits10 + 1};
+                for (size_t i = 0; i < attr.size()-1; i++) { strs << std::setprecision(maxPrecision) << attr[i] << " "; }
+                if (attr.size() > 0) { strs << std::setprecision(maxPrecision) << attr[attr.size()-1]; }
+            } else if constexpr (std::is_integral_v<value_type>) {
+                if constexpr (std::is_signed_v<value_type>) { // convert to bigger type to display char type as a number
+                    for (size_t i = 0; i < attr.size()-1; i++) { strs << static_cast<intmax_t>(attr[i]) << " "; }
+                    if (attr.size() > 0) { strs << static_cast<intmax_t>(attr[attr.size()-1]); }
+                } else {
+                    for (size_t i = 0; i < attr.size()-1; i++) { strs << static_cast<uintmax_t>(attr[i]) << " "; }
+                    if (attr.size() > 0) { strs << static_cast<uintmax_t>(attr[attr.size()-1]); }
+                }
+            } else {
+                static_assert(false, "Unsupported vector type");
+            }
+        } else {
+            static_assert(false, "Unsupported type");
+        }
         return strs.str();
+    };
+
+    if constexpr (std::is_same_v<T, std::string>) {
+        return std::visit(toString, val);
     } else {
         // redundant assertion in case we add other types
         static_assert(std::is_integral_v<T> || std::is_floating_point_v<T> || isVectorReturnType,
             "Target type should be an integral, a floating point number or a vector at this stage");
 
-        T ret = std::visit([] (auto&& arg) {
+        T ret = std::visit([&] (auto&& arg) {
             using variantHeld_t = std::decay_t<decltype(arg)>; // the type inside the alternative
             constexpr bool isSimpleHeldType = std::is_integral_v<variantHeld_t> || std::is_floating_point_v<variantHeld_t>
                 || std::is_same_v<std::string, variantHeld_t>;
@@ -148,9 +178,7 @@ T castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
                     }
                     return vec;
                 } else if constexpr (std::is_same_v<returnVectorValue_t, std::string>) {
-                    std::stringstream strs;
-                    strs << arg;
-                    return T{strs.str()};
+                    return T{toString(arg)};
                 } else if constexpr (std::is_convertible_v<variantHeld_t, returnVectorValue_t>) { // try to wrap it
                         return T{static_cast<returnVectorValue_t>(arg)};
                 } else if constexpr(std::is_convertible_v<variantHeld_t, T>) {
@@ -172,9 +200,7 @@ T castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
                     T vec;
                     vec.reserve(arg.size());
                     for(auto&& e: arg) {
-                        std::stringstream strs;
-                        strs << e;
-                        vec.push_back(strs.str());
+                        vec.push_back(toString(e));
                     }
                     return vec;
                 } else if constexpr (std::is_same_v<std::string, variantVectorValue_t>) {
@@ -566,6 +592,19 @@ protected:
     typename std::vector<typename GenericPointCloud<Geometry_T, Color_T>::Point>::const_iterator _iterator;
     const GenericPointCloud<Geometry_T, Color_T>* _point_cloud;
 };
+
+/**
+ * @brief
+ *
+ * Open a file and returns a FullPointCloudAccessInterface.
+ * The extension of the file is used to determine the type of the point cloud.
+ *
+ * @param filePath The path to the file containing the point cloud
+ *
+ * @return A FullPointCloudAccessInterface containing the header and the points.
+ * If the file can't be opened, an empty optional is returned.
+ */
+std::optional<FullPointCloudAccessInterface> openPointCloud(const std::filesystem::path& filePath);
 
 } // namespace IO
 } // namespace StereoVision
