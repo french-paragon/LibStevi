@@ -15,8 +15,59 @@
 namespace StereoVision {
 namespace IO {
 
-    static std::ostream &operator<<(std::ostream &os, const PcdDataStorageType &data);
-    static std::istream &operator>>(std::istream &is, PcdDataStorageType &data);
+static std::ostream &operator<<(std::ostream &os, const PcdDataStorageType &data);
+static std::istream &operator>>(std::istream &is, PcdDataStorageType &data);
+
+/// @brief From any pointcloud point, get the names of the attributes, their byte size, their type and their count
+/// @param pointcloudPointAccessInterface The pointcloud point access interface
+/// @return A tuple containing the attributes names, their byte size, their type and their count
+static std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>
+    getPcdDataLayoutFromPointcloudPoint(const PointCloudPointAccessInterface& pointcloudPointAccessInterface);
+
+/// @brief adapter class to obtain a PcdPointCloudPoint from any PointCloudPointAccessInterface
+class PcdPointCloudPointAdapter : public PcdPointCloudPoint
+{
+protected:
+    PointCloudPointAccessInterface* pointCloudPointAccessInterface = nullptr;
+public:
+    PcdPointCloudPointAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface);
+
+    bool gotoNext() override;
+    
+    // destructor
+    ~PcdPointCloudPointAdapter() override;
+
+protected:
+    PcdPointCloudPointAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface,
+        const std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>& attributeInformations);
+
+    /**
+     * @brief fill the internal data buffer with the values of the attributes of the current point.
+     * 
+     * @return true if the internal state was properly adapted, false otherwise
+     */
+    bool adaptInternalState();
+};
+
+/// @brief adapter class to obtain a PcdPointCloudHeader from any PointCloudHeaderInterface
+class PcdPointCloudHeaderAdapter : public PcdPointCloudHeader
+{
+protected:
+    PointCloudHeaderInterface* pointCloudHeaderInterface = nullptr;
+public:
+    PcdPointCloudHeaderAdapter(PointCloudHeaderInterface* pointCloudHeaderInterface);
+
+    // destructor
+    ~PcdPointCloudHeaderAdapter() override;
+
+private:
+    /**
+     * @brief set the internal state of the adapter
+     *
+     * @return true if the internal state was properly adapted, false otherwise
+     */
+    bool adaptInternalState();
+};
 
 PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::istream> reader,
     const std::vector<std::string>& attributeNames, const std::vector<size_t>& fieldByteSize,
@@ -231,9 +282,25 @@ bool PcdPointCloudPoint::gotoNextBinaryCompressed()
     return false;
 }
 
-PcdPointCloudPoint::~PcdPointCloudPoint()
+std::shared_ptr<PcdPointCloudPoint> PcdPointCloudPoint::createAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface)
 {
+    // test if nullptr. If so, return nullptr
+    if (pointCloudPointAccessInterface == nullptr) {return nullptr;}
+    
+    // we test if the interface is already a PcdPointCloudPoint with a dynamic cast
+    PcdPointCloudPoint* pcdPoint = dynamic_cast<PcdPointCloudPoint*>(pointCloudPointAccessInterface);
+    if (pcdPoint != nullptr) {
+        // if it is already a PcdPointCloudPointAdapter, we return a shared pointer with no ownership
+        return std::shared_ptr<PcdPointCloudPoint>{std::shared_ptr<PcdPointCloudPoint>{}, pcdPoint};
+    } else {
+        // create a new PcdPointCloudPointAdapter
+        return std::make_shared<PcdPointCloudPointAdapter>(pointCloudPointAccessInterface);
+    }
 }
+
+PcdPointCloudPoint::~PcdPointCloudPoint(){}
+
+PcdPointCloudHeader::PcdPointCloudHeader(){}
 
 /**
  * @brief Constructs a PcdPointCloudHeader object with the specified parameters for the PCD file format (see the PCL documentation for more information).
@@ -496,17 +563,36 @@ bool PcdPointCloudHeader::writeHeader(std::ostream &writer, const PcdPointCloudH
            << "FIELDS" << " " << header.fields << std::endl
            << "SIZE" << " " << header.size << std::endl
            << "TYPE" << " " << header.type << std::endl
-           << "COUNT" << " " << header.count << std::endl;
+           << "COUNT" << " " << header.count << std::endl
+           << "WIDTH" << " ";
     headerWidthPos = writer.tellp();
-    writer<< "WIDTH" << " " << widthStr << std::endl;
+    writer << widthStr << std::endl
+            << "HEIGHT" << " "; 
     headerHeightPos = writer.tellp();
-    writer << "HEIGHT" << " " << heightStr << std::endl
-           << "VIEWPOINT" << " " << header.viewpoint << std::endl;
+    writer << heightStr << std::endl
+           << "VIEWPOINT" << " " << header.viewpoint << std::endl
+           << "POINTS" << " ";
     headerPointsPos = writer.tellp();
-    writer << "POINTS" << " " << pointsStr << std::endl
+    writer << pointsStr << std::endl
            << "DATA" << " " << header.data << std::endl;
 
     return true;
+}
+
+std::shared_ptr<PcdPointCloudHeader> PcdPointCloudHeader::createAdapter(PointCloudHeaderInterface *pointCloudHeaderInterface)
+{
+    // test if nullptr. If so, return nullptr
+    if (pointCloudHeaderInterface == nullptr) {return nullptr;}
+    
+    // we test if the interface is already a PcdPointCloudHeader with a dynamic cast
+    PcdPointCloudHeader* pcdPoint = dynamic_cast<PcdPointCloudHeader*>(pointCloudHeaderInterface);
+    if (pcdPoint != nullptr) {
+        // if it is already a PcdPointCloudHeaderAdapter, we return a shared pointer with no ownership
+        return std::shared_ptr<PcdPointCloudHeader>{std::shared_ptr<PcdPointCloudHeader>{}, pcdPoint};
+    } else {
+        // create a new PcdPointCloudHeaderAdapter
+        return std::make_shared<PcdPointCloudHeaderAdapter>(pointCloudHeaderInterface);
+    }
 }
 
 std::vector<std::string> PcdPointCloudHeader::attributeList() const
@@ -552,6 +638,69 @@ static std::istream &operator>>(std::istream &is, PcdDataStorageType &data)
     return is;
 }
 
+std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>
+    getPcdDataLayoutFromPointcloudPoint(const PointCloudPointAccessInterface &pointcloudPointAccessInterface)
+{
+    // try to guess header parameters from the point cloud directly
+    auto attributeNames = std::vector<std::string>{};
+    auto size = std::vector<size_t>{};
+    auto type = std::vector<uint8_t>{};
+    auto count = std::vector<size_t>{};
+
+    size_t nbAttributes = 0;
+    for (auto&& attributeName : pointcloudPointAccessInterface.attributeList()) {
+        // try to find the attribute name in the header
+        auto attrOpt = pointcloudPointAccessInterface.getAttributeByName(attributeName.c_str()); 
+
+        if (attrOpt) {
+            const auto attr = attrOpt.value();
+            // visit the variant to get the size, type, count and data
+            std::visit([&](auto&& arg) {
+                using T = std::decay_t<decltype(arg)>;
+                // simple types
+                if constexpr (std::is_floating_point_v<T> || std::is_integral_v<T>) {
+                    attributeNames.push_back(attributeName);
+                    nbAttributes++;
+                    size.push_back(sizeof(T));
+                    count.push_back(1);
+                    if constexpr (std::is_floating_point_v<T>) {
+                        type.push_back('F');
+                    } else if constexpr (std::is_unsigned_v<T>) {
+                        type.push_back('U');
+                    } else {
+                        type.push_back('I');
+                    }
+                } else if constexpr (std::is_same_v<T, std::string>) {
+                    // PCD cannot store strings...We ignore it
+                } else if constexpr (is_vector_v<T>) { // vector types
+                    // get the contained type
+                    using V_t = std::decay_t<typename T::value_type>;
+                    if constexpr (std::is_floating_point_v<V_t> || std::is_integral_v<V_t>) {
+                        attributeNames.push_back(attributeName);
+                        nbAttributes++;
+                        size.push_back(sizeof(V_t));
+                        count.push_back(arg.size());
+                        if constexpr (std::is_floating_point_v<V_t>) {
+                            type.push_back('F');
+                        } else if constexpr (std::is_unsigned_v<V_t>) {
+                            type.push_back('U');
+                        } else {
+                            type.push_back('I');
+                        }
+                    } else if constexpr (std::is_same_v<V_t, std::string>) {
+                        // PCD cannot store strings...We ignore it
+                    } else {
+                        static_assert(false, "All types in the variant must be handled");
+                    }
+                } else {
+                    static_assert(false, "All types in the variant must be handled");
+                }
+            }, attr);
+        }
+    }
+    return {attributeNames, size, type, count};
+}
+
 std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesystem::path &pcdFilePath)
 {
    // open the file
@@ -591,34 +740,52 @@ bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloud
     std::streampos headerHeightPos;
     std::streampos headerPointsPos;
 
-    PcdPointCloudHeaderAdapter* pcdHeaderAccessAdapter = new PcdPointCloudHeaderAdapter{pointCloud.headerAccess.get()};
+    // default header data
+    double headerVersion = 0.7;
+    size_t headerWidth = 0;
+    size_t headerHeight = 0;
+    std::vector<double> headerViewpoint = {0, 0, 0, 1, 0, 0, 0};
+    size_t headerPoints = 0;
+    PcdDataStorageType headerData = PcdDataStorageType::ascii;
 
-    if (!pcdHeaderAccessAdapter->isStateValid()) {
-        return false;
+    auto pcdHeaderAccessAdapter = PcdPointCloudHeader::createAdapter(pointCloud.headerAccess.get());
+    if (pcdHeaderAccessAdapter) {
+        headerVersion = pcdHeaderAccessAdapter->version;
+        headerWidth = pcdHeaderAccessAdapter->width;
+        headerHeight = pcdHeaderAccessAdapter->height;
+        headerViewpoint = pcdHeaderAccessAdapter->viewpoint;
+        headerPoints = pcdHeaderAccessAdapter->points;
+        headerData = pcdHeaderAccessAdapter->data;
     }
 
+    // get the pointcloud point adapter
+    auto pcdPointAccessAdapter = PcdPointCloudPoint::createAdapter(pointCloud.pointAccess.get());
+    if (!(pcdPointAccessAdapter)) {return false;}
+
+    auto usedDataStorageType = headerData;
     // set the data storage type
     if (dataStorageType.has_value()) {
-        pcdHeaderAccessAdapter->data = dataStorageType.value();
+        usedDataStorageType = dataStorageType.value();
     }
+
+    // we generate a totally new header because if there is a mismatch between the informations of the point cloud and the header,
+    // we use the informations guessed from the point cloud point.
+    // the only information that we keep from the header is the data storage type (if not set by the user), the number of points,
+    // the width and the height (even though they may be wrong and will be corrected later after writing the points).
+    PcdPointCloudHeader newHeader{headerVersion, pcdPointAccessAdapter->attributeList(),
+        pcdPointAccessAdapter->getFieldByteSize(), pcdPointAccessAdapter->getFieldType(),
+        pcdPointAccessAdapter->getFieldCount(), headerWidth, headerHeight,
+        headerViewpoint, headerPoints, usedDataStorageType};
 
     // write the header
-    if (!PcdPointCloudHeader::writeHeader(*writer, *pcdHeaderAccessAdapter, headerWidthPos, headerHeightPos, headerPointsPos)) {
+    if (!PcdPointCloudHeader::writeHeader(*writer, newHeader, headerWidthPos, headerHeightPos, headerPointsPos)) {
         return false;
     }
 
-    // get the adapter
-    auto pcdPointAccessAdapter = PcdPointCloudPointAdapter::create(pointCloud.pointAccess.get(),
-        pcdHeaderAccessAdapter->fields, pcdHeaderAccessAdapter->size, pcdHeaderAccessAdapter->type,
-        pcdHeaderAccessAdapter->count, pcdHeaderAccessAdapter->data);
-    
-    if (!(pcdPointAccessAdapter && pcdPointAccessAdapter->isStateValid())) {
-        return false;
-    }
 
     size_t nbPoints = 0;
     // write the points
-    switch (pcdHeaderAccessAdapter->data) {
+    switch (usedDataStorageType) {
         case PcdDataStorageType::ascii:
             do {
                 if (!PcdPointCloudPointAdapter::writePointAscii(*writer, *pcdPointAccessAdapter)) return false;
@@ -643,13 +810,9 @@ bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloud
     static const size_t maxSizeStr = std::to_string(std::numeric_limits<size_t>::max()).length();
     // test if the number of points is the same as the number of points in the header. Otherwise, we have to modify it
     // in the header
-    if (nbPoints != pcdHeaderAccessAdapter->points) {
-        
-        pcdHeaderAccessAdapter->points = nbPoints;
+    if (nbPoints != newHeader.points || nbPoints != newHeader.width * newHeader.height) {
         // we cannot guess the width and height if the size of the point cloud has changed. Therefore, we have to
         // set the width to nbPoints and the height to 1
-        pcdHeaderAccessAdapter->width = nbPoints;
-        pcdHeaderAccessAdapter->height = 1;
 
         // convert everything to a string
         std::string pointsStr = std::to_string(nbPoints);
@@ -668,52 +831,32 @@ bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloud
         writer->write(heightStr.c_str(), maxSizeStr);
         // seek to the end of the file
         writer->seekp(0, std::ios_base::end);
-
     }
 
     return true;
 }
 
-PcdPointCloudPointAdapter::PcdPointCloudPointAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface,
-    const std::vector<std::string> &attributeNames, const std::vector<size_t> &fieldByteSize,
-    const std::vector<uint8_t> &fieldType, const std::vector<size_t> &fieldCount, PcdDataStorageType dataStorageType) :
-    PcdPointCloudPoint(nullptr, attributeNames, fieldByteSize, fieldType, fieldCount, dataStorageType),
-    pointCloudPointAccessInterface(pointCloudPointAccessInterface)
+PcdPointCloudPointAdapter::PcdPointCloudPointAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface,
+    const std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>& attributeInformations) :
+    PcdPointCloudPoint{nullptr, std::get<0>(attributeInformations), std::get<1>(attributeInformations), std::get<2>(attributeInformations),
+        std::get<3>(attributeInformations), PcdDataStorageType::ascii}, pointCloudPointAccessInterface(pointCloudPointAccessInterface)
 {
     adaptInternalState(); // set the internal state for the first time
 }
 
-std::shared_ptr<PcdPointCloudPointAdapter> PcdPointCloudPointAdapter::create(
-    PointCloudPointAccessInterface *pointCloudPointAccessInterface, const std::vector<std::string> &attributeNames,
-    const std::vector<size_t> &fieldByteSize, const std::vector<uint8_t> &fieldType,
-    const std::vector<size_t> &fieldCount, PcdDataStorageType dataStorageType)
-{
-    // we test if the interface is already a PcdPointCloudPointAdapter with a dynamic cast
-    PcdPointCloudPointAdapter* pcdPointAdapter = dynamic_cast<PcdPointCloudPointAdapter*>(pointCloudPointAccessInterface);
-    if (pcdPointAdapter != nullptr) {
-        // if it is already a PcdPointCloudPointAdapter, we return a shared pointer with no ownership
-        return std::shared_ptr<PcdPointCloudPointAdapter>{std::shared_ptr<PcdPointCloudPointAdapter>{}, pcdPointAdapter};
-    } else {
-        // create a new PcdPointCloudPointAdapter
-        return std::shared_ptr<PcdPointCloudPointAdapter>(new PcdPointCloudPointAdapter{pointCloudPointAccessInterface,
-            attributeNames, fieldByteSize, fieldType, fieldCount, dataStorageType});
-    }
-}
+PcdPointCloudPointAdapter::PcdPointCloudPointAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface):
+    PcdPointCloudPointAdapter(pointCloudPointAccessInterface, getPcdDataLayoutFromPointcloudPoint(*pointCloudPointAccessInterface)) {}
 
 bool PcdPointCloudPointAdapter::gotoNext()
 {
     return pointCloudPointAccessInterface->gotoNext() && adaptInternalState();
 }
 
-PcdPointCloudPointAdapter::~PcdPointCloudPointAdapter()
-{
-}
+PcdPointCloudPointAdapter::~PcdPointCloudPointAdapter(){}
 
 bool PcdPointCloudPointAdapter::adaptInternalState()
 {
     static_assert(sizeof(float) == 4 && sizeof(double) == 8);
-
-    isStateValid_v = false;
 
     if (pointCloudPointAccessInterface == nullptr) return false;
 
@@ -779,12 +922,11 @@ bool PcdPointCloudPointAdapter::adaptInternalState()
             }
             
     }
-    isStateValid_v = true;
     return true;
 }
 
 PcdPointCloudHeaderAdapter::PcdPointCloudHeaderAdapter(PointCloudHeaderInterface *pointCloudHeaderInterface) :
-    PcdPointCloudHeader(0, {}, {}, {}, {}, 0, 0, {}, 0, PcdDataStorageType::ascii)
+    PcdPointCloudHeader{}
 {
     this->pointCloudHeaderInterface = pointCloudHeaderInterface;
 
@@ -792,15 +934,18 @@ PcdPointCloudHeaderAdapter::PcdPointCloudHeaderAdapter(PointCloudHeaderInterface
     adaptInternalState();
 }
 
-PcdPointCloudHeaderAdapter::~PcdPointCloudHeaderAdapter()
-{
-}
+PcdPointCloudHeaderAdapter::~PcdPointCloudHeaderAdapter(){}
 
 bool PcdPointCloudHeaderAdapter::adaptInternalState()
 {
-    isStateValid_v = false;
+    // test if the list of attributes is valid (contains all the required attributes)
+    for (const auto& attr : attributeNames) {
+        auto it = std::find(pointCloudHeaderInterface->attributeList().begin(), pointCloudHeaderInterface->attributeList().end(), attr);
+        if (it == pointCloudHeaderInterface->attributeList().end() && attr != "viewpoint" && attr != "count") {
+            return false;
+        }
+    }
 
-    // try to get each attribute
     // version
     auto versionOpt = pointCloudHeaderInterface->getAttributeByName("version");
     if (!versionOpt.has_value()) return false;
@@ -819,8 +964,11 @@ bool PcdPointCloudHeaderAdapter::adaptInternalState()
     type = castedPointCloudAttribute<std::vector<uint8_t>>(typeOpt.value());
     // count
     auto countOpt = pointCloudHeaderInterface->getAttributeByName("count");
-    if (!countOpt.has_value()) return false;
-    count = castedPointCloudAttribute<std::vector<size_t>>(countOpt.value());
+    if (!countOpt.has_value()) {
+        count = std::vector<size_t>(fields.size(), 1);
+    } else {
+        count = castedPointCloudAttribute<std::vector<size_t>>(countOpt.value());   
+    }
     // width
     auto widthOpt = pointCloudHeaderInterface->getAttributeByName("width");
     if (!widthOpt.has_value()) return false;
@@ -831,8 +979,11 @@ bool PcdPointCloudHeaderAdapter::adaptInternalState()
     height = castedPointCloudAttribute<size_t>(heightOpt.value());
     // viewpoint
     auto viewpointOpt = pointCloudHeaderInterface->getAttributeByName("viewpoint");
-    if (!viewpointOpt.has_value()) return false;
-    viewpoint = castedPointCloudAttribute<std::vector<double>>(viewpointOpt.value());
+    if (!viewpointOpt.has_value()) {
+        viewpoint = std::vector<double>{0, 0, 0, 1, 0, 0, 0};
+    } else {
+        viewpoint = castedPointCloudAttribute<std::vector<double>>(viewpointOpt.value());
+    }
     // points
     auto pointsOpt = pointCloudHeaderInterface->getAttributeByName("points");
     if (!pointsOpt.has_value()) return false;
@@ -858,8 +1009,6 @@ bool PcdPointCloudHeaderAdapter::adaptInternalState()
     if (viewpoint.size() != 7) {
         return false;
     }
-
-    isStateValid_v = true;
     return true;
 }
 

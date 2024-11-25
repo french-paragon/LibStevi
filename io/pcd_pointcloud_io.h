@@ -58,10 +58,26 @@ public:
     std::vector<std::string> attributeList() const override;
 
     bool gotoNext() override;
+    
+    // getters
+
+    inline auto getFieldByteSize() const { return fieldByteSize; }
+    inline auto getFieldType() const { return fieldType; }
+    inline auto getFieldCount() const { return fieldCount; }
 
     static bool writePoint(std::ostream& writer, const PcdPointCloudPoint& point, PcdDataStorageType dataStorageType);
     static bool writePointAscii(std::ostream& writer, const PcdPointCloudPoint& point);
     static bool writePointBinary(std::ostream& writer, const PcdPointCloudPoint& point);
+
+    /**
+     * @brief Obtain an adapter to a PcdPointCloudPoint from any PointCloudPointAccessInterface. The adapted interface
+     * can be the given interface if the object is already a PcdPointCloudPoint or a wrapper otherwise.
+     * If the given interface is null, a nullptr is returned.
+     * 
+     * @param pointCloudPointAccessInterface the interface to adapt
+     * @return a shared_ptr to the adapted interface
+     */
+    static std::shared_ptr<PcdPointCloudPoint> createAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface);
 
     // destructor
     ~PcdPointCloudPoint() override;
@@ -71,71 +87,28 @@ private:
     bool gotoNextBinaryCompressed();
 };
 
-/// @brief adapter class to obtain a PcdPointCloudPoint from any PointCloudPointAccessInterface
-class PcdPointCloudPointAdapter : public PcdPointCloudPoint
-{
-protected:
-    PointCloudPointAccessInterface* pointCloudPointAccessInterface = nullptr;
-private:
-    // true if the state of the adapter is valid
-    bool isStateValid_v = false;
-public:    
-    /**
-     * @brief Factory method to create a PcdPointCloudPointAdapter. We use a shared_ptr because if the given iterface
-     * is already a PcdPointCloudPointAdapter, we don't want to create a new one. We will directly use the given interface
-     * and we don't have the ownerhip.
-     */
-    static std::shared_ptr<PcdPointCloudPointAdapter> create(PointCloudPointAccessInterface* pointCloudPointAccessInterface,
-        const std::vector<std::string>& attributeNames, const std::vector<size_t>& fieldByteSize,
-        const std::vector<uint8_t>& fieldType, const std::vector<size_t>& fieldCount,
-        PcdDataStorageType dataStorageType);
-
-    /**
-     * @brief 
-     * If true, the state of the adapter is valid
-     * @return true if the state of the adapter is valid
-    */
-    inline bool isStateValid() const { return isStateValid_v; }
-
-    bool gotoNext() override;
-    
-    // destructor
-    ~PcdPointCloudPointAdapter() override;
-
-protected:
-    PcdPointCloudPointAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface,
-        const std::vector<std::string>& attributeNames, const std::vector<size_t>& fieldByteSize,
-        const std::vector<uint8_t>& fieldType, const std::vector<size_t>& fieldCount,
-        PcdDataStorageType dataStorageType);
-
-    /**
-     * @brief fill the internal data buffer with the values of the attributes of the current point.
-     * 
-     * @return true if the internal state was properly adapted, false otherwise
-     */
-    bool adaptInternalState();
-};
-
 /// @brief basic class for a header in a pcd file
 class PcdPointCloudHeader : public PointCloudHeaderInterface
 {
 public:
-    double version;
+    double version = 0.7;
     std::vector<std::string> fields = {};
-    std::vector<size_t> size;
-    std::vector<uint8_t> type;
-    std::vector<size_t> count;
-    size_t width;
-    size_t height;
-    std::vector<double> viewpoint;
-    size_t points;
-    PcdDataStorageType data;
+    std::vector<size_t> size = {};
+    std::vector<uint8_t> type = {};
+    std::vector<size_t> count = {};
+    size_t width = 0;
+    size_t height = 0;
+    std::vector<double> viewpoint = {0, 0, 0, 1, 0, 0, 0};
+    size_t points = 0;
+    PcdDataStorageType data = PcdDataStorageType::ascii;
 
 protected:
     // attribute names for the header
     std::vector<std::string> attributeNames = {"version", "fields", "size", "type", "count", "width", "height", "viewpoint", "points", "data"};
 public:
     // constructor
+    PcdPointCloudHeader();
+
     PcdPointCloudHeader(const double version, const std::vector<std::string>& fields,
         const std::vector<size_t>& size, const std::vector<uint8_t>& type, const std::vector<size_t>& count,
         const size_t width, const size_t height, const std::vector<double>& viewpoint, const size_t points,
@@ -151,38 +124,29 @@ public:
 
     static bool getNextHeaderLine(std::istream& reader, std::string& line, std::vector<std::string>& lineSplit, std::stringstream& lineStream);
 
+    /**
+     * @brief Write the header of the pcd file. It also obtains the position of the fields width, height and points.
+     * 
+     * @param writer The writer to use
+     * @param header The header interface to write
+     * @param headerWidthPos The position of the width field in the stream.
+     * @param headerHeightPos The position of the heigh field in the stream.
+     * @param headerPointsPos The position of the points field in the stream.
+     * @return true is success.
+     * @return false if it fails to write the data.
+     */
     static bool writeHeader(std::ostream& writer, const PcdPointCloudHeader& header, 
                                std::streampos& headerWidthPos, std::streampos& headerHeightPos, std::streampos& headerPointsPos);
-};
-
-/// @brief adapter class to obtain a PcdPointCloudHeader from any PointCloudHeaderInterface
-class PcdPointCloudHeaderAdapter : public PcdPointCloudHeader
-{
-protected:
-    PointCloudHeaderInterface* pointCloudHeaderInterface = nullptr;
-private:
-    // true if the state of the adapter is valid
-    bool isStateValid_v = false;
-public:
-    PcdPointCloudHeaderAdapter(PointCloudHeaderInterface* pointCloudHeaderInterface);
 
     /**
-     * @brief 
-     * If true, the state of the adapter is valid
-     * @return true if the state of the adapter is valid
-    */
-    inline bool isStateValid() const { return isStateValid_v; }
-
-    // destructor
-    ~PcdPointCloudHeaderAdapter() override;
-
-private:
-    /**
-     * @brief set the internal state of the adapter
-     *
-     * @return true if the internal state was properly adapted, false otherwise
+     * @brief Obtain an adapter to a PcdPointCloudHeader from any PointCloudHeaderInterface. The adapted interface
+     * can be the given interface if the object is already a PcdPointCloudHeader or a wrapper otherwise.
+     * If the given interface is null, a nullptr is returned.
+     * 
+     * @param pointCloudHeaderInterface the interface to adapt
+     * @return a shared_ptr to the adapted interface
      */
-    bool adaptInternalState();
+    static std::shared_ptr<PcdPointCloudHeader> createAdapter(PointCloudHeaderInterface* pointCloudHeaderInterface);
 };
 
 /**
