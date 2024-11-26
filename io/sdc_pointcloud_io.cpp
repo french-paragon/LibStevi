@@ -11,32 +11,36 @@ namespace IO {
 SdcPointCloudPoint::SdcPointCloudPoint(std::unique_ptr<std::istream> reader, uint16_t majorVersion, uint16_t minorVersion):
     majorVersion{majorVersion}, minorVersion{minorVersion}, reader{std::move(reader)}
 {
-    // compute the offsets
-    std::exclusive_scan(fieldByteSize.begin(), fieldByteSize.end(), fieldOffset.begin(), 0);
 
     // compute the size of a sdc point record by summing the field sizes
-    recordByteSize = std::reduce(fieldByteSize.begin(), fieldByteSize.end() - 3);
-    
-    // depending on the version, we have different attributes for the point cloud
-    attributeNames = {"time", "range", "theta", "x", "y", "z", "amplitude", "width", "targettype", "target", "numtarget", "rgindex", "channeldesc"};
+    recordByteSize = fieldOffset[classid_id];
+
+    nbAttributes = 13;
+
+    // compute the size of a sdc point record
+    // recordByteSize = fieldOffset[classid_size];
     if (majorVersion >= 5) {
         if (minorVersion >= 2) { // version 5.2
-            attributeNames.push_back("classid");
-            recordByteSize += sizeof(classid);
+            recordByteSize += classid_size;
+            nbAttributes++;
         }
         if (minorVersion >= 3) { // version 5.3
-            attributeNames.push_back("rho");
-            recordByteSize += sizeof(rho);
+            recordByteSize += rho_size;
+            nbAttributes++;
         }
         if (minorVersion >= 4) { // version 5.4
-            attributeNames.push_back("reflectance");
-            recordByteSize += sizeof(reflectance);
+            recordByteSize += reflectance_size;
+            nbAttributes++;
         }
     }
 }
 
 PtGeometry<PointCloudGenericAttribute> SdcPointCloudPoint::getPointPosition() const {
-    return PtGeometry<PointCloudGenericAttribute>{x, y, z};
+    return PtGeometry<PointCloudGenericAttribute>{
+            *reinterpret_cast<const float*>(dataBuffer + fieldOffset[x_id]),
+            *reinterpret_cast<const float*>(dataBuffer + fieldOffset[y_id]),
+            *reinterpret_cast<const float*>(dataBuffer + fieldOffset[z_id])
+        };
 }
 
 std::optional<PtColor<PointCloudGenericAttribute>> SdcPointCloudPoint::getPointColor() const {
@@ -44,46 +48,43 @@ std::optional<PtColor<PointCloudGenericAttribute>> SdcPointCloudPoint::getPointC
 }
 
 std::optional<PointCloudGenericAttribute> SdcPointCloudPoint::getAttributeById(int id) const {
+    if (id >= nbAttributes || id < 0) return std::nullopt; 
     switch (id) {
-        case 0:
-            return PointCloudGenericAttribute{time};
-        case 1:
-            return PointCloudGenericAttribute{range};
-        case 2:
-            return PointCloudGenericAttribute{theta};
-        case 3:
-            return PointCloudGenericAttribute{x};
-        case 4:
-            return PointCloudGenericAttribute{y};
-        case 5:
-            return PointCloudGenericAttribute{z};
-        case 6:
-            return PointCloudGenericAttribute{amplitude};
-        case 7:
-            return PointCloudGenericAttribute{width};
-        case 8:
-            return PointCloudGenericAttribute{targettype};
-        case 9:
-            return PointCloudGenericAttribute{target};
-        case 10:
-            return PointCloudGenericAttribute{numtarget};
-        case 11:
-            return PointCloudGenericAttribute{rgindex};
-        case 12:
-            return PointCloudGenericAttribute{channeldesc};   
+        case time_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const double*>(dataBuffer + fieldOffset[time_id])};
+        case range_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const float*>(dataBuffer + fieldOffset[range_id])};
+        case theta_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const float*>(dataBuffer + fieldOffset[theta_id])};
+        case x_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const float*>(dataBuffer + fieldOffset[x_id])};
+        case y_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const float*>(dataBuffer + fieldOffset[y_id])};
+        case z_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const float*>(dataBuffer + fieldOffset[z_id])};
+        case amplitude_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const uint16_t*>(dataBuffer + fieldOffset[amplitude_id])};
+        case width_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const uint16_t*>(dataBuffer + fieldOffset[width_id])};
+        case targettype_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const uint8_t*>(dataBuffer + fieldOffset[targettype_id])};
+        case target_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const uint8_t*>(dataBuffer + fieldOffset[target_id])};
+        case numtarget_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const uint8_t*>(dataBuffer + fieldOffset[numtarget_id])};
+        case rgindex_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const uint16_t*>(dataBuffer + fieldOffset[rgindex_id])};
+        case channeldesc_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const uint8_t*>(dataBuffer + fieldOffset[channeldesc_id])};
+        case classid_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const uint8_t*>(dataBuffer + fieldOffset[classid_id])};
+        case rho_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const float*>(dataBuffer + fieldOffset[rho_id])};
+        case reflectance_id:
+            return PointCloudGenericAttribute{*reinterpret_cast<const int16_t*>(dataBuffer + fieldOffset[reflectance_id])};
+        default:
+            return std::nullopt;
     }
-
-    if (majorVersion >= 5) { 
-        if (minorVersion >= 2 && id == 13) { // version 5.2
-            return PointCloudGenericAttribute{classid};
-        } else if (minorVersion >= 3 && id == 14) { // version 5.3
-            return PointCloudGenericAttribute{rho};
-        } else if (minorVersion >= 4 && id == 15) { // version 5.4
-            return PointCloudGenericAttribute{reflectance};
-        }
-    }
-
-    return std::nullopt; // Attribute not found
 }
 
 std::optional<PointCloudGenericAttribute> SdcPointCloudPoint::getAttributeByName(const char* attributeName) const {
@@ -95,43 +96,17 @@ std::optional<PointCloudGenericAttribute> SdcPointCloudPoint::getAttributeByName
 }
 
 std::vector<std::string> SdcPointCloudPoint::attributeList() const {
-    return attributeNames;
+    return std::vector<std::string>(attributeNames.begin(), attributeNames.begin() + nbAttributes);
 }
 
 bool SdcPointCloudPoint::gotoNext() {
     static_assert(sizeof(float) == 4); // check if float is 4 bytes, should be true on most systems
     static_assert(sizeof(double) == 8); // check if double is 8 bytes
     // try to read a record
-     std::vector<char> buffer(recordByteSize);
-    reader->read(buffer.data(), recordByteSize);
+    // std::vector<char> buffer(recordByteSize);
+    reader->read(dataBuffer, recordByteSize);
     if (!reader->good()) {
         return false; // end of file or read error
-    }
-    // read the data
-    time = *reinterpret_cast<double*>(buffer.data() + fieldOffset[0]);
-    range = *reinterpret_cast<float*>(buffer.data() + fieldOffset[1]);
-    theta = *reinterpret_cast<float*>(buffer.data() + fieldOffset[2]);
-    x = *reinterpret_cast<float*>(buffer.data() + fieldOffset[3]);
-    y = *reinterpret_cast<float*>(buffer.data() + fieldOffset[4]);
-    z = *reinterpret_cast<float*>(buffer.data() + fieldOffset[5]);
-    amplitude = *reinterpret_cast<uint16_t*>(buffer.data() + fieldOffset[6]);
-    width = *reinterpret_cast<uint16_t*>(buffer.data() + fieldOffset[7]);
-    targettype = *reinterpret_cast<uint8_t*>(buffer.data() + fieldOffset[8]);
-    target = *reinterpret_cast<uint8_t*>(buffer.data() + fieldOffset[9]);
-    numtarget = *reinterpret_cast<uint8_t*>(buffer.data() + fieldOffset[10]);
-    rgindex = *reinterpret_cast<uint16_t*>(buffer.data() + fieldOffset[11]);
-    channeldesc = *reinterpret_cast<uint8_t*>(buffer.data() + fieldOffset[12]);
-    // depending on the version, we have different attributes for the point cloud
-    if (majorVersion >= 5) {
-        if (minorVersion >= 2) { // version 5.2
-            classid = *reinterpret_cast<uint8_t*>(buffer.data() + fieldOffset[13]);
-        }
-        if (minorVersion >= 3) { // version 5.3
-            rho = *reinterpret_cast<float*>(buffer.data() + fieldOffset[14]);
-        }
-        if (minorVersion >= 4) { // version 5.4
-            reflectance = *reinterpret_cast<int16_t*>(buffer.data() + fieldOffset[15]);
-        }
     }
     return true;
 }
@@ -177,7 +152,15 @@ std::vector<std::string> SdcPointCloudHeader::attributeList() const
 std::optional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesystem::path &sdcFilePath)
 {
     // read the file
-    auto inputFile = std::make_unique<std::ifstream>(sdcFilePath, std::ios_base::binary);
+
+    auto inputFile = std::make_unique<std::ifstream>();
+
+    // big buffer
+    // constexpr size_t bufferSize = 1 << 20;
+    // char* buffer = new char[bufferSize];
+    // inputFile->rdbuf()->pubsetbuf(buffer, bufferSize);
+
+    inputFile->open(sdcFilePath, std::ios_base::binary);
 
     // return null if the file can't be opened
     if (!inputFile->is_open()) return std::nullopt;
