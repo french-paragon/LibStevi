@@ -82,6 +82,32 @@ Filter<T, Ds...> instanciateSeparatedFilter(Multidim::Array<T, Filter<T, Ds...>:
 }
 
 template<typename T, typename... Ds>
+Filter<T, Ds...> constantFilter(T val, int radius, Ds... axisDefinitions) {
+
+    using CoeffType = Multidim::Array<T, Filter<T, Ds...>::nFilterAxes>;
+
+    std::array<int, Filter<T, Ds...>::nFilterAxes> shape;
+
+    for (int i = 0; i < Filter<T, Ds...>::nFilterAxes; i++) {
+        shape[i] = 2*radius+1;
+    }
+
+    CoeffType coefficients(shape);
+
+    Multidim::IndexConverter<Filter<T, Ds...>::nFilterAxes> idxCvrt(shape);
+
+    for (int i = 0; i < idxCvrt.numberOfPossibleIndices(); i++) {
+
+        auto idx = idxCvrt.getIndexFromPseudoFlatId(i);
+
+        coefficients.atUnchecked(idx) = static_cast<T>(val);
+    }
+
+    return Filter<T, Ds...>(coefficients, axisDefinitions...);
+
+}
+
+template<typename T, typename... Ds>
 Filter<T, Ds...> uniformGaussianFilter(T sigma, int radius, bool normalize, Ds... axisDefinitions) {
 
     using CoeffType = Multidim::Array<T, Filter<T, Ds...>::nFilterAxes>;
@@ -130,6 +156,52 @@ Filter<T, Ds...> uniformGaussianFilter(T sigma, int radius, bool normalize, Ds..
     }
 
     return Filter<T, Ds...>(coefficients, axisDefinitions...);
+}
+
+
+template<typename T, typename... Ds>
+std::array<Filter<T, Ds...>, Filter<T, Ds...>::nAxesOfType(AxisType::Moving)> separatedConstantFilter(T val, int radius, Ds... axisDefinitions) {
+    using CoeffType = Multidim::Array<T, Filter<T, Ds...>::nFilterAxes>;
+
+    constexpr int nFilters = Filter<T, Ds...>::nAxesOfType(AxisType::Moving);
+
+    std::array<Filter<T, Ds...>, nFilters> ret;
+
+    for (int i = 0; i < nFilters; i++) {
+
+        std::array<int, Filter<T, Ds...>::nFilterAxes> shape;
+
+        for (int j = 0; j < Filter<T, Ds...>::nFilterAxes; j++) {
+            shape[j] = 1;
+        }
+
+        shape[i] = 2*radius+1;
+
+        CoeffType coefficients(shape);
+
+        std::array<int, Filter<T, Ds...>::nFilterAxes> idx;
+
+        for (int j = 0; j < Filter<T, Ds...>::nFilterAxes; j++) {
+            idx[j] = 0;
+        }
+
+        double sum = 0;
+
+        for (int d = 0; d < 2*radius+1; d++) {
+            idx[i] = d;
+
+            coefficients.atUnchecked(idx) = (i == 0) ? val : 1;
+        }
+
+        if (i == 0) {
+            ret[i] = Internals::instanciateSeparatedFilter<T, true>(coefficients, i, std::index_sequence_for<Ds...>(), axisDefinitions...);
+        } else {
+            ret[i] = Internals::instanciateSeparatedFilter<T, false>(coefficients, i, std::index_sequence_for<Ds...>(), axisDefinitions...);
+        }
+
+    }
+
+    return ret;
 }
 
 /*!

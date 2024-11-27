@@ -22,6 +22,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../geometry/core.h"
 #include <Eigen/Geometry>
 
+#include "../utils/types_manipulations.h"
+
 namespace StereoVision {
 namespace Geometry {
 
@@ -58,12 +60,21 @@ Eigen::Matrix<T,3,1> angleAxisRotate(Eigen::Matrix<T,3,1> const& r, Eigen::Matri
 template<typename T>
 Eigen::Matrix<T,3,1> inverseRodriguezFormula(Eigen::Matrix<T,3,3> const& R) {
 
-    T d =  0.5*(R(0,0) + R(1,1) + R(2,2) - T(1));
+    T trace = R(0,0) + R(1,1) + R(2,2);
+    T d =  0.5*(trace - T(1));
+
+    if (d < T(-1)) { //necessary for numerical stability.
+        d = T(-1);
+    }
+
     Eigen::Matrix<T,3,1> omega;
 
     Eigen::Matrix<T,3,1> dR = unskew<T>(R - R.transpose());
 
     T nDr = dR.norm();
+
+    double d_threshold = (TypesManipulations::typeExceedFloat32Precision<T>()) ? 0.999999 : 0.999;
+    double nDr_threshold = (TypesManipulations::typeExceedFloat32Precision<T>()) ? 1e-6 : 1e-3;
 
     if (d>0.999)
     {
@@ -71,8 +82,29 @@ Eigen::Matrix<T,3,1> inverseRodriguezFormula(Eigen::Matrix<T,3,3> const& R) {
     }
     else if (nDr < 1e-3) {
         T theta = acos(d);
-        Eigen::Matrix<T,3,1> d = R.diagonal();
-        omega = theta*(d - Eigen::Matrix<T,3,1>::Ones()*d.minCoeff())/(T(1) - d.minCoeff());
+        Eigen::Matrix<T,3,3> S = R + R.transpose() + (T(1) - trace)*Eigen::Matrix<T,3,3>::Identity();
+        Eigen::Matrix<T,3,1> n;
+
+        for (int i = 0; i < 3; i++) {
+            n[i] = sqrt(S(i,i)/(T(3) - trace)); //compute the values, up to sign
+        }
+
+        if (n[0] > n[1] and n[0] > n[2]) {
+            n[1] = (S(0,1)/(T(3) - trace))/n[0];
+            n[2] = (S(0,2)/(T(3) - trace))/n[0];
+        }
+
+        if (n[1] > n[0] and n[1] > n[2]) {
+            n[0] = (S(1,0)/(T(3) - trace))/n[1];
+            n[2] = (S(1,2)/(T(3) - trace))/n[1];
+        }
+
+        if (n[2] > n[0] and n[2] > n[1]) {
+            n[0] = (S(2,0)/(T(3) - trace))/n[2];
+            n[1] = (S(2,1)/(T(3) - trace))/n[2];
+        }
+
+        omega = theta*n;
     }
     else
     {

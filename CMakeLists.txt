@@ -62,6 +62,7 @@ include_directories(${EIGEN3_INCLUDE_DIR})
 find_package(JPEG)
 find_package(PNG)
 find_package(TIFF)
+find_package(OpenEXR)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -71,21 +72,22 @@ add_subdirectory(submodules)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/submodules)
 include_directories(${MODULES_INCLUDE_DIRECTORIES})
 
-set(LIB_SRC 
+set(LIB_SRC
         stevi_global.h
-	geometry/core.h
-	geometry/geometricexception.cpp
+        geometry/core.h
+        geometry/geometricexception.cpp
         geometry/geometricexception.h
         geometry/alignement.h
         geometry/imagecoordinates.h
-	geometry/lensdistortion.h
-	geometry/pointcloudalignment.cpp
+        geometry/lensdistortion.h
+        geometry/pointcloudalignment.cpp
         geometry/pointcloudalignment.h
         geometry/genericraysalignement.h
         geometry/rotations.h
         geometry/posesmath.h
         geometry/stereorigrectifier.cpp
         geometry/stereorigrectifier.h
+        geometry/genericbinarypartitioningtree.h
         graphs/graphs.h
         graphs/doublyConnectedEdgeLists.h
         graphs/graph_flow.h
@@ -152,8 +154,12 @@ set(LIB_SRC
         imageProcessing/pixelsLines.h
         imageProcessing/pixelsTriangles.h
         imageProcessing/edgesDetection.h
+        imageProcessing/inpainting.h
         io/image_io.h
         io/image_io.cpp
+        io/read_exr.h
+        io/pointcloud_io.h
+        io/pointcloud_io.cpp
         sparseMatching/cornerDetectors.h
         sparseMatching/nonLocalMaximumPointSelection.h
         sparseMatching/pointsOrientation.h
@@ -189,6 +195,12 @@ if (TIFF_FOUND)
     target_link_libraries(${STEREOVISION_LIB} PUBLIC TIFF::TIFF)
 	target_compile_definitions(${STEREOVISION_LIB} PRIVATE STEVI_IO_USE_TIFF)
 endif (TIFF_FOUND)
+
+if(OpenEXR_FOUND)
+    message("Using native openEXR library")
+    target_link_libraries(${STEREOVISION_LIB} PUBLIC OpenEXR::IlmImf)
+    target_compile_definitions(stevi PRIVATE STEVI_IO_USE_OPENEXR)
+endif(OpenEXR_FOUND)
 
 if (buildGui)
     find_package(QT NAMES Qt5 COMPONENTS Widgets REQUIRED)

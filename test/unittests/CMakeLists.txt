@@ -143,5 +143,13 @@ add_executable(testPartitionTrees testPartitionTrees.cpp)
 target_link_libraries(testPartitionTrees ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestPartitionTrees testPartitionTrees)
 
+add_executable(testTypesUtils testTypesUtils.cpp)
+target_link_libraries(testTypesUtils ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestTypesUtils testTypesUtils)
+
+add_executable(testPointCloudIO testPointCloudIO.cpp)
+target_link_libraries(testPointCloudIO ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestPointCloudIO testPointCloudIO)
+
 
 

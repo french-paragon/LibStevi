@@ -12,6 +12,7 @@
 #include <Eigen/QR>
 
 #include "./convolutions.h"
+#include "./standardConvolutionFilters.h"
 #include "./edgesDetection.h"
 
 #include "../geometry/rotations.h"
@@ -969,11 +970,17 @@ Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType,
 }
 
 template<typename ComputeType>
-Multidim::Array<ComputeType, 2> flattenHeightMapInAreaOfInterest(Multidim::Array<ComputeType, 2> const& baseHeightMap, Multidim::Array<bool, 2> const& mask) {
+Multidim::Array<ComputeType, 2> flattenHeightMapInAreaOfInterest(Multidim::Array<ComputeType, 2> const& baseHeightMap,
+                                                                 Multidim::Array<bool, 2> const& mask,
+                                                                 bool ensureConvex = false) {
 
 	using MatAT = Eigen::Matrix<ComputeType, Eigen::Dynamic, 3>;
 	using VecbT = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
 	using VecSolT = Eigen::Matrix<ComputeType, 3, 1>;
+
+    using MovingAxis = ImageProcessing::Convolution::MovingWindowAxis;
+    using Padding = ImageProcessing::Convolution::PaddingInfos;
+    using FiltType = Convolution::Filter<ComputeType, MovingAxis, MovingAxis>;
 
 	auto shape = baseHeightMap.shape();
 
@@ -1040,6 +1047,52 @@ Multidim::Array<ComputeType, 2> flattenHeightMapInAreaOfInterest(Multidim::Array
 		}
 	}
 
+    if (ensureConvex) {
+
+        Multidim::Array<ComputeType,2> array(3,3);
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                array.atUnchecked(i,j) = 1;
+            }
+        }
+        array.atUnchecked(1,1) = 8;
+
+        Padding diff_pad(1, ImageProcessing::Convolution::PaddingType::Mirror);
+        FiltType convDetector(array, MovingAxis(diff_pad), MovingAxis(diff_pad));
+
+        Multidim::Array<ComputeType,2> convex = convDetector.convolve(ret);
+
+        ComputeType mean = 0;
+
+        for (int i = 0; i < mask.shape()[0]; i++) {
+            for (int j = 0; j < mask.shape()[1]; j++) {
+
+                if (mask.valueUnchecked(i,j)) {
+                    mean += (convex.atUnchecked(i,j) >= 0) ? 1 : -1;
+                }
+            }
+        }
+
+        if (mean < 0) {
+            minVal = std::numeric_limits<ComputeType>::max();
+
+            for (int i = 0; i < mask.shape()[0]; i++) {
+                for (int j = 0; j < mask.shape()[1]; j++) {
+
+                    if (mask.valueUnchecked(i,j)) {
+                        ComputeType val = ret.atUnchecked(i,j);
+                        ret.atUnchecked(i,j) = -val;
+
+                        if (minVal > val) {
+                            minVal = val;
+                        }
+                    }
+                }
+            }
+        }
+
+    }
+
 	for (int i = 0; i < mask.shape()[0]; i++) {
 		for (int j = 0; j < mask.shape()[1]; j++) {
 
@@ -1054,6 +1107,106 @@ Multidim::Array<ComputeType, 2> flattenHeightMapInAreaOfInterest(Multidim::Array
 
 	return ret;
 
+}
+
+template<typename ComputeType>
+Eigen::Matrix<ComputeType, 3, 1> estimateLightDirection(Multidim::Array<ComputeType, 2> const& shading, int lowPassRadius = 3) {
+
+    using MovingAxis = ImageProcessing::Convolution::MovingWindowAxis;
+    using Padding = ImageProcessing::Convolution::PaddingInfos;
+    using FiltType = Convolution::Filter<ComputeType, MovingAxis, MovingAxis>;
+
+    auto shape = shading.shape();
+
+    Padding diff_pad(1, ImageProcessing::Convolution::PaddingType::Mirror);
+
+    std::array<FiltType, 2> finiteDifferencesFilters =
+            ImageProcessing::Convolution::finiteDifferencesKernels<ComputeType>(MovingAxis(diff_pad), MovingAxis(diff_pad));
+
+    std::array<FiltType, 2> extendingKernels =
+            ImageProcessing::Convolution::extendLinearKernels<ComputeType>(MovingAxis(diff_pad), MovingAxis(diff_pad));
+
+
+    Multidim::Array<ComputeType, 2> lp_filtered;
+
+    if (lowPassRadius >= 1) {
+
+        Padding pad(lowPassRadius, ImageProcessing::Convolution::PaddingType::Mirror);
+
+        constexpr bool normalize = false;
+        float sigma = static_cast<float>(lowPassRadius+1)/2;
+
+        std::array<FiltType, 2> separatedGaussianFilter =
+                ImageProcessing::Convolution::separatedGaussianFilters(sigma, lowPassRadius, normalize, MovingAxis(pad), MovingAxis(pad));
+
+        lp_filtered = separatedGaussianFilter[0].convolve(shading);
+
+        for (int i = 1; i < separatedGaussianFilter.size(); i++) {
+            lp_filtered = separatedGaussianFilter[i].convolve(lp_filtered);
+        }
+
+    } else {
+        lp_filtered = shading;
+    }
+
+    std::array<Multidim::Array<ComputeType, 2>, 2> diffs;
+
+    for (int diff = 0; diff < 2; diff++) {
+
+        FiltType filt1 = (diff == 0) ? finiteDifferencesFilters[0] : extendingKernels[0];
+
+        diffs[diff] = filt1.convolve(lp_filtered);
+
+        FiltType filt2 = (diff == 1) ? finiteDifferencesFilters[1] : extendingKernels[1];
+
+        diffs[diff] = filt2.convolve(diffs[diff]);
+    }
+
+    Eigen::Vector2d centroid(0,0);
+    Eigen::Matrix<double,Eigen::Dynamic,2> directions;
+
+    int nDir = shape[0]*shape[1];
+    directions.resize(nDir,2);
+
+    double wMeasurements = 0;
+    int id = 0;
+
+    for (int i = 0; i < shape[0]; i++) {
+        for (int j = 0; j < shape[1]; j++) {
+
+            double val = lp_filtered.atUnchecked(i,j);
+
+            wMeasurements += val;
+            centroid[0] += i*val;
+            centroid[1] += j*val;
+
+            directions(id,0) = diffs[0].atUnchecked(i,j);
+            directions(id,1) = diffs[1].atUnchecked(i,j);
+            id++;
+
+        }
+    }
+
+    centroid /= wMeasurements;
+    centroid -= Eigen::Vector2d(shape[0], shape[1])/2;
+
+    Eigen::JacobiSVD<Eigen::Matrix<double,Eigen::Dynamic,2>> svd(directions, Eigen::ComputeFullV);
+    Eigen::Vector2d direction = svd.matrixV().col(0);
+
+    direction.normalize();
+
+    if (direction.dot(centroid) < 0) {
+        direction = -direction;
+    }
+
+    double norm = direction.norm();
+
+    Eigen::Matrix<ComputeType, 3, 1> ret;
+    ret[0] = -direction[1]; //light comes from oppossite directions.
+    ret[1] = direction[0]; //first image axis is y geometrically
+    ret[2] = norm; //assume 45° light
+
+    return ret;
 }
 
 } // namespace ImageProcessing

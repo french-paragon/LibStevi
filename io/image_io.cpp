@@ -1,7 +1,78 @@
 #include "image_io.h"
 
+#ifdef STEVI_IO_USE_OPENEXR
+#include "read_exr.h"
+#endif
+
 namespace StereoVision {
 namespace IO {
+
+#define EXR_LAYER_EXT ".exrlayer"
+#define EXR_CHANNEL_EXT ".exrchannel"
+
+#define EXR_INNER_SEPARATOR '/'
+
+#ifdef STEVI_IO_USE_OPENEXR
+template<typename ImgType>
+Multidim::Array<ImgType, 3> readExrLayerAsImage(std::string const& path) {
+
+    std::string exr_layer_ext = EXR_LAYER_EXT;
+
+    if (path.size() < exr_layer_ext.size() or 0 != path.compare(path.size()-exr_layer_ext.size(), exr_layer_ext.size(), exr_layer_ext)) {
+        return Multidim::Array<ImgType, 3>();
+    }
+
+    int pos = path.find_last_of(EXR_INNER_SEPARATOR);
+
+    if (pos <= 0 or pos >= path.size()) {
+        return Multidim::Array<ImgType, 3>();
+    }
+
+    int nCharLayer = path.size()-1-pos-exr_layer_ext.size();
+
+    if (nCharLayer <= 0) {
+        return Multidim::Array<ImgType, 3>();
+    }
+
+    std::string file = path.substr(0,pos);
+    std::string layer = path.substr(pos+1,nCharLayer);
+
+    return readExrLayer<ImgType>(file, layer);
+
+}
+
+template<typename ImgType>
+Multidim::Array<ImgType, 3> readExrChannelAsImage(std::string const& path) {
+
+    std::string exr_channel_ext = EXR_CHANNEL_EXT;
+
+    if (path.size() < exr_channel_ext.size() or 0 != path.compare(path.size()-exr_channel_ext.size(), exr_channel_ext.size(), exr_channel_ext)) {
+        return Multidim::Array<ImgType, 3>();
+    }
+
+    int pos = path.find_last_of(EXR_INNER_SEPARATOR);
+
+    if (pos <= 0 or pos >= path.size()) {
+        return Multidim::Array<ImgType, 3>();
+    }
+
+    int nCharLayer = path.size()-1-pos-exr_channel_ext.size();
+
+    if (nCharLayer <= 0) {
+        return Multidim::Array<ImgType, 3>();
+    }
+
+    std::string file = path.substr(0,pos);
+    std::string channel = path.substr(pos+1,nCharLayer);
+
+    Multidim::Array<ImgType, 2> channelArray = readExrChannel<ImgType>(file, channel);
+
+    std::array<int,3> shape = {channelArray.shape()[0], channelArray.shape()[1],1};
+    std::array<int,3> strides = {channelArray.strides()[0], channelArray.strides()[1],shape[0]*shape[1]};
+    constexpr bool manage = true;
+    return Multidim::Array<ImgType, 3>(channelArray.takePointer(), shape,strides, manage);
+}
+#endif
 
 template<typename ImgType>
 Multidim::Array<ImgType, 3> readImage(std::string const& fileName) {
@@ -12,6 +83,19 @@ Multidim::Array<ImgType, 3> readImage(std::string const& fileName) {
     if (fileName.size() >= stevimg_ext.size() && 0 == fileName.compare(fileName.size()-stevimg_ext.size(), stevimg_ext.size(), stevimg_ext)) {
         return readStevimg<ImgType, 3>(fileName);
     }
+
+    #ifdef STEVI_IO_USE_OPENEXR
+    std::string exr_layer_ext = EXR_LAYER_EXT;
+    std::string exr_channel_ext = EXR_CHANNEL_EXT;
+
+    if (fileName.size() >= exr_layer_ext.size() && 0 == fileName.compare(fileName.size()-exr_layer_ext.size(), exr_layer_ext.size(), exr_layer_ext)) {
+        return readExrLayerAsImage<ImgType>(fileName);
+    }
+
+    if (fileName.size() >= exr_channel_ext.size() && 0 == fileName.compare(fileName.size()-exr_channel_ext.size(), exr_channel_ext.size(), exr_channel_ext)) {
+        return readExrChannelAsImage<ImgType>(fileName);
+    }
+    #endif
 
     try {
         cimg_library::CImg<ImgType> image(fileName.c_str());
