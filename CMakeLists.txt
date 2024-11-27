@@ -170,29 +170,30 @@ add_library(
 )
 
 target_compile_definitions(${STEREOVISION_LIB} PRIVATE LIBSTEREOVISION_BUILDING)
+target_link_libraries(${STEREOVISION_LIB} PUBLIC Threads::Threads)
 
 if (JPEG_FOUND)
     message("Using native jpg library")
     target_link_libraries(${STEREOVISION_LIB} PUBLIC JPEG::JPEG)
-    target_compile_definitions(stevi PRIVATE STEVI_IO_USE_JPEG)
+	target_compile_definitions(${STEREOVISION_LIB} PRIVATE STEVI_IO_USE_JPEG)
 endif (JPEG_FOUND)
 
 if (PNG_FOUND)
     message("Using native png library")
     target_link_libraries(${STEREOVISION_LIB} PUBLIC PNG::PNG)
-    target_compile_definitions(stevi PRIVATE STEVI_IO_USE_PNG)
+	target_compile_definitions(${STEREOVISION_LIB} PRIVATE STEVI_IO_USE_PNG)
 endif (PNG_FOUND)
 
 if (TIFF_FOUND)
     message("Using native tiff library")
     target_link_libraries(${STEREOVISION_LIB} PUBLIC TIFF::TIFF)
-    target_compile_definitions(stevi PRIVATE STEVI_IO_USE_TIFF)
+	target_compile_definitions(${STEREOVISION_LIB} PRIVATE STEVI_IO_USE_TIFF)
 endif (TIFF_FOUND)
 
 if (buildGui)
     find_package(QT NAMES Qt5 COMPONENTS Widgets REQUIRED)
     find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets REQUIRED)
-    target_link_libraries(stevi PUBLIC Qt${QT_VERSION_MAJOR}::Widgets)
+	target_link_libraries(${STEREOVISION_LIB} PUBLIC Qt${QT_VERSION_MAJOR}::Widgets)
 endif(buildGui)
 
 if (buildTests)
