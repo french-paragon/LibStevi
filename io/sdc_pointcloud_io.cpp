@@ -5,35 +5,22 @@
 #include <numeric>
 #include "sdc_pointcloud_io.h"
 #include "pointcloud_io.h"
+#include "fstreamCustomBuffer.h"
 
 namespace StereoVision {
 namespace IO {
+
+// constants
+// buffersize when reading a sdc file
+constexpr static size_t sdcFileReaderBufferSize = 1 << 16;
+
 SdcPointCloudPoint::SdcPointCloudPoint(std::unique_ptr<std::istream> reader, uint16_t majorVersion, uint16_t minorVersion):
-    majorVersion{majorVersion}, minorVersion{minorVersion}, reader{std::move(reader)}
-{
-
-    // compute the size of a sdc point record by summing the field sizes
-    recordByteSize = fieldOffset[classid_id];
-
-    nbAttributes = 13;
-
-    // compute the size of a sdc point record
-    // recordByteSize = fieldOffset[classid_size];
-    if (majorVersion >= 5) {
-        if (minorVersion >= 2) { // version 5.2
-            recordByteSize += classid_size;
-            nbAttributes++;
-        }
-        if (minorVersion >= 3) { // version 5.3
-            recordByteSize += rho_size;
-            nbAttributes++;
-        }
-        if (minorVersion >= 4) { // version 5.4
-            recordByteSize += reflectance_size;
-            nbAttributes++;
-        }
-    }
-}
+    majorVersion{majorVersion},
+    minorVersion{minorVersion},
+    nbAttributes{computeNbAttributes(majorVersion, minorVersion)},
+    recordByteSize{computeRecordByteSize(majorVersion, minorVersion)},
+    reader{std::move(reader)}
+{ }
 
 PtGeometry<PointCloudGenericAttribute> SdcPointCloudPoint::getPointPosition() const {
     return PtGeometry<PointCloudGenericAttribute>{
@@ -153,19 +140,12 @@ std::optional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesy
 {
     // read the file
 
-    auto inputFile = std::make_unique<std::ifstream>();
-
-    // big buffer
-    // constexpr size_t bufferSize = 1 << 20;
-    // char* buffer = new char[bufferSize];
-    // inputFile->rdbuf()->pubsetbuf(buffer, bufferSize);
+    auto inputFile = std::make_unique<ifstreamCustomBuffer<sdcFileReaderBufferSize>>();
 
     inputFile->open(sdcFilePath, std::ios_base::binary);
 
     // return null if the file can't be opened
     if (!inputFile->is_open()) return std::nullopt;
-
-    // auto fileSize = std::filesystem::file_size(sdcFilePath);
 
     // first 4 bytes are the size of the header
     uint32_t headerSize;

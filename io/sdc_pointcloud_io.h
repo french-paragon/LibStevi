@@ -117,12 +117,12 @@ private:
     // ***************************************        
     
     // number of attributes, it depends on the version 
-    size_t nbAttributes;
+    const size_t nbAttributes;
 
     // reader "head"
     const std::unique_ptr<std::istream> reader;
 
-    size_t recordByteSize; // number of bytes in a sdc point record
+    const size_t recordByteSize; // number of bytes in a sdc point record
 
     static constexpr auto dataBufferMaxSize = fieldOffset.back() + fieldByteSize.back();
     char dataBuffer[dataBufferMaxSize];
@@ -142,6 +142,26 @@ public:
     
     // destructor
     ~SdcPointCloudPoint() override;
+private:
+    // compute the number of attributes based on the version
+    static inline size_t computeNbAttributes(uint16_t majorVersion, uint16_t minorVersion) {
+        if (majorVersion >= 5) {
+            if (minorVersion >= 4) { // version 5.4
+                return 16;
+            } else if (minorVersion >= 3) { // version 5.3
+                return 15;
+            } else if (minorVersion >= 2) { // version 5.2
+                return 14;
+            }
+        }
+        return 13;
+    }
+
+    // compute the size of a sdc point record based on the version
+    static inline size_t computeRecordByteSize(uint16_t majorVersion, uint16_t minorVersion) {
+        const auto lastId = computeNbAttributes(majorVersion, minorVersion)-1;
+        return fieldOffset[lastId] + fieldByteSize[lastId];
+    }
 };
 
 class SdcPointCloudHeader : public PointCloudHeaderInterface

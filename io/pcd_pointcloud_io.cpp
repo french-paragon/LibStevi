@@ -10,10 +10,17 @@
 #include <memory>
 #include "pcd_pointcloud_io.h"
 #include "pointcloud_io.h"
-
+#include "fstreamCustomBuffer.h"
 
 namespace StereoVision {
 namespace IO {
+
+// constants
+// buffersize when reading pcd files
+constexpr static size_t pcdFileReaderBufferSize = 1 << 16;
+// write
+constexpr static size_t pcdFileWriterBufferSize_binary = 1 << 16;
+constexpr static size_t pcdFileWriterBufferSize_ascii = 1 << 16;
 
 static std::ostream &operator<<(std::ostream &os, const PcdDataStorageType &data);
 static std::istream &operator>>(std::istream &is, PcdDataStorageType &data);
@@ -33,7 +40,7 @@ public:
     PcdPointCloudPointAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface);
 
     bool gotoNext() override;
-    
+
     // destructor
     ~PcdPointCloudPointAdapter() override;
 
@@ -205,19 +212,6 @@ std::vector<std::string> PcdPointCloudPoint::attributeList() const
     return attributeNames;
 }
 
-bool PcdPointCloudPoint::gotoNext()
-{
-    switch (dataStorageType) {
-        case PcdDataStorageType::ascii:
-            return gotoNextAscii();
-        case PcdDataStorageType::binary:
-            return gotoNextBinary();
-        case PcdDataStorageType::binary_compressed:
-            return gotoNextBinaryCompressed();
-    }
-    return false;
-}
-
 bool PcdPointCloudPoint::gotoNextAscii()
 {
     static_assert(sizeof(float) == 4 && sizeof(double) == 8);
@@ -225,10 +219,17 @@ bool PcdPointCloudPoint::gotoNextAscii()
     auto convertAndCopy = [](auto data, auto* dataPtr, auto size) {
         std::memcpy(dataPtr, &data, size);
     };
-    // read a line
+
+    // if the reader is at the end of the file or in a bad state, return false
+    if (!reader->good()) return false;
+    
     std::string line;
-    std::getline(*reader, line);
+    // read a line until the line is not empty or cannot read more (EOF or read error)
+    do {
+        std::getline(*reader, line);
+    } while (reader->good() && line.empty());
     if (reader->fail() || line.empty()) return false;
+
     // parse the line
     std::stringstream ss(line);
     std::string token;
@@ -720,7 +721,10 @@ std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, 
 std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesystem::path &pcdFilePath)
 {
    // open the file
-    auto reader = std::make_unique<std::ifstream>(pcdFilePath, std::ios_base::binary);
+    auto reader = std::make_unique<ifstreamCustomBuffer<pcdFileReaderBufferSize>>();
+
+    reader->open(pcdFilePath, std::ios_base::binary);
+
     if (!reader->is_open()) return std::nullopt;
 
     // read the header
@@ -747,10 +751,6 @@ std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesy
 bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloudAccessInterface &pointCloud,
     std::optional<PcdDataStorageType> dataStorageType)
 {
-   // open the file
-    auto writer = std::make_unique<std::fstream>(pcdFilePath, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
-    if (!writer->is_open()) return false;
-    
     // position of some header elements that might change
     std::streampos headerWidthPos;
     std::streampos headerHeightPos;
@@ -792,6 +792,24 @@ bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloud
         pcdPointAccessAdapter->getFieldByteSize(), pcdPointAccessAdapter->getFieldType(),
         pcdPointAccessAdapter->getFieldCount(), headerWidth, headerHeight,
         headerViewpoint, headerPoints, usedDataStorageType};
+
+
+   // open the file
+    auto writer = std::unique_ptr<std::fstream>{nullptr};
+
+    // set the buffer size
+    if (usedDataStorageType == PcdDataStorageType::ascii) {
+        writer = std::make_unique<fstreamCustomBuffer<pcdFileWriterBufferSize_ascii>>();
+    } else if (usedDataStorageType == PcdDataStorageType::binary) {
+        writer = std::make_unique<fstreamCustomBuffer<pcdFileWriterBufferSize_binary>>();
+    }  else {
+        // default
+        writer = std::make_unique<fstreamCustomBuffer<pcdFileWriterBufferSize_binary>>();
+    }
+
+    writer->open(pcdFilePath, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
+
+    if (!writer->is_open()) return false;
 
     // write the header
     if (!PcdPointCloudHeader::writeHeader(*writer, newHeader, headerWidthPos, headerHeightPos, headerPointsPos)) {
@@ -863,15 +881,13 @@ PcdPointCloudPointAdapter::PcdPointCloudPointAdapter(PointCloudPointAccessInterf
 PcdPointCloudPointAdapter::PcdPointCloudPointAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface):
     PcdPointCloudPointAdapter(pointCloudPointAccessInterface, getPcdDataLayoutFromPointcloudPoint(*pointCloudPointAccessInterface)) {}
 
-bool PcdPointCloudPointAdapter::gotoNext()
-{
+bool PcdPointCloudPointAdapter::gotoNext() {
     return pointCloudPointAccessInterface->gotoNext() && adaptInternalState();
 }
 
 PcdPointCloudPointAdapter::~PcdPointCloudPointAdapter(){}
 
-bool PcdPointCloudPointAdapter::adaptInternalState()
-{
+bool PcdPointCloudPointAdapter::adaptInternalState() {
     static_assert(sizeof(float) == 4 && sizeof(double) == 8);
 
     if (pointCloudPointAccessInterface == nullptr) return false;
