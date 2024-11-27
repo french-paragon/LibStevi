@@ -446,15 +446,37 @@ std::optional<Results> getResultsWMatchFunc(QString leftImg,
             return QColor(red, green, blue);
         };
 
+        T_FV whiteLevelLeft = 255;
+        T_FV whiteLevelRight = 255;
+
+        std::array<int, 3> colorChannelsLeft = {0,1,2};
+        std::array<int, 3> colorChannelsRight = {0,1,2};
+
+        if (leftImg.endsWith(".exrlayer")) {
+            whiteLevelLeft = 1;
+        }
+
+        if (imgLeft.shape()[2] < 3) {
+            colorChannelsLeft = {0,0,0};
+        }
+
+        if (rightImg.endsWith(".exrlayer")) {
+            whiteLevelRight = 1;
+        }
+
+        if (imgRight.shape()[2] < 3) {
+            colorChannelsRight = {0,0,0};
+        }
+
         QImageDisplay::ImageWindow leftImgWindow;
-        StereoVision::Gui::ArrayDisplayAdapter<T_FV>* leftImgAdapter = new StereoVision::Gui::ArrayDisplayAdapter<T_FV>(&imgLeft,0,255,1,0,2,{0,1,2},&leftImgWindow);
+        StereoVision::Gui::ArrayDisplayAdapter<T_FV>* leftImgAdapter = new StereoVision::Gui::ArrayDisplayAdapter<T_FV>(&imgLeft,0,whiteLevelLeft,1,0,2,colorChannelsLeft,&leftImgWindow);
         leftImgAdapter->configureOriginalChannelDisplay(QVector<QString>{"Red", "Green", "Blue"});
         leftImgWindow.setWindowTitle("Left Image");
         leftImgWindow.setImage(leftImgAdapter);
         leftImgWindow.show();
 
         QImageDisplay::ImageWindow rightImgWindow;
-        StereoVision::Gui::ArrayDisplayAdapter<T_FV>* rightImgAdapter = new StereoVision::Gui::ArrayDisplayAdapter<T_FV>(&imgRight,0,255,1,0,2,{0,1,2},&rightImgWindow);
+        StereoVision::Gui::ArrayDisplayAdapter<T_FV>* rightImgAdapter = new StereoVision::Gui::ArrayDisplayAdapter<T_FV>(&imgRight,0,whiteLevelRight,1,0,2,colorChannelsRight,&rightImgWindow);
         rightImgAdapter->configureOriginalChannelDisplay(QVector<QString>{"Red", "Green", "Blue"});
         rightImgWindow.setWindowTitle("Right Image");
         rightImgWindow.setImage(leftImgAdapter);

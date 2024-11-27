@@ -62,6 +62,7 @@ include_directories(${EIGEN3_INCLUDE_DIR})
 find_package(JPEG)
 find_package(PNG)
 find_package(TIFF)
+find_package(OpenEXR)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -156,6 +157,7 @@ set(LIB_SRC
         imageProcessing/inpainting.h
         io/image_io.h
         io/image_io.cpp
+        io/read_exr.h
         io/pointcloud_io.h
         io/pointcloud_io.cpp
         sparseMatching/cornerDetectors.h
@@ -192,6 +194,12 @@ if (TIFF_FOUND)
     target_link_libraries(${STEREOVISION_LIB} PUBLIC TIFF::TIFF)
     target_compile_definitions(stevi PRIVATE STEVI_IO_USE_TIFF)
 endif (TIFF_FOUND)
+
+if(OpenEXR_FOUND)
+    message("Using native openEXR library")
+    target_link_libraries(${STEREOVISION_LIB} PUBLIC OpenEXR::IlmImf)
+    target_compile_definitions(stevi PRIVATE STEVI_IO_USE_OPENEXR)
+endif(OpenEXR_FOUND)
 
 if (buildGui)
     find_package(QT NAMES Qt5 COMPONENTS Widgets REQUIRED)
