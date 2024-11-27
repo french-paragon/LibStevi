@@ -38,11 +38,37 @@ T unidimensionalPyramidFunction(T const& v) {
     return out;
 }
 
+/*!
+ * \brief unidimensionalBicubicKernel represent the unidimensional version of the bi-cubic interpolation kernel with unit nodes
+ * \param v the parameter of the function
+ * \return the kernel value
+ */
+template<typename T, int ratioNumerator = 1, int ratioDenominator = 2>
+T unidimensionalBicubicKernel(T const& v) {
+    T a = -T(ratioNumerator)/T(ratioDenominator);
+    T x = std::abs(v);
+    if (x < 1) {
+        return (a+2)*x*x*x - (a+3)*x*x + 1;
+    } else if (x < 2) {
+        return a*x*x*x - 5*a*x*x + 8*a*x - 4*a;
+    }
+    return 0;
+}
+
 template<typename T, int inDIM>
 T pyramidFunction(std::array<T,inDIM> const& pos) {
     T out = 1;
     for (int i = 0; i < inDIM; i++) {
         out *= unidimensionalPyramidFunction(pos[i]);
+    }
+    return out;
+}
+
+template<typename T, int inDIM, int ratioNumerator = 1, int ratioDenominator = 2>
+T bicubicKernel(std::array<T,inDIM> const& pos) {
+    T out = 1;
+    for (int i = 0; i < inDIM; i++) {
+        out *= unidimensionalBicubicKernel<T,ratioNumerator,ratioDenominator>(pos[i]);
     }
     return out;
 }
