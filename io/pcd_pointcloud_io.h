@@ -57,7 +57,17 @@ public:
 
     std::vector<std::string> attributeList() const override;
 
-    bool gotoNext() override;
+    inline bool gotoNext() override {
+        switch (dataStorageType) {
+            case PcdDataStorageType::ascii:
+                return gotoNextAscii();
+            case PcdDataStorageType::binary:
+                return gotoNextBinary();
+            case PcdDataStorageType::binary_compressed:
+                return gotoNextBinaryCompressed();
+        }
+        return false;
+    }
     
     // getters
 
