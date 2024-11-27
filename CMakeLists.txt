@@ -153,6 +153,7 @@ set(LIB_SRC
         imageProcessing/pixelsLines.h
         imageProcessing/pixelsTriangles.h
         imageProcessing/edgesDetection.h
+        imageProcessing/inpainting.h
         io/image_io.h
         io/image_io.cpp
         io/pointcloud_io.h

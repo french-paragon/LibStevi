@@ -89,6 +89,88 @@ Multidim::Array<T, nDim> nearestInPaintingMonochannel(Multidim::Array<T, nDim> c
 
 }
 
+/*!
+ * \brief nearestInPaintingBatched perform neared pixel inpainting in a batched manner
+ * \param img the image to inpaint
+ * \param area2Fill the pixels to inpaint (as a mask without the batched dimensions).
+ * \param batchDims the axis of the image that should be considered batched. They should all be different or the behavior is undefined.
+ * \return the inpainted image, with the same shape and strides as the input image.
+ */
+template <typename T, int nDim, int nBatchDims>
+Multidim::Array<T, nDim> nearestInPaintingBatched(Multidim::Array<T, nDim> const& img,
+                                                      Multidim::Array<bool, nDim-nBatchDims> const& area2Fill,
+                                                       std::array<int, nBatchDims> batchDims) {
+
+    static_assert (nDim > nBatchDims, "Not all dimensions can be channels");
+
+    constexpr int mDim = nDim-nBatchDims;
+
+    std::array<int, nBatchDims> batchShape;
+
+    for (int i = 0; i < nBatchDims; i++) {
+        batchShape[i] = img.shape()[batchDims[i]];
+    }
+
+    Multidim::IndexConverter<mDim> idxConverter(area2Fill.shape());
+    Multidim::IndexConverter<mDim> batchIdxConverter(batchShape);
+    Multidim::ExcludedDimsSaticIndexConverter<nDim,nBatchDims> axisIdxCompressors(batchDims);
+
+    for (int i = 0; i < mDim; i++) {
+        int maskIdx = i;
+        int imgAxisIdx = axisIdxCompressors.getCorrespondingUncompressedAxis(i);
+        if (area2Fill.shape()[maskIdx] != img.shape()[imgAxisIdx]) {
+            return Multidim::Array<T, nDim>(); //shape mismatch
+        }
+    }
+
+    std::vector<std::array<int,mDim>> nonInpaintedPoints;
+    nonInpaintedPoints.reserve(area2Fill.flatLenght());
+
+    int nIdxs = idxConverter.numberOfPossibleIndices();
+    int nBatch = batchIdxConverter.numberOfPossibleIndices();
+
+    for (int i = 0; i < nIdxs ; i++) {
+        auto idx = idxConverter.getIndexFromPseudoFlatId(i);
+
+        bool notToInpaint = !area2Fill.valueUnchecked(idx);
+
+        if (notToInpaint) {
+            nonInpaintedPoints.push_back(idx);
+        }
+    }
+
+    if (nonInpaintedPoints.empty()) {
+        return Multidim::Array<T, nDim>(); //impossible to inpaint when no fixed points are present
+    }
+
+    using PartitionTree = Geometry::GenericBSP<std::array<int,nDim>, nDim, Geometry::BSPObjectWrapper<std::array<int,nDim>, int>>;
+
+    PartitionTree tree(std::move(nonInpaintedPoints));
+
+    Multidim::Array<T, nDim> ret(img.shape(), img.strides());
+
+    for (int i = 0; i < nIdxs ; i++) {
+        auto idx = idxConverter.getIndexFromPseudoFlatId(i);
+        auto imgIdx = axisIdxCompressors.getCorrespondingUncompressedAxis(idx);
+
+        std::array<int,mDim> nearest = tree.closest(idx);
+        auto imgNearest = axisIdxCompressors.getCorrespondingUncompressedAxis(nearest);
+
+        for (int j = 0; j < nBatch; j++) {
+            auto batchPos = batchIdxConverter.getIndexFromPseudoFlatId(j);
+
+            for (int d = 0; d < nBatchDims; d++) {
+                imgIdx[batchDims[d]] = batchPos[d];
+                imgNearest[batchDims[d]] = batchPos[d];
+
+                ret.atUnchecked(imgIdx) = img.valueUnchecked(imgNearest);
+            }
+        }
+    }
+
+    return ret;
+}
+
 template <typename T, int nDim, typename ComputeT = float>
 Multidim::Array<T, nDim> firstOrderDiffusionInPaintingMonochannel(Multidim::Array<T, nDim> const& img,
                                                                   Multidim::Array<bool, nDim> const& area2Fill) {
