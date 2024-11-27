@@ -280,7 +280,8 @@ void TestGeometryLibRotation::testDiffRigidBodyTransform() {
 
     for (int i = 0; i < nRepeats; i++) {
         Eigen::Vector3d vec(rd(re), rd(re), rd(re));
-        Eigen::Matrix<double,6,1> randomTransform(rd(re), rd(re), rd(re), rd(re), rd(re), rd(re));
+		Eigen::Matrix<double,6,1> randomTransform;
+		randomTransform << rd(re), rd(re), rd(re), rd(re), rd(re), rd(re);
 
         RigidBodyTransform transform(randomTransform);
         Eigen::Matrix<double,3,6> Jac = transform.Jacobian(vec);
@@ -315,7 +316,8 @@ void TestGeometryLibRotation::testDiffShapePreservingTransform() {
     for (int i = 0; i < nRepeats; i++) {
 
         Eigen::Vector3d vec(rd(re), rd(re), rd(re));
-        Eigen::Matrix<double,7,1> randomTransform(rd(re), rd(re), rd(re), rd(re), rd(re), rd(re), rd(re));
+		Eigen::Matrix<double,7,1> randomTransform;
+		randomTransform << rd(re), rd(re), rd(re), rd(re), rd(re), rd(re), rd(re);
 
         ShapePreservingTransform transform(randomTransform);
         Eigen::Matrix<double,3,7> Jac = transform.Jacobian(vec);
