@@ -282,8 +282,8 @@ std::optional<Results> getResultsWMatchFunc(QString leftImg,
         }
     }
 
-    auto right_features = StereoVision::Correlation::unfold(radius,radius,imgRight);
-    auto left_features = StereoVision::Correlation::unfold(radius,radius,imgLeft);
+	Multidim::Array<T_FV, 3> right_features = StereoVision::Correlation::unfold<T_FV,T_FV>(radius,radius,imgRight);
+	Multidim::Array<T_FV, 3> left_features = StereoVision::Correlation::unfold<T_FV,T_FV>(radius,radius,imgLeft);
 
     StereoVision::Correlation::disp_t disp_width;
 
@@ -343,24 +343,57 @@ std::optional<Results> getResultsWMatchFunc(QString leftImg,
     auto refinedParabola = StereoVision::Correlation::refineDispCostInterpolation<parabolaKernel>(truncatedCostVolume, rawDisp);
     auto refinedEquiangular = StereoVision::Correlation::refineDispCostInterpolation<equiangularKernel>(truncatedCostVolume, rawDisp);
 
-    auto right_features_processed = StereoVision::Correlation::getFeatureVolumeForMatchFunc<matchFunc>(right_features);
-    auto left_features_processed = StereoVision::Correlation::getFeatureVolumeForMatchFunc<matchFunc>(left_features);
+	Multidim::Array<T_FV, 3>  right_features_processed;
+	Multidim::Array<T_FV, 3>  left_features_processed;
+
+	Multidim::Array<T_FV, 3>  right_features_zeromean;
+	Multidim::Array<T_FV, 3>  left_features_zeromean;
+
+	if (StereoVision::Correlation::MatchingFunctionTraits<matchFunc>::ZeroMean) {
+		Multidim::Array<T_FV, 2> mean_right = StereoVision::Correlation::channelsMean<T_FV, T_FV>(right_features);
+		Multidim::Array<T_FV, 2> mean_left = StereoVision::Correlation::channelsMean<T_FV, T_FV>(left_features);
+		right_features_zeromean = StereoVision::Correlation::zeromeanFeatureVolume<T_FV,T_FV,T_FV>(right_features, mean_right);
+		left_features_zeromean = StereoVision::Correlation::zeromeanFeatureVolume<T_FV,T_FV,T_FV>(left_features, mean_left);
+	}
+
+	right_features_processed = StereoVision::Correlation::getFeatureVolumeForMatchFunc<matchFunc>(right_features);
+	left_features_processed = StereoVision::Correlation::getFeatureVolumeForMatchFunc<matchFunc>(left_features);
 
     bool preNormalize = false;
     auto refinedSymmetric = StereoVision::Correlation::refineCostSymmetricDisp<matchFunc, direction>
             (left_features_processed, right_features_processed, rawDisp, cost_volume);
 
-    auto refinedImage = StereoVision::Correlation::refineBarycentricDisp<matchFunc, direction>
-            (left_features, right_features, rawDisp);
+	Multidim::Array<float,2> refinedImage;
 
-    auto refinedPredictive = StereoVision::Correlation::refineBarycentricSymmetricDisp<matchFunc, 1, direction>
-            (left_features, right_features, rawDisp, disp_width);
+	if (StereoVision::Correlation::MatchingFunctionTraits<matchFunc>::ZeroMean) {
+		refinedImage = StereoVision::Correlation::refineBarycentricDisp<matchFunc, direction>
+					(left_features_zeromean, right_features_zeromean, rawDisp);
+	} else {
+		refinedImage = StereoVision::Correlation::refineBarycentricDisp<matchFunc, direction>
+				(left_features, right_features, rawDisp);
+	}
 
-    auto refinedImagePreNormalized = StereoVision::Correlation::refineBarycentricDisp<matchFunc, direction>
+
+	Multidim::Array<float,2> refinedPredictive;
+
+	if (StereoVision::Correlation::MatchingFunctionTraits<matchFunc>::ZeroMean) {
+		refinedPredictive = StereoVision::Correlation::refineBarycentricSymmetricDisp<matchFunc, 1, direction>
+					(left_features_zeromean, right_features_zeromean, rawDisp, disp_width);
+	} else {
+		refinedPredictive = StereoVision::Correlation::refineBarycentricSymmetricDisp<matchFunc, 1, direction>
+					(left_features, right_features, rawDisp, disp_width);
+	}
+
+	Multidim::Array<float,2> refinedImagePreNormalized;
+	Multidim::Array<float,2> refinedPredictivePreNormalized;
+
+	if (StereoVision::Correlation::MatchingFunctionTraits<matchFunc>::Normalized) {
+		refinedImagePreNormalized = StereoVision::Correlation::refineBarycentricDisp<matchFunc, direction>
             (left_features_processed, right_features_processed, rawDisp);
 
-    auto refinedPredictivePreNormalized = StereoVision::Correlation::refineBarycentricSymmetricDisp<matchFunc, 1, direction>
+		refinedImagePreNormalized = StereoVision::Correlation::refineBarycentricSymmetricDisp<matchFunc, 1, direction>
             (left_features_processed, right_features_processed, rawDisp, disp_width);
+	}
 
     constexpr int kernelRadius = 2;
     constexpr int nPixelsCut = 10;
@@ -374,8 +407,8 @@ std::optional<Results> getResultsWMatchFunc(QString leftImg,
             kernelRadius,
             direction,
             withAdditionalRefine>
-            (left_features_processed,
-             right_features_processed,
+			(left_features,
+			 right_features,
              rawDisp,
              nPixelsCut);
 
@@ -394,11 +427,17 @@ std::optional<Results> getResultsWMatchFunc(QString leftImg,
     ret.parabola = compareWithGroundTruth<T_FV, direction>(refinedParabola, inliers, gtDisp);
     ret.equiangular = compareWithGroundTruth<T_FV, direction>(refinedEquiangular, inliers, gtDisp);
     ret.symmetric = compareWithGroundTruth<T_FV, direction>(refinedSymmetric, inliers, gtDisp);
-    ret.image = compareWithGroundTruth<T_FV, direction>(refinedImage, inliers, gtDisp);
-    ret.imagePreNorm = compareWithGroundTruth<T_FV, direction>(refinedImagePreNormalized, inliers, gtDisp);
-    ret.predictive = compareWithGroundTruth<T_FV, direction>(refinedPredictive, inliers, gtDisp);
-    ret.predictivePreNorm = compareWithGroundTruth<T_FV, direction>(refinedPredictivePreNormalized, inliers, gtDisp);
+	ret.image = compareWithGroundTruth<T_FV, direction>(refinedImage, inliers, gtDisp);
+	ret.predictive = compareWithGroundTruth<T_FV, direction>(refinedPredictive, inliers, gtDisp);
     ret.splines = compareWithGroundTruth<T_FV, direction>(refinedBicubicSplines, inliers, gtDisp);
+
+	if (StereoVision::Correlation::MatchingFunctionTraits<matchFunc>::Normalized) {
+		ret.imagePreNorm = compareWithGroundTruth<T_FV, direction>(refinedImagePreNormalized, inliers, gtDisp);
+		ret.predictivePreNorm = compareWithGroundTruth<T_FV, direction>(refinedPredictivePreNormalized, inliers, gtDisp);
+	} else {
+		ret.imagePreNorm = Metrics{std::nan(""),std::nan(""),std::nan("")};
+		ret.predictivePreNorm = Metrics{std::nan(""),std::nan(""),std::nan("")};
+	}
 
     ret.minDisp = minDisp;
     ret.maxDisp = maxDisp;
