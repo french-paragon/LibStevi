@@ -12,10 +12,10 @@ class fstreamCustomBuffer : public std::fstream
 {
 public:
     inline fstreamCustomBuffer() : std::fstream() {
-        this->rdbuf()->pubsetbuf(buffer, bufferSize);
+        this->rdbuf()->pubsetbuf(buffer.data(), bufferSize);
     }
 private:
-    char buffer[bufferSize];
+    std::array<char, bufferSize> buffer;
 };
 
 /// @brief an ifstream with a custom buffer
@@ -24,10 +24,10 @@ class ifstreamCustomBuffer : public std::ifstream
 {
 public:
     inline ifstreamCustomBuffer() : std::ifstream() {
-        this->rdbuf()->pubsetbuf(buffer, bufferSize);
+        this->rdbuf()->pubsetbuf(buffer.data(), bufferSize);
     }
 private:
-    char buffer[bufferSize];
+    std::array<char, bufferSize> buffer;
 };
 
 /// @brief an ifstream with a custom buffer
@@ -36,10 +36,10 @@ class ofstreamCustomBuffer : public std::ofstream
 {
 public:
     inline ofstreamCustomBuffer() : std::ofstream() {
-        this->rdbuf()->pubsetbuf(buffer, bufferSize);
+        this->rdbuf()->pubsetbuf(buffer.data(), bufferSize);
     }
 private:
-    char buffer[bufferSize];
+    std::array<char, bufferSize> buffer;
 };
 
 }

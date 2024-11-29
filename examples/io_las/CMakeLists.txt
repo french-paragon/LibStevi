@@ -1,6 +1,8 @@
-set(EXEC_NAME io_sdc_read)
 
-set(PROG_SRC main.cpp)
+set(EXEC_NAME io_las)
+
+configure_file(main.cpp main.cpp)
+set(PROG_SRC ${CMAKE_CURRENT_BINARY_DIR}/main.cpp)
 
 add_executable(
     ${EXEC_NAME}

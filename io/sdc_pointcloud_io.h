@@ -125,7 +125,8 @@ private:
     const size_t recordByteSize; // number of bytes in a sdc point record
 
     static constexpr auto dataBufferMaxSize = fieldOffset.back() + fieldByteSize.back();
-    char dataBuffer[dataBufferMaxSize];
+    std::array<char, dataBufferMaxSize> dataBuffer;
+    char* dataBufferPtr = dataBuffer.data();
 
 public:
     PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;
@@ -140,6 +141,9 @@ public:
 
     bool gotoNext() override;
     
+    inline auto getRecordByteSize() const { return recordByteSize; }
+    inline auto* getRecordDataBuffer() const { return dataBufferPtr; }
+
     // destructor
     ~SdcPointCloudPoint() override;
 private:

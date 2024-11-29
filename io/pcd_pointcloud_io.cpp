@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cinttypes>
+#include <charconv>
 #include <cmath>
 #include <numeric>
 #include <optional>
@@ -9,8 +10,9 @@
 #include <algorithm>
 #include <memory>
 #include "pcd_pointcloud_io.h"
-#include "pointcloud_io.h"
+#include "sdc_pointcloud_io.h"
 #include "fstreamCustomBuffer.h"
+#include "bit_manipulations.h"
 
 namespace StereoVision {
 namespace IO {
@@ -32,20 +34,20 @@ static std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uin
     getPcdDataLayoutFromPointcloudPoint(const PointCloudPointAccessInterface& pointcloudPointAccessInterface);
 
 /// @brief adapter class to obtain a PcdPointCloudPoint from any PointCloudPointAccessInterface
-class PcdPointCloudPointAdapter : public PcdPointCloudPoint
+class PcdPointCloudPointBasicAdapter : public PcdPointCloudPoint
 {
 protected:
     PointCloudPointAccessInterface* pointCloudPointAccessInterface = nullptr;
 public:
-    PcdPointCloudPointAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface);
+    PcdPointCloudPointBasicAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface);
 
     bool gotoNext() override;
 
     // destructor
-    ~PcdPointCloudPointAdapter() override;
+    ~PcdPointCloudPointBasicAdapter() override;
 
 protected:
-    PcdPointCloudPointAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface,
+    PcdPointCloudPointBasicAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface,
         const std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>& attributeInformations);
 
     /**
@@ -56,16 +58,34 @@ protected:
     bool adaptInternalState();
 };
 
+/// @brief adapter class to obtain a PcdPointCloudPoint from a SdcPointCloudPoint
+class PcdPointCloudPointFromSdcAdapter : public PcdPointCloudPoint
+{
+protected:
+    SdcPointCloudPoint* sdcPointCloudPoint = nullptr;
+public:
+    PcdPointCloudPointFromSdcAdapter(SdcPointCloudPoint* sdcPointCloudPoint);
+
+    bool gotoNext() override;
+
+    // destructor
+    ~PcdPointCloudPointFromSdcAdapter() override;
+
+protected:
+    PcdPointCloudPointFromSdcAdapter(SdcPointCloudPoint* sdcPointCloudPoint,
+        const std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>& attributeInformations);
+};
+
 /// @brief adapter class to obtain a PcdPointCloudHeader from any PointCloudHeaderInterface
-class PcdPointCloudHeaderAdapter : public PcdPointCloudHeader
+class PcdPointCloudHeaderBasicAdapter : public PcdPointCloudHeader
 {
 protected:
     PointCloudHeaderInterface* pointCloudHeaderInterface = nullptr;
 public:
-    PcdPointCloudHeaderAdapter(PointCloudHeaderInterface* pointCloudHeaderInterface);
+    PcdPointCloudHeaderBasicAdapter(PointCloudHeaderInterface* pointCloudHeaderInterface);
 
     // destructor
-    ~PcdPointCloudHeaderAdapter() override;
+    ~PcdPointCloudHeaderBasicAdapter() override;
 
 private:
     /**
@@ -78,10 +98,20 @@ private:
 
 PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::istream> reader,
     const std::vector<std::string>& attributeNames, const std::vector<size_t>& fieldByteSize,
-    const std::vector<uint8_t>& fieldType, const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType):
+    const std::vector<uint8_t>& fieldType, const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType) :
+    PcdPointCloudPoint(std::move(reader), attributeNames, fieldByteSize, fieldType, fieldCount, dataStorageType, nullptr)
+{
+    dataBufferContainer.resize(recordByteSize);
+    dataBuffer = dataBufferContainer.data();
+}
+
+PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::istream> reader,
+    const std::vector<std::string>& attributeNames, const std::vector<size_t>& fieldByteSize,
+    const std::vector<uint8_t>& fieldType, const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType,
+    char* dataBuffer) :
     attributeNames{attributeNames}, fieldByteSize{fieldByteSize},
     fieldOffset(fieldByteSize.size()), fieldType{fieldType}, fieldCount{fieldCount},
-    dataStorageType{dataStorageType}, reader{std::move(reader)}
+    dataStorageType{dataStorageType}, reader{std::move(reader)}, dataBuffer{dataBuffer}
 {
     // compute the offsets
     const auto* fieldCountPtr = fieldCount.data();
@@ -96,8 +126,6 @@ PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::istream> reader,
     if (!(fieldOffset.empty() || fieldCount.empty() || fieldByteSize.empty())) {
         recordByteSize = fieldOffset.back() + fieldCount.back() * fieldByteSize.back();
     }
-    // resize the data
-    dataBuffer.resize(recordByteSize);
 
     // find the index of the rgba field
     auto it = std::find(attributeNames.begin(), attributeNames.end(), "rgba");
@@ -151,7 +179,7 @@ std::optional<PtColor<PointCloudGenericAttribute>> PcdPointCloudPoint::getPointC
         return std::nullopt;
     }
     const float rgba_float = std::get<float>(rgba_opt.value());
-    const uint32_t rgba = *reinterpret_cast<const uint32_t*>(&rgba_float);
+    const uint32_t rgba = bit_cast<uint32_t>(rgba_float);
     const uint8_t a = (rgba >> 24)  & 0x000000FF;
     const uint8_t r = (rgba >> 16)  & 0x000000FF;
     const uint8_t g = (rgba >> 8)   & 0x000000FF;
@@ -173,27 +201,45 @@ std::optional<PointCloudGenericAttribute> PcdPointCloudPoint::getAttributeById(i
     if (id < 0 || id >= fieldByteSize.size() || size + offset > recordByteSize) {
         return std::nullopt;
     }
-    const auto* const position = dataBuffer.data() + fieldOffset[id];
+    const auto* const position = dataBuffer + fieldOffset[id];
     
     // lambda function that return a vector of type T or T if count == 1
     auto returnVectorOrSingleValue = [](const auto* dataPtr, auto count) -> PointCloudGenericAttribute {
         if (count == 1) return {*dataPtr};
         return std::vector(dataPtr, dataPtr + count);
     };
-    // test the type and size
-    if (type == 'F') {
-        if (size == 4) return returnVectorOrSingleValue(reinterpret_cast<const float*>(position), count);
-        if (size == 8) return returnVectorOrSingleValue(reinterpret_cast<const double*>(position), count);
-    } else if (type == 'I') {
-        if (size == 1) return returnVectorOrSingleValue(reinterpret_cast<const int8_t*>(position), count);
-        if (size == 2) return returnVectorOrSingleValue(reinterpret_cast<const int16_t*>(position), count);
-        if (size == 4) return returnVectorOrSingleValue(reinterpret_cast<const int32_t*>(position), count);
-        if (size == 8) return returnVectorOrSingleValue(reinterpret_cast<const int64_t*>(position), count);
-    } else if (type == 'U') {
-        if (size == 1) return returnVectorOrSingleValue(reinterpret_cast<const uint8_t*>(position), count);
-        if (size == 2) return returnVectorOrSingleValue(reinterpret_cast<const uint16_t*>(position), count);
-        if (size == 4) return returnVectorOrSingleValue(reinterpret_cast<const uint32_t*>(position), count);
-        if (size == 8) return returnVectorOrSingleValue(reinterpret_cast<const uint64_t*>(position), count);
+    if (count == 1) { // simple value
+        // test the type and size
+        if (type == 'F') {
+            if (size == 4) return fromBytes<float>(position);
+            if (size == 8) return fromBytes<double>(position);
+        } else if (type == 'I') {
+            if (size == 1) return fromBytes<int8_t>(position);
+            if (size == 2) return fromBytes<int16_t>(position);
+            if (size == 4) return fromBytes<int32_t>(position);
+            if (size == 8) return fromBytes<int64_t>(position);
+        } else if (type == 'U') {
+            if (size == 1) return fromBytes<uint8_t>(position);
+            if (size == 2) return fromBytes<uint16_t>(position);
+            if (size == 4) return fromBytes<uint32_t>(position);
+            if (size == 8) return fromBytes<uint64_t>(position);
+        }
+    } else { // vector
+        // test the type and size
+        if (type == 'F') {
+            if (size == 4) return VectorfromBytes<float>(position, count);
+            if (size == 8) return VectorfromBytes<double>(position, count);
+        } else if (type == 'I') {
+            if (size == 1) return VectorfromBytes<int8_t>(position, count);
+            if (size == 2) return VectorfromBytes<int16_t>(position, count);
+            if (size == 4) return VectorfromBytes<int32_t>(position, count);
+            if (size == 8) return VectorfromBytes<int64_t>(position, count);
+        } else if (type == 'U') {
+            if (size == 1) return VectorfromBytes<uint8_t>(position, count);
+            if (size == 2) return VectorfromBytes<uint16_t>(position, count);
+            if (size == 4) return VectorfromBytes<uint32_t>(position, count);
+            if (size == 8) return VectorfromBytes<uint64_t>(position, count);
+        }
     }
     return std::nullopt;
 }
@@ -212,68 +258,106 @@ std::vector<std::string> PcdPointCloudPoint::attributeList() const
     return attributeNames;
 }
 
-bool PcdPointCloudPoint::gotoNextAscii()
-{
+bool PcdPointCloudPoint::gotoNextAscii() {
     static_assert(sizeof(float) == 4 && sizeof(double) == 8);
 
-    auto convertAndCopy = [](auto data, auto* dataPtr, auto size) {
-        std::memcpy(dataPtr, &data, size);
-    };
-
-    // if the reader is at the end of the file or in a bad state, return false
+    // If the reader is at the end of the file or in a bad state, return false
     if (!reader->good()) return false;
-    
+
     std::string line;
-    // read a line until the line is not empty or cannot read more (EOF or read error)
+    // Read a non-empty line or return false if no valid lines are found
     do {
         std::getline(*reader, line);
     } while (reader->good() && line.empty());
     if (reader->fail() || line.empty()) return false;
 
-    // parse the line
     std::stringstream ss(line);
     std::string token;
-    for (size_t fieldIt = 0; fieldIt < fieldByteSize.size(); fieldIt++) {
-        auto count = fieldCount[fieldIt];
-        auto size = fieldByteSize[fieldIt];
-        auto type = fieldType[fieldIt];
-        for (size_t countIt = 0; countIt < count; countIt++) {
-            // read the token
-            ss >> token;
-            if (ss.fail()) return false;
-            auto* position = dataBuffer.data() + fieldOffset[fieldIt] + countIt * size;
-            try {
-                errno = 0;
-                // test the type and size
+
+    try {
+        for (size_t fieldIt = 0; fieldIt < fieldByteSize.size(); ++fieldIt) {
+            size_t count = fieldCount[fieldIt];
+            size_t size = fieldByteSize[fieldIt];
+            char type = fieldType[fieldIt];
+            size_t baseOffset = fieldOffset[fieldIt];
+
+            for (size_t countIt = 0; countIt < count; ++countIt) {
+                // Read the token
+                ss >> token;
+                if (ss.fail()) return false;
+
+                auto* position = dataBuffer + baseOffset + countIt * size;
+
+                // Parse and copy data using `std::from_chars`
                 if (type == 'F') {
-                    if (size == 4) convertAndCopy(std::stof(token), position, size);
-                    if (size == 8) convertAndCopy(std::stod(token), position, size);
+                    if (size == 4) {
+                        float value;
+                        auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), value);
+                        if (ec != std::errc{}) return false;
+                        std::memcpy(position, &value, size);
+                    } else if (size == 8) {
+                        double value;
+                        auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), value);
+                        if (ec != std::errc{}) return false;
+                        std::memcpy(position, &value, size);
+                    }
                 } else if (type == 'I') {
-                    auto data = std::strtoimax(token.c_str(), nullptr, 10);
-                    if (size == 1) convertAndCopy(static_cast<int8_t>(data), position, size);
-                    if (size == 2) convertAndCopy(static_cast<int16_t>(data), position, size);
-                    if (size == 4) convertAndCopy(static_cast<int32_t>(data), position, size);
-                    if (size == 8) convertAndCopy(static_cast<int64_t>(data), position, size);
+                    if (size == 1) {
+                        int8_t value;
+                        auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), value);
+                        if (ec != std::errc{}) return false;
+                        std::memcpy(position, &value, size);
+                    } else if (size == 2) {
+                        int16_t value;
+                        auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), value);
+                        if (ec != std::errc{}) return false;
+                        std::memcpy(position, &value, size);
+                    } else if (size == 4) {
+                        int32_t value;
+                        auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), value);
+                        if (ec != std::errc{}) return false;
+                        std::memcpy(position, &value, size);
+                    } else if (size == 8) {
+                        int64_t value;
+                        auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), value);
+                        if (ec != std::errc{}) return false;
+                        std::memcpy(position, &value, size);
+                    }
                 } else if (type == 'U') {
-                    auto data = std::strtoumax(token.c_str(), nullptr, 10);
-                    if (size == 1) convertAndCopy(static_cast<uint8_t>(data), position, size);
-                    if (size == 2) convertAndCopy(static_cast<uint16_t>(data), position, size);
-                    if (size == 4) convertAndCopy(static_cast<uint32_t>(data), position, size);
-                    if (size == 8) convertAndCopy(static_cast<uint64_t>(data), position, size);
+                    if (size == 1) {
+                        uint8_t value;
+                        auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), value);
+                        if (ec != std::errc{}) return false;
+                        std::memcpy(position, &value, size);
+                    } else if (size == 2) {
+                        uint16_t value;
+                        auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), value);
+                        if (ec != std::errc{}) return false;
+                        std::memcpy(position, &value, size);
+                    } else if (size == 4) {
+                        uint32_t value;
+                        auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), value);
+                        if (ec != std::errc{}) return false;
+                        std::memcpy(position, &value, size);
+                    } else if (size == 8) {
+                        uint64_t value;
+                        auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), value);
+                        if (ec != std::errc{}) return false;
+                        std::memcpy(position, &value, size);
+                    }
                 }
-                if (errno != 0) return false;
-            } catch (...) {
-                return false;
             }
         }
+    } catch (...) {
+        return false;
     }
     return true;
-}  
+}
 
 bool PcdPointCloudPoint::gotoNextBinary()
 {
     // we just read the next record
-    reader->read(reinterpret_cast<char*>(dataBuffer.data()), recordByteSize);
+    reader->read(dataBuffer, recordByteSize);
     if (!reader->good()) return false;
     return true;
 }
@@ -293,10 +377,15 @@ std::shared_ptr<PcdPointCloudPoint> PcdPointCloudPoint::createAdapter(PointCloud
     if (pcdPoint != nullptr) {
         // if it is already a PcdPointCloudPointAdapter, we return a shared pointer with no ownership
         return std::shared_ptr<PcdPointCloudPoint>{std::shared_ptr<PcdPointCloudPoint>{}, pcdPoint};
-    } else {
-        // create a new PcdPointCloudPointAdapter
-        return std::make_shared<PcdPointCloudPointAdapter>(pointCloudPointAccessInterface);
     }
+    // cast to SdcPointCloudPoint
+    SdcPointCloudPoint* sdcPoint = dynamic_cast<SdcPointCloudPoint*>(pointCloudPointAccessInterface);
+    if (sdcPoint != nullptr) {
+        // create a new PcdPointCloudPointAdapter
+        return std::make_shared<PcdPointCloudPointFromSdcAdapter>(sdcPoint);
+    }
+    // create a new PcdPointCloudPointBasicAdapter
+    return std::make_shared<PcdPointCloudPointBasicAdapter>(pointCloudPointAccessInterface);
 }
 
 PcdPointCloudPoint::~PcdPointCloudPoint(){}
@@ -380,12 +469,10 @@ std::unique_ptr<PcdPointCloudHeader> PcdPointCloudHeader::readHeader(std::istrea
         std::string line;
         std::vector<std::string> lineSplit; // variable holding the split line data
         std::stringstream lineStream; // we will also use this stream to easily convert the data to the correct type
+        lineStream.copyfmt(reader);
 
         std::string headerEntryName;
         size_t nbFields;
-
-        constexpr auto maxPrecision{std::numeric_limits<long double>::max_digits10 + 1};
-        lineStream << std::setprecision(maxPrecision);
 
         if (!PcdPointCloudHeader::getNextHeaderLine(reader, line, lineSplit, lineStream)) return nullptr;
         
@@ -563,13 +650,10 @@ bool PcdPointCloudHeader::writeHeader(std::ostream &writer, const PcdPointCloudH
     pointsStr.resize(maxSizeStr, ' ');
 
     // vector to string
-    auto vectorToString = [](auto&& c) {
-        std::stringstream ss;
-        using U = std::decay_t<decltype(c)>;
-        if constexpr (std::is_floating_point_v<U>) {
-            constexpr auto maxPrecision{std::numeric_limits<U>::digits10 + 1};
-            ss << std::setprecision(maxPrecision); // write with max precision
-        }
+    auto vectorToString = [&writer](auto&& c) {
+        std::ostringstream ss;
+        ss.copyfmt(writer);
+
         for (size_t i = 0; i < c.size() - 1; ++i) {ss << c[i] << " ";}
         if (c.size() > 0) {ss << c[c.size() - 1];}
         return ss.str();
@@ -608,7 +692,7 @@ std::shared_ptr<PcdPointCloudHeader> PcdPointCloudHeader::createAdapter(PointClo
         return std::shared_ptr<PcdPointCloudHeader>{std::shared_ptr<PcdPointCloudHeader>{}, pcdPoint};
     } else {
         // create a new PcdPointCloudHeaderAdapter
-        return std::make_shared<PcdPointCloudHeaderAdapter>(pointCloudHeaderInterface);
+        return std::make_shared<PcdPointCloudHeaderBasicAdapter>(pointCloudHeaderInterface);
     }
 }
 
@@ -723,6 +807,9 @@ std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesy
    // open the file
     auto reader = std::make_unique<ifstreamCustomBuffer<pcdFileReaderBufferSize>>();
 
+    constexpr auto maxPrecision{std::numeric_limits<double>::digits10 + 1};
+    reader->precision(maxPrecision); // set the precision for the reader
+
     reader->open(pcdFilePath, std::ios_base::binary);
 
     if (!reader->is_open()) return std::nullopt;
@@ -811,6 +898,10 @@ bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloud
 
     if (!writer->is_open()) return false;
 
+    // set the precision to the maximum
+    constexpr auto maxPrecision{std::numeric_limits<double>::digits10 + 1};
+    *writer << std::setprecision(maxPrecision);
+
     // write the header
     if (!PcdPointCloudHeader::writeHeader(*writer, newHeader, headerWidthPos, headerHeightPos, headerPointsPos)) {
         return false;
@@ -822,13 +913,13 @@ bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloud
     switch (usedDataStorageType) {
         case PcdDataStorageType::ascii:
             do {
-                if (!PcdPointCloudPointAdapter::writePointAscii(*writer, *pcdPointAccessAdapter)) return false;
+                if (!PcdPointCloudPoint::writePointAscii(*writer, *pcdPointAccessAdapter)) return false;
                 nbPoints++;
             } while (pcdPointAccessAdapter->gotoNext());
             break;
         case PcdDataStorageType::binary:
             do {
-                if (!PcdPointCloudPointAdapter::writePointBinary(*writer, *pcdPointAccessAdapter)) return false;
+                if (!PcdPointCloudPoint::writePointBinary(*writer, *pcdPointAccessAdapter)) return false;
                 nbPoints++;
             } while (pcdPointAccessAdapter->gotoNext());
             break;
@@ -870,7 +961,7 @@ bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloud
     return true;
 }
 
-PcdPointCloudPointAdapter::PcdPointCloudPointAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface,
+PcdPointCloudPointBasicAdapter::PcdPointCloudPointBasicAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface,
     const std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>& attributeInformations) :
     PcdPointCloudPoint{nullptr, std::get<0>(attributeInformations), std::get<1>(attributeInformations), std::get<2>(attributeInformations),
         std::get<3>(attributeInformations), PcdDataStorageType::ascii}, pointCloudPointAccessInterface(pointCloudPointAccessInterface)
@@ -878,16 +969,16 @@ PcdPointCloudPointAdapter::PcdPointCloudPointAdapter(PointCloudPointAccessInterf
     adaptInternalState(); // set the internal state for the first time
 }
 
-PcdPointCloudPointAdapter::PcdPointCloudPointAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface):
-    PcdPointCloudPointAdapter(pointCloudPointAccessInterface, getPcdDataLayoutFromPointcloudPoint(*pointCloudPointAccessInterface)) {}
+PcdPointCloudPointBasicAdapter::PcdPointCloudPointBasicAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface):
+    PcdPointCloudPointBasicAdapter(pointCloudPointAccessInterface, getPcdDataLayoutFromPointcloudPoint(*pointCloudPointAccessInterface)) {}
 
-bool PcdPointCloudPointAdapter::gotoNext() {
+bool PcdPointCloudPointBasicAdapter::gotoNext() {
     return pointCloudPointAccessInterface->gotoNext() && adaptInternalState();
 }
 
-PcdPointCloudPointAdapter::~PcdPointCloudPointAdapter(){}
+PcdPointCloudPointBasicAdapter::~PcdPointCloudPointBasicAdapter(){}
 
-bool PcdPointCloudPointAdapter::adaptInternalState() {
+bool PcdPointCloudPointBasicAdapter::adaptInternalState() {
     static_assert(sizeof(float) == 4 && sizeof(double) == 8);
 
     if (pointCloudPointAccessInterface == nullptr) return false;
@@ -910,7 +1001,7 @@ bool PcdPointCloudPointAdapter::adaptInternalState() {
         if (!attrOpt.has_value()) return false;
         const auto& attr = attrOpt.value();
 
-            auto* position = dataBuffer.data() + fieldOffset[fieldIt];
+            auto* position = dataBuffer + fieldOffset[fieldIt];
             try {
                 if (!isAttributeList(attr)) {
                     if (count != 1) return false; // should not happen
@@ -957,7 +1048,7 @@ bool PcdPointCloudPointAdapter::adaptInternalState() {
     return true;
 }
 
-PcdPointCloudHeaderAdapter::PcdPointCloudHeaderAdapter(PointCloudHeaderInterface *pointCloudHeaderInterface) :
+PcdPointCloudHeaderBasicAdapter::PcdPointCloudHeaderBasicAdapter(PointCloudHeaderInterface *pointCloudHeaderInterface) :
     PcdPointCloudHeader{}
 {
     this->pointCloudHeaderInterface = pointCloudHeaderInterface;
@@ -966,9 +1057,9 @@ PcdPointCloudHeaderAdapter::PcdPointCloudHeaderAdapter(PointCloudHeaderInterface
     adaptInternalState();
 }
 
-PcdPointCloudHeaderAdapter::~PcdPointCloudHeaderAdapter(){}
+PcdPointCloudHeaderBasicAdapter::~PcdPointCloudHeaderBasicAdapter(){}
 
-bool PcdPointCloudHeaderAdapter::adaptInternalState()
+bool PcdPointCloudHeaderBasicAdapter::adaptInternalState()
 {
     // test if the list of attributes is valid (contains all the required attributes)
     for (const auto& attr : attributeNames) {
@@ -1062,59 +1153,83 @@ bool PcdPointCloudPoint::writePoint(std::ostream &writer, const PcdPointCloudPoi
 bool PcdPointCloudPoint::writePointBinary(std::ostream &writer, const PcdPointCloudPoint &point)
 {
     // simply write the bytes
-    writer.write(reinterpret_cast<const char*>(point.dataBuffer.data()), point.dataBuffer.size());
+    writer.write(point.dataBuffer, point.recordByteSize);
     if (!writer.good()) return false;
     return true;
 }
 
 bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointCloudPoint &point)
 {
-    // visit the variant and write each field as a string
-    auto visitor = [&writer](auto&& attr) {
+    std::ostringstream buffer; // Accumulate output to a buffer for the point
+    // copy the formatting:
+    buffer.copyfmt(writer);
+
+    // Visitor for handling each field type
+    auto visitor = [&buffer](auto &&attr) {
         using T = std::decay_t<decltype(attr)>;
-        if constexpr (std::is_same_v<T, std::string>) {
-            writer << attr;
-        } else if constexpr (std::is_floating_point_v<T>) {
-            constexpr auto maxPrecision{std::numeric_limits<T>::digits10 + 1};
-            writer << std::setprecision(maxPrecision) << attr; // write with max precision
+        if constexpr (std::is_same_v<T, std::string> || std::is_floating_point_v<T>) {
+            buffer << attr;
         } else if constexpr (std::is_integral_v<T>) {
-            if constexpr (std::is_signed_v<T>) { // convert to bigger type to display char type as a number
-                writer << static_cast<intmax_t>(attr);
+            if constexpr (std::is_signed_v<T>) {
+                buffer << static_cast<intmax_t>(attr);
             } else {
-                writer << static_cast<uintmax_t>(attr);
+                buffer << static_cast<uintmax_t>(attr);
             }
         } else if constexpr (is_vector_v<T>) {
-            using value_type = typename T::value_type;
-            if constexpr (std::is_same_v<value_type, std::string>) {
-                for (size_t i = 0; i < attr.size()-1; i++) { writer << attr[i] << " "; }
-                if (attr.size() > 0) { writer << attr[attr.size()-1]; }
-            } else if constexpr (std::is_floating_point_v<value_type>) {
-                constexpr auto maxPrecision{std::numeric_limits<value_type>::digits10 + 1};
-                for (size_t i = 0; i < attr.size()-1; i++) { writer << std::setprecision(maxPrecision) << attr[i] << " "; }
-                if (attr.size() > 0) { writer << std::setprecision(maxPrecision) << attr[attr.size()-1]; }
-            } else if constexpr (std::is_integral_v<value_type>) {
-                if constexpr (std::is_signed_v<value_type>) { // convert to bigger type to display char type as a number
-                    for (size_t i = 0; i < attr.size()-1; i++) { writer << static_cast<intmax_t>(attr[i]) << " "; }
-                    if (attr.size() > 0) { writer << static_cast<intmax_t>(attr[attr.size()-1]); }
-                } else {
-                    for (size_t i = 0; i < attr.size()-1; i++) { writer << static_cast<uintmax_t>(attr[i]) << " "; }
-                    if (attr.size() > 0) { writer << static_cast<uintmax_t>(attr[attr.size()-1]); }
+            for (size_t i = 0; i < attr.size(); ++i) {
+                if constexpr (std::is_same_v<typename T::value_type, std::string> || 
+                              std::is_floating_point_v<typename T::value_type>) {
+                    buffer << attr[i];
+                } else if constexpr (std::is_integral_v<typename T::value_type>) {
+                    if constexpr (std::is_signed_v<typename T::value_type>) {
+                        buffer << static_cast<intmax_t>(attr[i]);
+                    } else {
+                        buffer << static_cast<uintmax_t>(attr[i]);
+                    }
                 }
-            } else {
-                static_assert(false, "Unsupported vector type");
+                if (i < attr.size() - 1) { 
+                    buffer << " "; // Add space after all but the last element
+                }
             }
         } else {
             static_assert(false, "Unsupported type");
         }
     };
-    // write each field
-    for (size_t i = 0; i < point.fieldCount.size()-1; i++) {
+
+    // Precompute size to avoid multiple size() calls
+    size_t fieldCount = point.fieldCount.size();
+    
+    // Write each field
+    for (size_t i = 0; i < fieldCount; ++i) {
         std::visit(visitor, point.getAttributeById(i).value());
-        writer << " ";
+        if (i < fieldCount - 1) {
+            buffer << " "; // Add space between fields
+        }
     }
-    std::visit(visitor, point.getAttributeById(point.fieldCount.size() - 1).value()); // last field
-    writer << std::endl;
+
+    buffer << std::endl;
+
+    // Write accumulated output to writer
+    writer << buffer.str();
     return writer.good();
+}
+
+PcdPointCloudPointFromSdcAdapter::PcdPointCloudPointFromSdcAdapter(SdcPointCloudPoint *sdcPointCloudPoint):
+    PcdPointCloudPointFromSdcAdapter(sdcPointCloudPoint, getPcdDataLayoutFromPointcloudPoint(*sdcPointCloudPoint)) {}
+
+bool PcdPointCloudPointFromSdcAdapter::gotoNext()
+{
+   return sdcPointCloudPoint->gotoNext();
+}
+
+PcdPointCloudPointFromSdcAdapter::~PcdPointCloudPointFromSdcAdapter(){}
+
+PcdPointCloudPointFromSdcAdapter::PcdPointCloudPointFromSdcAdapter(SdcPointCloudPoint *sdcPointCloudPoint,
+    const std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>& attributeInformations) :
+    PcdPointCloudPoint{nullptr, std::get<0>(attributeInformations), std::get<1>(attributeInformations), std::get<2>(attributeInformations),
+        std::get<3>(attributeInformations), PcdDataStorageType::ascii, sdcPointCloudPoint->getRecordDataBuffer()}, sdcPointCloudPoint(sdcPointCloudPoint)
+{
+    
 }
 
 } // namespace IO

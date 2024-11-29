@@ -37,15 +37,40 @@ protected:
     int zIndex;
 
     size_t recordByteSize; // number of bytes in a pcd point record
-
-    std::vector<std::byte> dataBuffer;
+    char* dataBuffer;
+private:
+    std::vector<char> dataBufferContainer;
 
     // reader
     const std::unique_ptr<std::istream> reader;
 public:
+    /***
+     * @brief Pcd point cloud point constructor
+     * @param reader The reader to use to read the point cloud
+     * @param attributeNames The names of the fields in the point cloud
+     * @param fieldByteSize The byte size of the fields in the point cloud
+     * @param fieldType The type of the fields in the point cloud
+     * @param fieldCount The number of fields in the point cloud
+     * @param dataStorageType The storage type of the point cloud
+     */
     PcdPointCloudPoint(std::unique_ptr<std::istream> reader, const std::vector<std::string>& attributeNames,
         const std::vector<size_t>& fieldByteSize, const std::vector<uint8_t>& fieldType,
         const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType);
+
+    /***
+     * @brief Pcd point cloud point constructor with a given data buffer
+     * @param reader The reader to use to read the point cloud
+     * @param attributeNames The names of the fields in the point cloud
+     * @param fieldByteSize The byte size of the fields in the point cloud
+     * @param fieldType The type of the fields in the point cloud
+     * @param fieldCount The number of fields in the point cloud
+     * @param dataStorageType The storage type of the point cloud
+     * @param dataBuffer The data buffer. The buffer is not owned by the point cloud and must be able to contain
+     * at least recordByteSize bytes.
+     */
+    PcdPointCloudPoint(std::unique_ptr<std::istream> reader, const std::vector<std::string>& attributeNames,
+        const std::vector<size_t>& fieldByteSize, const std::vector<uint8_t>& fieldType,
+        const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType, char* dataBuffer);
     
     PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;
 
@@ -74,6 +99,8 @@ public:
     inline auto getFieldByteSize() const { return fieldByteSize; }
     inline auto getFieldType() const { return fieldType; }
     inline auto getFieldCount() const { return fieldCount; }
+    inline auto getRecordByteSize() const { return recordByteSize; }
+    inline auto* getRecordDataBuffer() const { return dataBuffer; }
 
     static bool writePoint(std::ostream& writer, const PcdPointCloudPoint& point, PcdDataStorageType dataStorageType);
     static bool writePointAscii(std::ostream& writer, const PcdPointCloudPoint& point);
