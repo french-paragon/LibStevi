@@ -1,5 +1,5 @@
 
-set(EXEC_NAME io_pcd_read)
+set(EXEC_NAME io_pcd)
 
 configure_file(main.cpp main.cpp)
 set(PROG_SRC ${CMAKE_CURRENT_BINARY_DIR}/main.cpp)

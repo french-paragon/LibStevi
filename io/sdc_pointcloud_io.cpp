@@ -6,6 +6,7 @@
 #include "sdc_pointcloud_io.h"
 #include "pointcloud_io.h"
 #include "fstreamCustomBuffer.h"
+#include "bit_manipulations.h"
 
 namespace StereoVision {
 namespace IO {
@@ -24,9 +25,9 @@ SdcPointCloudPoint::SdcPointCloudPoint(std::unique_ptr<std::istream> reader, uin
 
 PtGeometry<PointCloudGenericAttribute> SdcPointCloudPoint::getPointPosition() const {
     return PtGeometry<PointCloudGenericAttribute>{
-            *reinterpret_cast<const float*>(dataBuffer + fieldOffset[x_id]),
-            *reinterpret_cast<const float*>(dataBuffer + fieldOffset[y_id]),
-            *reinterpret_cast<const float*>(dataBuffer + fieldOffset[z_id])
+            fromBytes<float>(dataBufferPtr + fieldOffset[x_id]),
+            fromBytes<float>(dataBufferPtr + fieldOffset[y_id]),
+            fromBytes<float>(dataBufferPtr + fieldOffset[z_id])
         };
 }
 
@@ -38,37 +39,37 @@ std::optional<PointCloudGenericAttribute> SdcPointCloudPoint::getAttributeById(i
     if (id >= nbAttributes || id < 0) return std::nullopt; 
     switch (id) {
         case time_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const double*>(dataBuffer + fieldOffset[time_id])};
+            return PointCloudGenericAttribute{fromBytes<double>(dataBufferPtr + fieldOffset[time_id])};
         case range_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const float*>(dataBuffer + fieldOffset[range_id])};
+            return PointCloudGenericAttribute{fromBytes<float>(dataBufferPtr + fieldOffset[range_id])};
         case theta_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const float*>(dataBuffer + fieldOffset[theta_id])};
+            return PointCloudGenericAttribute{fromBytes<float>(dataBufferPtr + fieldOffset[theta_id])};
         case x_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const float*>(dataBuffer + fieldOffset[x_id])};
+            return PointCloudGenericAttribute{fromBytes<float>(dataBufferPtr + fieldOffset[x_id])};
         case y_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const float*>(dataBuffer + fieldOffset[y_id])};
+            return PointCloudGenericAttribute{fromBytes<float>(dataBufferPtr + fieldOffset[y_id])};
         case z_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const float*>(dataBuffer + fieldOffset[z_id])};
+            return PointCloudGenericAttribute{fromBytes<float>(dataBufferPtr + fieldOffset[z_id])};
         case amplitude_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const uint16_t*>(dataBuffer + fieldOffset[amplitude_id])};
+            return PointCloudGenericAttribute{fromBytes<uint16_t>(dataBufferPtr + fieldOffset[amplitude_id])};
         case width_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const uint16_t*>(dataBuffer + fieldOffset[width_id])};
+            return PointCloudGenericAttribute{fromBytes<uint16_t>(dataBufferPtr + fieldOffset[width_id])};
         case targettype_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const uint8_t*>(dataBuffer + fieldOffset[targettype_id])};
+            return PointCloudGenericAttribute{fromBytes<uint8_t>(dataBufferPtr + fieldOffset[targettype_id])};
         case target_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const uint8_t*>(dataBuffer + fieldOffset[target_id])};
+            return PointCloudGenericAttribute{fromBytes<uint8_t>(dataBufferPtr + fieldOffset[target_id])};
         case numtarget_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const uint8_t*>(dataBuffer + fieldOffset[numtarget_id])};
+            return PointCloudGenericAttribute{fromBytes<uint8_t>(dataBufferPtr + fieldOffset[numtarget_id])};
         case rgindex_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const uint16_t*>(dataBuffer + fieldOffset[rgindex_id])};
+            return PointCloudGenericAttribute{fromBytes<uint16_t>(dataBufferPtr + fieldOffset[rgindex_id])};
         case channeldesc_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const uint8_t*>(dataBuffer + fieldOffset[channeldesc_id])};
+            return PointCloudGenericAttribute{fromBytes<uint8_t>(dataBufferPtr + fieldOffset[channeldesc_id])};
         case classid_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const uint8_t*>(dataBuffer + fieldOffset[classid_id])};
+            return PointCloudGenericAttribute{fromBytes<uint8_t>(dataBufferPtr + fieldOffset[classid_id])};
         case rho_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const float*>(dataBuffer + fieldOffset[rho_id])};
+            return PointCloudGenericAttribute{fromBytes<float>(dataBufferPtr + fieldOffset[rho_id])};
         case reflectance_id:
-            return PointCloudGenericAttribute{*reinterpret_cast<const int16_t*>(dataBuffer + fieldOffset[reflectance_id])};
+            return PointCloudGenericAttribute{fromBytes<int16_t>(dataBufferPtr + fieldOffset[reflectance_id])};
         default:
             return std::nullopt;
     }
@@ -91,7 +92,7 @@ bool SdcPointCloudPoint::gotoNext() {
     static_assert(sizeof(double) == 8); // check if double is 8 bytes
     // try to read a record
     // std::vector<char> buffer(recordByteSize);
-    reader->read(dataBuffer, recordByteSize);
+    reader->read(dataBufferPtr, recordByteSize);
     if (!reader->good()) {
         return false; // end of file or read error
     }
@@ -158,10 +159,10 @@ std::optional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesy
     if (!inputFile->good()) return std::nullopt;
 
     // next 2 bytes are the major version
-    auto majorVersion = *reinterpret_cast<uint16_t*>(bufferHeader.data());
+    auto majorVersion = fromBytes<uint16_t>(bufferHeader.data());
 
     // next 2 bytes are the minor version
-    auto minorVersion = *reinterpret_cast<uint16_t*>(bufferHeader.data() + 2);
+    auto minorVersion = fromBytes<uint16_t>(bufferHeader.data() + 2);
 
     // next headerSize - 8 bytes are the header informations
     std::string headerInformation{bufferHeader.data() + 4, headerSize - 4};
