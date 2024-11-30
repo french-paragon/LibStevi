@@ -4,6 +4,7 @@
  add_subdirectory(checkboard_detection)
  add_subdirectory(bg_fg_stereo)
  add_subdirectory(stereo_refine_test)
+ add_subdirectory(optical_flow_refine_test/)
  add_subdirectory(generic_ray_alignement_evaluation)
  add_subdirectory(points_cloud2depth_map)
 
