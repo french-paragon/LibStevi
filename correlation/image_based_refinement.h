@@ -1358,6 +1358,178 @@ Multidim::Array<float, 3> refineSubpartBarycentricSymmetric2dDisp(Multidim::Arra
 
 	return refinedDisp;
 }
+template<matchingFunctions matchFunc,
+		 float(interpolationKernel)(std::array<float,2> const&),
+		 int kernelRadius,
+		 dispDirection dDir = dispDirection::RightToLeft,
+		 bool withAdditionalRefine = true>
+Multidim::Array<float, 3> refineArbitraryInterpolation2dDisp(Multidim::Array<float, 3> const& feature_vol_l,
+															 Multidim::Array<float, 3> const& feature_vol_r,
+															 Multidim::Array<disp_t, 3> const& selectedIndex,
+															 int nPixelsCut = 10) {
+
+	typedef Eigen::Matrix<float, Eigen::Dynamic, 4> TypeMatrixA;
+	typedef Eigen::Matrix<float, 2, 4> TypeMatrixC;
+	typedef Eigen::Matrix<float, 4, 1> TypeVectorAlpha;
+
+	constexpr disp_t deltaSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+	Multidim::Array<float, 3> const& source_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_r : feature_vol_l;
+	Multidim::Array<float, 3> const& target_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_l : feature_vol_r;
+
+	auto d_shape = selectedIndex.shape();
+	auto t_shape = target_feature_volume.shape();
+
+	Multidim::Array<float, 3> refinedDisp(d_shape);
+
+	float binWidth = 1./ nPixelsCut;
+
+	int nFeatures = t_shape[2];
+
+	#pragma omp parallel for
+	for (int i = 0; i < d_shape[0]; i++) {
+
+		//Build the interpolated features for the line
+		for (int j = 0; j < d_shape[1]; j++) {
+
+			disp_t di = selectedIndex.value<Nc>(i,j,0);
+			disp_t dj = selectedIndex.value<Nc>(i,j,1);
+
+			int id = i + di;
+			int jd = j + dj;
+
+			if (id < 1 or id + 1 >= t_shape[0] or
+					jd < 1 or jd + 1 >= t_shape[1]) { // if the source patch is partially outside the image
+				refinedDisp.at<Nc>(i,j,0) = di;
+				refinedDisp.at<Nc>(i,j,1) = dj;
+				continue;
+			}
+
+			Multidim::Array<float,1> source_feature_vector =
+					source_feature_volume.subView(Multidim::DimIndex(i),
+												  Multidim::DimIndex(j),
+												  Multidim::DimSlice());
+
+			Multidim::Array<float,1>  target_feature_vector(nFeatures);
+
+			for (int f = 0; f < nFeatures; f++) {
+				target_feature_vector.atUnchecked(f) = target_feature_volume.valueUnchecked(i,jd,f);
+			}
+
+			auto source_features_processed = StereoVision::Correlation::getFeatureVectorForMatchFunc<matchFunc>(source_feature_vector);
+			auto target_features_processed = StereoVision::Correlation::getFeatureVectorForMatchFunc<matchFunc>(target_feature_vector);
+
+			float refinedDi = di;
+			float refinedDj = dj;
+			float currentCost = MatchingFunctionTraits<matchFunc>::featureComparison(source_features_processed, target_features_processed);
+
+			for (int cuti = -nPixelsCut ; cuti < nPixelsCut; cuti++) {
+
+				float deltaPixi = (cuti+1)*binWidth;
+
+				for (int cutj = -nPixelsCut; cutj < nPixelsCut; cutj++) {
+
+					float deltaPixj = (cutj+1)*binWidth;
+					float DeltaDi = 0;
+					float DeltaDj = 0;
+
+					int minI = std::max(0,id-kernelRadius);
+					int maxI = std::min(target_feature_volume.shape()[0],id+kernelRadius+1);
+					int minJ = std::max(0,jd-kernelRadius);
+					int maxJ = std::min(target_feature_volume.shape()[1],jd+kernelRadius+1);
+					int deltai = id-minI;
+					int deltaj = jd-minJ;
+					float pixCoordi = deltai + deltaPixi;
+					float pixCoordj = deltaj + deltaPixj;
+
+					for (int f = 0; f < nFeatures; f++) {
+						Multidim::Array<float,2,Multidim::ConstView> featureArea =
+								target_feature_volume.subView(Multidim::DimSlice(minI,maxI),Multidim::DimSlice(minJ,maxJ),Multidim::DimIndex(f));
+						target_feature_vector.at<Nc>(f) =
+									Interpolation::interpolateValue<2,float,interpolationKernel,kernelRadius>(featureArea,{pixCoordi,pixCoordj});
+					}
+
+					auto target_features_processed = StereoVision::Correlation::getFeatureVectorForMatchFunc<matchFunc>(target_feature_vector);
+
+					if (withAdditionalRefine) {
+
+						TypeMatrixA A(nFeatures,4);
+						TypeMatrixC C;
+						Eigen::VectorXf source(nFeatures);
+
+						C(0,0) = 0;
+						C(1,0) = 0;
+
+						C(0,1) = -binWidth;
+						C(1,1) = 0;
+
+						C(0,2) = 0;
+						C(1,2) = -binWidth;
+
+						C(0,3) = -binWidth;
+						C(1,3) = -binWidth;
+
+						for (int f = 0; f < nFeatures; f++) {
+
+							Multidim::Array<float,2,Multidim::ConstView> featureArea =
+								target_feature_volume.subView(Multidim::DimSlice(minI,maxI),Multidim::DimSlice(minJ,maxJ),Multidim::DimIndex(f));
+					target_feature_vector.at<Nc>(f) =
+								Interpolation::interpolateValue<2,float,interpolationKernel,kernelRadius>(featureArea,{pixCoordi,pixCoordj});
+
+							A(f, 0) = target_feature_vector.value<Nc>(f);
+
+							for (int c = 1; c < 4; c++) {
+								A(f, c) = Interpolation::interpolateValue<2,float,interpolationKernel,kernelRadius>(featureArea,{pixCoordi+C(0,i),pixCoordj+C(1,i)});
+							}
+							source(f) = source_feature_vector.value<Nc>(f);
+						}
+
+						TypeVectorAlpha coeffs = MatchingFunctionTraits<matchFunc>::barycentricBestApproximation(A, source);
+
+						if (coeffs[0] > 0 and coeffs[0] < 1 and coeffs[1] > 0 and coeffs[1] < 1 and coeffs[2] > 0 and coeffs[2] < 1) {
+							DeltaDi = C.row(0).dot(coeffs) + pixCoordi;
+							DeltaDj = C.row(1).dot(coeffs) + pixCoordj;
+
+							Multidim::Array<float,1>  interp_target_feature_vector(nFeatures);
+
+							for (int f = 0; f < nFeatures; f++) {
+								interp_target_feature_vector.at<Nc>(f) =
+											coeffs[0] * A(f, 0) + coeffs[1] * A(f, 1) + coeffs[2] * A(f, 2) + coeffs[3] * A(f, 3);
+							}
+
+							target_features_processed =
+										StereoVision::Correlation::getFeatureVectorForMatchFunc<matchFunc>(interp_target_feature_vector);
+						}
+					}
+
+					float candCost = MatchingFunctionTraits<matchFunc>::featureComparison(source_features_processed, target_features_processed);
+
+					if (MatchingFunctionTraits<matchFunc>::extractionStrategy == dispExtractionStartegy::Cost) {
+						if (candCost < currentCost) {
+							currentCost = candCost;
+							refinedDi = di + deltaPixi + DeltaDi;
+							refinedDj = dj + deltaPixj + DeltaDj;
+						}
+					} else { //in that case we have a score
+						if (candCost > currentCost) {
+							currentCost = candCost;
+							refinedDi = di + deltaPixi + DeltaDi;
+							refinedDj = dj + deltaPixj + DeltaDj;
+						}
+					}
+				}
+			}
+
+			refinedDisp.at<Nc>(i,j,0) = refinedDi;
+			refinedDisp.at<Nc>(i,j,0) = refinedDi;
+
+		}
+	}
+
+	return refinedDisp;
+
+}
 
 template<matchingFunctions matchFunc, dispDirection dDir = dispDirection::RightToLeft>
 Multidim::Array<float, 2> refineCostSymmetricDisp(Multidim::Array<float, 3> const& feature_vol_l,

@@ -4,6 +4,8 @@
 #include "read_exr.h"
 #endif
 
+#include "read_flo.h"
+
 namespace StereoVision {
 namespace IO {
 
@@ -77,12 +79,17 @@ Multidim::Array<ImgType, 3> readExrChannelAsImage(std::string const& path) {
 template<typename ImgType>
 Multidim::Array<ImgType, 3> readImage(std::string const& fileName) {
 
-    constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
-    std::string stevimg_ext = ".stevimg";
-    if (fileName.size() >= stevimg_ext.size() && 0 == fileName.compare(fileName.size()-stevimg_ext.size(), stevimg_ext.size(), stevimg_ext)) {
-        return readStevimg<ImgType, 3>(fileName);
-    }
+	std::string stevimg_ext = ".stevimg";
+	if (fileName.size() >= stevimg_ext.size() && 0 == fileName.compare(fileName.size()-stevimg_ext.size(), stevimg_ext.size(), stevimg_ext)) {
+		return readStevimg<ImgType, 3>(fileName);
+	}
+
+	std::string middleburry_flo_ext = ".flo";
+	if (fileName.size() >= stevimg_ext.size() && 0 == fileName.compare(fileName.size()-stevimg_ext.size(), stevimg_ext.size(), stevimg_ext)) {
+		return readFloImg<ImgType>(fileName);
+	}
 
     #ifdef STEVI_IO_USE_OPENEXR
     std::string exr_layer_ext = EXR_LAYER_EXT;
