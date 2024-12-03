@@ -404,6 +404,29 @@ RigidBodyTransform<T> operator*(T scale, RigidBodyTransform<T> transform) {
     return transform.operator*(scale);
 }
 
+/*!
+ * \brief interpolateRigidBodyTransformOnManifold interpolate between two RigidBodyTransform on the manifold
+ * \param w1 weight for t1
+ * \param t1 transformation 1
+ * \param w2 weight for t2
+ * \param t2 transformation 2
+ * \return the linear interpolation between t1 and t2, using weights w1 and w2 and done on the manifold (se(3)).
+ */
+template<typename T>
+RigidBodyTransform<T> interpolateRigidBodyTransformOnManifold(
+        T w1,
+        RigidBodyTransform<T> const& t1,
+        T w2,
+        RigidBodyTransform<T> const& t2) {
+
+    RigidBodyTransform<T> transform = t2*t1.inverse();
+
+    T w = w2 / (w1 + w2);
+
+    return (w*transform)*t1;
+
+}
+
 template<typename T>
 class ShapePreservingTransform
 {
