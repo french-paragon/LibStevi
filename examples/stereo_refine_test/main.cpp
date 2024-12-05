@@ -274,6 +274,46 @@ std::optional<Results> getResultsWMatchFunc(QString leftImg,
         }
     }
 
+    //convert to grayscale for speed and consistency with old python code
+    Multidim::Array<T_FV, 3> grayLeft;
+    Multidim::Array<T_FV, 3> grayRight;
+
+    if (imgLeft.shape()[2] == 1) {
+        grayLeft = imgLeft;
+    } else {
+        grayLeft = Multidim::Array<T_FV, 3>(imgLeft.shape()[0], imgLeft.shape()[1], 1);
+
+        for (int i = 0; i < imgLeft.shape()[0]; i++) {
+            for (int j = 0; j < imgLeft.shape()[1]; j++) {
+                T_FV val = 0;
+
+                for (int c = 0; c < imgLeft.shape()[2]; c++) {
+                    val += imgLeft.valueUnchecked(i,j,c);
+                }
+                val /= imgLeft.shape()[2];
+                grayLeft.atUnchecked(i,j,0) = val;
+            }
+        }
+    }
+
+    if (imgRight.shape()[2] == 1) {
+        grayRight = imgRight;
+    } else {
+        grayRight = Multidim::Array<T_FV, 3>(imgRight.shape()[0], imgRight.shape()[1], 1);
+
+        for (int i = 0; i < imgRight.shape()[0]; i++) {
+            for (int j = 0; j < imgRight.shape()[1]; j++) {
+                T_FV val = 0;
+
+                for (int c = 0; c < imgRight.shape()[2]; c++) {
+                    val += imgRight.valueUnchecked(i,j,c);
+                }
+                val /= imgRight.shape()[2];
+                grayRight.atUnchecked(i,j,0) = val;
+            }
+        }
+    }
+
     for (int d = 0; d < 2; d++) {
         if (imgRight.shape()[d] != imgLeft.shape()[d] or
                 imgRight.shape()[d] != dispRight.shape()[d] or
@@ -282,8 +322,8 @@ std::optional<Results> getResultsWMatchFunc(QString leftImg,
         }
     }
 
-	Multidim::Array<T_FV, 3> right_features = StereoVision::Correlation::unfold<T_FV,T_FV>(radius,radius,imgRight);
-	Multidim::Array<T_FV, 3> left_features = StereoVision::Correlation::unfold<T_FV,T_FV>(radius,radius,imgLeft);
+    Multidim::Array<T_FV, 3> right_features = StereoVision::Correlation::unfold<T_FV,T_FV>(radius,radius,grayRight);
+    Multidim::Array<T_FV, 3> left_features = StereoVision::Correlation::unfold<T_FV,T_FV>(radius,radius,grayLeft);
 
     StereoVision::Correlation::disp_t disp_width;
 
@@ -361,7 +401,7 @@ std::optional<Results> getResultsWMatchFunc(QString leftImg,
 
     bool preNormalize = false;
     auto refinedSymmetric = StereoVision::Correlation::refineCostSymmetricDisp<matchFunc, direction>
-            (left_features_processed, right_features_processed, rawDisp, cost_volume);
+            (left_features, right_features, rawDisp, cost_volume);
 
 	Multidim::Array<float,2> refinedImage;
 
@@ -391,12 +431,12 @@ std::optional<Results> getResultsWMatchFunc(QString leftImg,
 		refinedImagePreNormalized = StereoVision::Correlation::refineBarycentricDisp<matchFunc, direction>
             (left_features_processed, right_features_processed, rawDisp);
 
-		refinedImagePreNormalized = StereoVision::Correlation::refineBarycentricSymmetricDisp<matchFunc, 1, direction>
+        refinedPredictivePreNormalized = StereoVision::Correlation::refineBarycentricSymmetricDisp<matchFunc, 1, direction>
             (left_features_processed, right_features_processed, rawDisp, disp_width);
 	}
 
     constexpr int kernelRadius = 2;
-    constexpr int nPixelsCut = 10;
+    constexpr int nPixelsCut = 30;
     constexpr int bicubicNumerator = 1;
     constexpr int bicubicDenominator = 2;
     constexpr bool withAdditionalRefine = true;
