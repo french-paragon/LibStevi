@@ -87,7 +87,7 @@ Multidim::Array<ImgType, 3> readImage(std::string const& fileName) {
 	}
 
 	std::string middleburry_flo_ext = ".flo";
-	if (fileName.size() >= stevimg_ext.size() && 0 == fileName.compare(fileName.size()-stevimg_ext.size(), stevimg_ext.size(), stevimg_ext)) {
+    if (fileName.size() >= middleburry_flo_ext.size() && 0 == fileName.compare(fileName.size()-middleburry_flo_ext.size(), middleburry_flo_ext.size(), middleburry_flo_ext)) {
 		return readFloImg<ImgType>(fileName);
 	}
 

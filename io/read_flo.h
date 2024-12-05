@@ -20,11 +20,11 @@ Multidim::Array<T,3> readFloImg(std::string file) {
 	}
 
 	const char magicCheck[4] = {'P','I','E','H'};
-	char magic[4];
-	inFile.read(magic,4);
+    char buffer[4];
+    inFile.read(buffer,4);
 
 	for (int i = 0; i < 4; i++) {
-		if (magic[i] != magicCheck[i]) {
+        if (buffer[i] != magicCheck[i]) {
 			return Multidim::Array<T,3>();
 		}
 	}
@@ -32,8 +32,8 @@ Multidim::Array<T,3> readFloImg(std::string file) {
 	int32_t w;
 	int32_t h;
 
-	inFile >> w;
-	inFile >> h;
+    inFile.read(reinterpret_cast<char*>(&w),4);
+    inFile.read(reinterpret_cast<char*>(&h),4);
 
 	if (w <= 0 or h <= 0) {
 		return Multidim::Array<T,3>();

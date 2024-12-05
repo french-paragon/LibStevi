@@ -1508,21 +1508,21 @@ Multidim::Array<float, 3> refineArbitraryInterpolation2dDisp(Multidim::Array<flo
 					if (MatchingFunctionTraits<matchFunc>::extractionStrategy == dispExtractionStartegy::Cost) {
 						if (candCost < currentCost) {
 							currentCost = candCost;
-							refinedDi = di + deltaPixi + DeltaDi;
-							refinedDj = dj + deltaPixj + DeltaDj;
+                            refinedDi = di + DeltaDi;
+                            refinedDj = dj + DeltaDj;
 						}
 					} else { //in that case we have a score
 						if (candCost > currentCost) {
 							currentCost = candCost;
-							refinedDi = di + deltaPixi + DeltaDi;
-							refinedDj = dj + deltaPixj + DeltaDj;
+                            refinedDi = di + DeltaDi;
+                            refinedDj = dj + DeltaDj;
 						}
 					}
 				}
 			}
 
 			refinedDisp.at<Nc>(i,j,0) = refinedDi;
-			refinedDisp.at<Nc>(i,j,0) = refinedDi;
+            refinedDisp.at<Nc>(i,j,1) = refinedDj;
 
 		}
 	}

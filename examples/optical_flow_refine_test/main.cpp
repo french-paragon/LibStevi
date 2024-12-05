@@ -278,7 +278,7 @@ std::optional<Results> getResultsWMatchFunc(QString Img0Path,
 			decltype(searchRange),
 			direction,
 			T_CV>
-			(img0, img1, searchRange);
+            (img0_features, img1_features, searchRange);
 
 	Multidim::Array<StereoVision::Correlation::disp_t,3> selectedIdxs =
 			StereoVision::Correlation::extractSelected2dIndex<MatchFuncTraits::extractionStrategy>(cost_volume);
@@ -287,7 +287,7 @@ std::optional<Results> getResultsWMatchFunc(QString Img0Path,
 				selectedIdxs,
 				searchRange
 				);
-	auto truncatedCostVolume = StereoVision::Correlation::truncatedBidirectionaCostVolume(cost_volume, rawDisp, 1,1);
+    auto truncatedCostVolume = StereoVision::Correlation::truncatedBidirectionaCostVolume(cost_volume, selectedIdxs, 1,1);
 
 	constexpr StereoVision::Correlation::InterpolationKernel parabolaKernel = StereoVision::Correlation::InterpolationKernel::Parabola;
 	constexpr StereoVision::Correlation::InterpolationKernel equiangularKernel = StereoVision::Correlation::InterpolationKernel::Equiangular;
@@ -336,11 +336,11 @@ std::optional<Results> getResultsWMatchFunc(QString Img0Path,
 			(img0_features_refine, img1_features_refine, rawDisp, searchRange);
 
 	constexpr int kernelRadius = 2;
-	constexpr int nPixelsCut = 10;
+    constexpr int nPixelsCut = 2;
 	constexpr int bicubicNumerator = 1;
 	constexpr int bicubicDenominator = 2;
 	constexpr bool withAdditionalRefine = true;
-	auto refinedBicubicSplines =
+    /*auto refinedBicubicSplines =
 			StereoVision::Correlation::refineArbitraryInterpolation2dDisp
 			<matchFunc,
 			StereoVision::Interpolation::bicubicKernel<float,2,bicubicNumerator,bicubicDenominator>,
@@ -350,7 +350,7 @@ std::optional<Results> getResultsWMatchFunc(QString Img0Path,
 			(img0_features_processed,
 			 img1_features_processed,
 			 rawDisp,
-			 nPixelsCut);
+             nPixelsCut);*/
 
 	Results ret;
 
@@ -366,7 +366,7 @@ std::optional<Results> getResultsWMatchFunc(QString Img0Path,
 	ret.featuresSplit.queen = compareWithGroundTruth<T_FV>(refinedFeaturesSplitQueen, inliers, gtFlow);
 	ret.featuresSymmetric.rook = compareWithGroundTruth<T_FV>(refinedFeaturesSymmetricRook, inliers, gtFlow);
 	ret.featuresSymmetric.queen = compareWithGroundTruth<T_FV>(refinedFeaturesSymmetricQueen, inliers, gtFlow);
-	ret.splines = compareWithGroundTruth<T_FV>(refinedBicubicSplines, inliers, gtFlow);
+    //ret.splines = compareWithGroundTruth<T_FV>(refinedBicubicSplines, inliers, gtFlow);
 
 	ret.minDispX = minDispX;
 	ret.maxDispX = maxDispX;
@@ -422,33 +422,33 @@ std::optional<Results> getResultsWMatchFunc(QString Img0Path,
 		std::array<int, 3> colorChannelsLeft = {0,1,2};
 		std::array<int, 3> colorChannelsRight = {0,1,2};
 
-		if (leftImg.endsWith(".exrlayer")) {
+        if (Img0Path.endsWith(".exrlayer")) {
 			whiteLevelLeft = 1;
 		}
 
-		if (imgLeft.shape()[2] < 3) {
+        if (img0.shape()[2] < 3) {
 			colorChannelsLeft = {0,0,0};
 		}
 
-		if (rightImg.endsWith(".exrlayer")) {
+        if (Img1Path.endsWith(".exrlayer")) {
 			whiteLevelRight = 1;
 		}
 
-		if (imgRight.shape()[2] < 3) {
+        if (img1.shape()[2] < 3) {
 			colorChannelsRight = {0,0,0};
 		}
 
 		QImageDisplay::ImageWindow leftImgWindow;
-		StereoVision::Gui::ArrayDisplayAdapter<T_FV>* leftImgAdapter = new StereoVision::Gui::ArrayDisplayAdapter<T_FV>(&imgLeft,0,whiteLevelLeft,1,0,2,colorChannelsLeft,&leftImgWindow);
+        StereoVision::Gui::ArrayDisplayAdapter<T_FV>* leftImgAdapter = new StereoVision::Gui::ArrayDisplayAdapter<T_FV>(&img0,0,whiteLevelLeft,1,0,2,colorChannelsLeft,&leftImgWindow);
 		leftImgAdapter->configureOriginalChannelDisplay(QVector<QString>{"Red", "Green", "Blue"});
-		leftImgWindow.setWindowTitle("Left Image");
+        leftImgWindow.setWindowTitle("Image 0");
 		leftImgWindow.setImage(leftImgAdapter);
 		leftImgWindow.show();
 
 		QImageDisplay::ImageWindow rightImgWindow;
-		StereoVision::Gui::ArrayDisplayAdapter<T_FV>* rightImgAdapter = new StereoVision::Gui::ArrayDisplayAdapter<T_FV>(&imgRight,0,whiteLevelRight,1,0,2,colorChannelsRight,&rightImgWindow);
+        StereoVision::Gui::ArrayDisplayAdapter<T_FV>* rightImgAdapter = new StereoVision::Gui::ArrayDisplayAdapter<T_FV>(&img1,0,whiteLevelRight,1,0,2,colorChannelsRight,&rightImgWindow);
 		rightImgAdapter->configureOriginalChannelDisplay(QVector<QString>{"Red", "Green", "Blue"});
-		rightImgWindow.setWindowTitle("Right Image");
+        rightImgWindow.setWindowTitle("Image 1");
 		rightImgWindow.setImage(leftImgAdapter);
 		rightImgWindow.show();
 
@@ -467,6 +467,14 @@ std::optional<Results> getResultsWMatchFunc(QString Img0Path,
 		rawDispWindow.setWindowTitle("Raw flow");
 		rawDispWindow.setImage(rawDispAdapter);
 		rawDispWindow.show();
+
+        QImageDisplay::ImageWindow idxsDispWindow;
+        StereoVision::Gui::ArrayDisplayAdapter<StereoVision::Correlation::disp_t>* idxsDispAdapter =
+                new StereoVision::Gui::ArrayDisplayAdapter<StereoVision::Correlation::disp_t>(&selectedIdxs,0,std::max(maxDispX-minDispX, maxDispY-minDispY),1,0,2,{0,0,1},&rawDispWindow);
+        idxsDispAdapter->configureOriginalChannelDisplay(QVector<QString>{"FlowY", "FlowX"});
+        idxsDispWindow.setWindowTitle("Raw index selected");
+        idxsDispWindow.setImage(idxsDispAdapter);
+        idxsDispWindow.show();
 
 		app.exec();
 	}
@@ -561,7 +569,7 @@ int main(int argc, char** argv) {
 		StereoVision::Correlation::matchingFunctions::ZMEDAD
 	};
 
-	std::vector<int> radiuses = {2,3,4,5};
+    std::vector<int> radiuses = {2,3,4,5};
 
 	QTextStream out(stdout);
 	QTextStream err(stderr);
