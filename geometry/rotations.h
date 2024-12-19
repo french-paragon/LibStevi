@@ -86,7 +86,7 @@ Eigen::Matrix<T,3,1> inverseRodriguezFormula(Eigen::Matrix<T,3,3> const& R) {
         Eigen::Matrix<T,3,1> n;
 
         for (int i = 0; i < 3; i++) {
-            n[i] = sqrt(S(i,i)/(T(3) - trace)); //compute the values, up to sign
+            n[i] = sqrt(std::max<T>(S(i,i)/(T(3) - trace), T(0))); //compute the values, up to sign
         }
 
         if (n[0] > n[1] and n[0] > n[2]) {

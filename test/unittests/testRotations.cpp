@@ -24,8 +24,11 @@ private Q_SLOTS:
 
     void testDiffAngleAxisRotate();
 
-	void testInverseRodriguez_data();
-	void testInverseRodriguez();
+    void testInverseRodriguez_data();
+    void testInverseRodriguez();
+
+    void testInverseRodriguezNumStable_data();
+    void testInverseRodriguezNumStable();
 
 	void testDiffRodriguez_data();
 	void testDiffRodriguez();
@@ -229,6 +232,46 @@ void TestGeometryLibRotation::testInverseRodriguez() {
 	float mismatch = (vec - recons).norm();
 
 	QVERIFY2(mismatch < 1e-5, qPrintable(QString("Reconstructed rotation axis not correct (norm (rgt - rrc) = %1)").arg(mismatch)));
+
+}
+
+void TestGeometryLibRotation::testInverseRodriguezNumStable_data() {
+
+    QTest::addColumn<double>("r00");
+    QTest::addColumn<double>("r01");
+    QTest::addColumn<double>("r02");
+    QTest::addColumn<double>("r10");
+    QTest::addColumn<double>("r11");
+    QTest::addColumn<double>("r12");
+    QTest::addColumn<double>("r20");
+    QTest::addColumn<double>("r21");
+    QTest::addColumn<double>("r22");
+
+    QTest::newRow("Case 1") << 0.9976515596006329 << 0.0001402027638521819 << 0.0684932807438838 <<
+                               0.00012947832197639572 << -0.9999999694524941 << 0.00016091083470215484 <<
+                               0.06849330024634 << -0.00015174534422002228 << -0.9976515280311443;
+
+}
+void TestGeometryLibRotation::testInverseRodriguezNumStable() {
+
+    QFETCH(double, r00);
+    QFETCH(double, r01);
+    QFETCH(double, r02);
+    QFETCH(double, r10);
+    QFETCH(double, r11);
+    QFETCH(double, r12);
+    QFETCH(double, r20);
+    QFETCH(double, r21);
+    QFETCH(double, r22);
+
+    Eigen::Matrix3d R;
+    R << r00, r01, r02, r10, r11, r12, r20, r21, r22;
+
+    Eigen::Vector3d r = inverseRodriguezFormula(R);
+
+    bool allFinite = r.array().allFinite();
+
+    QVERIFY2(allFinite, "Expected coefficients are all supposed to be finite");
 
 }
 
