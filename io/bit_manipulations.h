@@ -1,5 +1,5 @@
-#ifndef STEREOVISION_IO_BITMANIPULATION_H
-#define STEREOVISION_IO_BITMANIPULATION_H
+#ifndef STEREOVISION_IO_BITMANIPULATIONS_H
+#define STEREOVISION_IO_BITMANIPULATIONS_H
 
 #include <type_traits>
 #include <vector>
@@ -19,7 +19,7 @@ To bit_cast(const From& from) {
 
     using To_ = std::remove_cv_t<To>;
     To_ to;
-    std::memcpy(&to, &from, sizeof(To));
+    std::memcpy(&to, &from, sizeof(To_));
     return to;
 }
 
@@ -33,25 +33,27 @@ To fromBytes(const From* bytes) {
 
     using To_ = std::remove_cv_t<To>;
     To_ to;
-    std::memcpy(&to, bytes, sizeof(To));
+    std::memcpy(&to, bytes, sizeof(To_));
     return to;
 }
 
 // return an vector of To containg N elements from a pointer to a sequence of bytes of type From representing to vector data.
 template<typename To, typename From>
-std::vector<To> VectorfromBytes(const From* bytes, size_t N) {
+std::vector<To> vectorFromBytes(const From* bytes, size_t N) {
     // types that can alias any other type
     static_assert(std::is_same_v<std::remove_cv_t<From>, char> or std::is_same_v<std::remove_cv_t<From>, unsigned char>
                   || std::is_same_v<std::remove_cv_t<From>, std::byte>, "From must be a pointer that can alias any other type");
     static_assert(std::is_trivially_copyable<To>::value, "To must be trivially copyable");
-    std::vector<To> to(N);
+
+    using To_ = std::remove_cv_t<To>;
+    std::vector<To_> to(N);
     for (auto i = 0; i < N; i++)
     {
-        std::memcpy(&to[i], bytes + i * sizeof(To), sizeof(To));
+        std::memcpy(&to[i], bytes + i * sizeof(To_), sizeof(To_));
     }
     return to;
 }
 } // namespace IO
 } // namespace StereoVision
 
-#endif //STEREOVISION_IO_BITMANIPULATION_H
+#endif //STEREOVISION_IO_BITMANIPULATIONS_H

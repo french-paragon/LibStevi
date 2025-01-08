@@ -43,9 +43,6 @@ public:
 
     bool gotoNext() override;
 
-    // destructor
-    ~PcdPointCloudPointBasicAdapter() override;
-
 protected:
     PcdPointCloudPointBasicAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface,
         const std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>& attributeInformations);
@@ -68,9 +65,6 @@ public:
 
     bool gotoNext() override;
 
-    // destructor
-    ~PcdPointCloudPointFromSdcAdapter() override;
-
 protected:
     PcdPointCloudPointFromSdcAdapter(SdcPointCloudPoint* sdcPointCloudPoint,
         const std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>& attributeInformations);
@@ -83,9 +77,6 @@ protected:
     PointCloudHeaderInterface* pointCloudHeaderInterface = nullptr;
 public:
     PcdPointCloudHeaderBasicAdapter(PointCloudHeaderInterface* pointCloudHeaderInterface);
-
-    // destructor
-    ~PcdPointCloudHeaderBasicAdapter() override;
 
 private:
     /**
@@ -227,18 +218,18 @@ std::optional<PointCloudGenericAttribute> PcdPointCloudPoint::getAttributeById(i
     } else { // vector
         // test the type and size
         if (type == 'F') {
-            if (size == 4) return VectorfromBytes<float>(position, count);
-            if (size == 8) return VectorfromBytes<double>(position, count);
+            if (size == 4) return vectorFromBytes<float>(position, count);
+            if (size == 8) return vectorFromBytes<double>(position, count);
         } else if (type == 'I') {
-            if (size == 1) return VectorfromBytes<int8_t>(position, count);
-            if (size == 2) return VectorfromBytes<int16_t>(position, count);
-            if (size == 4) return VectorfromBytes<int32_t>(position, count);
-            if (size == 8) return VectorfromBytes<int64_t>(position, count);
+            if (size == 1) return vectorFromBytes<int8_t>(position, count);
+            if (size == 2) return vectorFromBytes<int16_t>(position, count);
+            if (size == 4) return vectorFromBytes<int32_t>(position, count);
+            if (size == 8) return vectorFromBytes<int64_t>(position, count);
         } else if (type == 'U') {
-            if (size == 1) return VectorfromBytes<uint8_t>(position, count);
-            if (size == 2) return VectorfromBytes<uint16_t>(position, count);
-            if (size == 4) return VectorfromBytes<uint32_t>(position, count);
-            if (size == 8) return VectorfromBytes<uint64_t>(position, count);
+            if (size == 1) return vectorFromBytes<uint8_t>(position, count);
+            if (size == 2) return vectorFromBytes<uint16_t>(position, count);
+            if (size == 4) return vectorFromBytes<uint32_t>(position, count);
+            if (size == 8) return vectorFromBytes<uint64_t>(position, count);
         }
     }
     return std::nullopt;
@@ -387,8 +378,6 @@ std::shared_ptr<PcdPointCloudPoint> PcdPointCloudPoint::createAdapter(PointCloud
     // create a new PcdPointCloudPointBasicAdapter
     return std::make_shared<PcdPointCloudPointBasicAdapter>(pointCloudPointAccessInterface);
 }
-
-PcdPointCloudPoint::~PcdPointCloudPoint(){}
 
 PcdPointCloudHeader::PcdPointCloudHeader(){}
 
@@ -776,7 +765,7 @@ std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, 
                 } else if constexpr (is_vector_v<T>) { // vector types
                     // get the contained type
                     using V_t = std::decay_t<typename T::value_type>;
-                    if constexpr (std::is_floating_point_v<V_t> || std::is_integral_v<V_t>) {
+                    if constexpr (std::is_floating_point_v<V_t> || std::is_integral_v<V_t> || std::is_same_v<V_t, std::byte>) {
                         attributeNames.push_back(attributeName);
                         nbAttributes++;
                         size.push_back(sizeof(V_t));
@@ -785,8 +774,12 @@ std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, 
                             type.push_back('F');
                         } else if constexpr (std::is_unsigned_v<V_t>) {
                             type.push_back('U');
-                        } else {
+                        } else if constexpr (std::is_signed_v<V_t>) {
                             type.push_back('I');
+                        } else if constexpr (std::is_same_v<V_t, std::byte>) {
+                            type.push_back('U'); // byte as uint8_t
+                        } else {
+                            static_assert(false, "All types in the variant must be handled");
                         }
                     } else if constexpr (std::is_same_v<V_t, std::string>) {
                         // PCD cannot store strings...We ignore it
@@ -802,8 +795,7 @@ std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, 
     return {attributeNames, size, type, count};
 }
 
-std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesystem::path &pcdFilePath)
-{
+std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesystem::path &pcdFilePath) {
    // open the file
     auto reader = std::make_unique<ifstreamCustomBuffer<pcdFileReaderBufferSize>>();
 
@@ -976,8 +968,6 @@ bool PcdPointCloudPointBasicAdapter::gotoNext() {
     return pointCloudPointAccessInterface->gotoNext() && adaptInternalState();
 }
 
-PcdPointCloudPointBasicAdapter::~PcdPointCloudPointBasicAdapter(){}
-
 bool PcdPointCloudPointBasicAdapter::adaptInternalState() {
     static_assert(sizeof(float) == 4 && sizeof(double) == 8);
 
@@ -1003,7 +993,7 @@ bool PcdPointCloudPointBasicAdapter::adaptInternalState() {
 
             auto* position = dataBuffer + fieldOffset[fieldIt];
             try {
-                if (!isAttributeList(attr)) {
+                if (!isAttributeList(attr) && !std::holds_alternative<std::vector<std::byte>>(attr)) {
                     if (count != 1) return false; // should not happen
                     // test the type and size
                     if (type == 'F') {
@@ -1056,8 +1046,6 @@ PcdPointCloudHeaderBasicAdapter::PcdPointCloudHeaderBasicAdapter(PointCloudHeade
     // try to adapt the header
     adaptInternalState();
 }
-
-PcdPointCloudHeaderBasicAdapter::~PcdPointCloudHeaderBasicAdapter(){}
 
 bool PcdPointCloudHeaderBasicAdapter::adaptInternalState()
 {
@@ -1221,8 +1209,6 @@ bool PcdPointCloudPointFromSdcAdapter::gotoNext()
 {
    return sdcPointCloudPoint->gotoNext();
 }
-
-PcdPointCloudPointFromSdcAdapter::~PcdPointCloudPointFromSdcAdapter(){}
 
 PcdPointCloudPointFromSdcAdapter::PcdPointCloudPointFromSdcAdapter(SdcPointCloudPoint *sdcPointCloudPoint,
     const std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>& attributeInformations) :

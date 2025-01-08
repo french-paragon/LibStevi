@@ -3,13 +3,20 @@
 
 #include <array>
 #include "pointcloud_io.h"
+#include "bit_manipulations.h"
 
 namespace StereoVision {
 namespace IO {
 
+// forward declaration
+template <bool extended> class LasGenericVariableLengthRecord;
+
+using LasVariableLengthRecord = LasGenericVariableLengthRecord<false>;
+using LasExtendedVariableLengthRecord = LasGenericVariableLengthRecord<true>;
+
 class LasPublicHeaderBlock {
 public:
-    const std::vector<std::string> publicHeaderAttributes =
+    inline static const std::vector<std::string> publicHeaderAttributes =
         {"fileSignature", "fileSourceID", "globalEncoding", "projectID_GUID_Data1", "projectID_GUID_Data2",
          "projectID_GUID_Data3", "projectID_GUID_Data4", "versionMajor", "versionMinor", "systemIdentifier",
          "generatingSoftware", "fileCreationDayOfYear", "fileCreationYear", "headerSize", "offsetToPointData",
@@ -19,7 +26,6 @@ public:
          "startOfFirstExtendedVariableLengthRecord", "numberOfExtendedVariableLengthRecords", "numberOfPointRecords",
          "numberOfPointsByReturn"};
 
-private:
     std::array<char, 4>  fileSignature;       // "LASF"
     uint16_t fileSourceID;                    // File Source ID
     uint16_t globalEncoding;                  // Global Encoding
@@ -58,6 +64,7 @@ private:
     uint64_t numberOfPointRecords;        // Number of Point Records
     std::array<uint64_t, 15> numberOfPointsByReturn;  // Number of Points by Return
 
+private:
     // size in bytes of the data in the block
     static constexpr size_t fileSignature_size = sizeof(decltype(fileSignature)::value_type) * 4;
     static constexpr size_t fileSourceID_size = sizeof(fileSourceID);
@@ -137,6 +144,7 @@ private:
     static constexpr size_t numberOfPointsByReturn_offset = numberOfPointRecords_offset + numberOfPointRecords_size;
 
     static constexpr size_t headerBlockByteSize = 375;
+    static_assert(headerBlockByteSize == numberOfPointsByReturn_offset + numberOfPointsByReturn_size, "Header block size should be 375 bytes");
 public:
     // read the header of the LAS file
     static std::optional<LasPublicHeaderBlock> readPublicHeader(std::istream& reader);
@@ -144,10 +152,68 @@ public:
     static void writePublicHeader(std::ostream& writer, const LasPublicHeaderBlock& header);
 };
 
+/// Class representing a variable length record
+template<bool isExtended>
+class LasGenericVariableLengthRecord {
+private:
+    // the size of the elements in bytes
+    static constexpr auto reserved_size = sizeof(uint16_t);
+    static constexpr auto userId_size = sizeof(uint8_t)*16;
+    static constexpr auto recordId_size = sizeof(uint16_t);
+    static constexpr auto recordLengthAfterHeader_size = [] { if constexpr (isExtended) return sizeof(uint64_t); else return sizeof(uint16_t); }();
+    static constexpr auto description_size = sizeof(uint8_t)*32;
+
+    // offsets in bytes in the block
+    static constexpr auto reserved_offset = 0;
+    static constexpr auto userId_offset = reserved_offset + reserved_size;
+    static constexpr auto recordId_offset = userId_offset + userId_size;
+    static constexpr auto recordLengthAfterHeader_offset = recordId_offset + recordId_size;
+    static constexpr auto description_offset = recordLengthAfterHeader_offset + recordLengthAfterHeader_size;
+    static constexpr auto data_offset = description_offset + description_size;
+    static constexpr auto vlrHeaderSize = [] { if constexpr (isExtended) return 60; else return 54; }();
+    static_assert(data_offset == vlrHeaderSize, "Variable length record header size is incorrect");
+
+    // header data and actual data
+    std::array<char, vlrHeaderSize> vlrHeaderData;
+    std::vector<std::byte> data;
+
+public:
+    // getters
+    uint16_t getReserved() const;
+    std::string getUserId() const;
+    uint16_t getRecordId() const;
+    auto getRecordLengthAfterHeader() const;
+    std::string getDescription() const;
+    inline std::vector<std::byte> getData() const { return data; }
+
+    // read one variable length record
+
+    /***
+     * @brief read one variable length record
+     * 
+     * @param reader The input stream to read from.
+     * @return An optional variable length record or std::nullopt if the read fails.
+     * 
+     */
+    static std::optional<LasGenericVariableLengthRecord> readVariableLengthRecord(std::istream& reader);
+
+    /***
+     * @brief read all the variable length records in the file and return An optional vector
+     * If the read fails, std::nullopt is returned
+     * 
+     * @param reader The input stream to read from.
+     * @param recordCount The number of variable length records to read.
+     * @return An optional vector of variable length records or std::nullopt if the read fails.
+     */
+    static std::optional<std::vector<LasGenericVariableLengthRecord>> readVariableLengthRecords(std::istream& reader, size_t recordCount);
+    
+};
+
 class LasPointCloudHeader : public PointCloudHeaderInterface {
 public:
     LasPublicHeaderBlock publicHeaderBlock;
-
+    std::vector<LasVariableLengthRecord> variableLengthRecords;
+    std::vector<LasExtendedVariableLengthRecord> extendedVariableLengthRecords;
 protected:
     // attribute names for the header
 public:
@@ -159,6 +225,110 @@ public:
 
     static std::unique_ptr<LasPointCloudHeader> readHeader(std::istream& reader);
 };
+
+class LasPointCloudPoint : public PointCloudPointAccessInterface {
+protected:
+    size_t recordByteSize; // number of bytes in the las point record
+    char* dataBuffer;
+    
+    /**
+     * @brief Construct a new Las Point Cloud Point object
+     * 
+     * @param recordByteSize the size of the point record
+     */
+    LasPointCloudPoint(size_t recordByteSize);
+
+    /**
+     * @brief Construct a new Las Point Cloud Point object with a data buffer
+     * 
+     * @param recordByteSize the size of the point record
+     * @param dataBuffer the data buffer
+     *
+     **/
+    LasPointCloudPoint(size_t recordByteSize, char* dataBuffer);
+
+private:
+    std::vector<char> dataBufferContainer;
+public:
+    inline auto* getRecordDataBuffer() const { return dataBuffer; }
+    inline auto getRecordByteSize() const { return recordByteSize; }
+};
+
+/**
+ * @brief
+ *
+ * Open a point cloud from a las file and returns a FullPointCloudAccessInterface
+ * containing the header and the points.
+ *
+ * @param lasFilePath The path to the las file containing the point cloud
+ *
+ * @return A FullPointCloudAccessInterface containing the header and the points.
+ *         If the file can't be opened, an empty optional is returned
+ */
+std::optional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesystem::path& lasFilePath);
+
+/*************** Implementation ***************/
+
+template <bool isExtended>
+inline uint16_t LasGenericVariableLengthRecord<isExtended>::getReserved() const {
+    return fromBytes<uint16_t>(vlrHeaderData.data() + reserved_offset);
+}
+
+template <bool isExtended>
+inline std::string LasGenericVariableLengthRecord<isExtended>::getUserId() const {
+    const auto begin = vlrHeaderData.begin() + userId_offset;
+    const auto end = std::find(begin, begin + userId_size, '\0');
+    return std::string{begin, end};
+}
+
+template <bool isExtended>
+inline uint16_t LasGenericVariableLengthRecord<isExtended>::getRecordId() const {
+    return fromBytes<uint16_t>(vlrHeaderData.data() + recordId_offset);
+}
+
+template <bool isExtended>
+inline auto LasGenericVariableLengthRecord<isExtended>::getRecordLengthAfterHeader() const {
+    if constexpr (isExtended) {
+        return fromBytes<uint64_t>(vlrHeaderData.data() + recordLengthAfterHeader_offset);
+    } else {
+        return fromBytes<uint16_t>(vlrHeaderData.data() + recordLengthAfterHeader_offset);
+    }
+}
+
+template <bool isExtended>
+inline std::string LasGenericVariableLengthRecord<isExtended>::getDescription() const {
+    const auto begin = vlrHeaderData.begin() + description_offset;
+    const auto end = std::find(begin, begin + description_size, '\0');
+    return std::string{begin, end};
+}
+
+template <bool isExtended>
+inline std::optional<LasGenericVariableLengthRecord<isExtended>> LasGenericVariableLengthRecord<isExtended>::readVariableLengthRecord(std::istream &reader) {
+    LasGenericVariableLengthRecord<isExtended> vlr;
+    reader.read(vlr.vlrHeaderData.data(), vlrHeaderSize);
+    if (reader.fail()) return std::nullopt;
+    vlr.data.resize(vlr.getRecordLengthAfterHeader());
+    reader.read(reinterpret_cast<char*>(vlr.data.data()), vlr.getRecordLengthAfterHeader());
+    if (reader.fail()) return std::nullopt;
+
+    return vlr;
+}
+
+template <bool isExtended>
+inline std::optional<std::vector<LasGenericVariableLengthRecord<isExtended>>> LasGenericVariableLengthRecord<isExtended>::readVariableLengthRecords(std::istream &reader, size_t recordCount) {
+    std::vector<LasGenericVariableLengthRecord<isExtended>> records;
+    records.reserve(recordCount);
+    for (size_t i = 0; i < recordCount; i++) {
+        // read the data of the record
+        auto vlr = readVariableLengthRecord(reader);
+        if (vlr) {
+            records.push_back(std::move(*vlr));
+        } else {
+            return std::nullopt;
+        }
+    }
+    return records;
+}
 
 }
 }

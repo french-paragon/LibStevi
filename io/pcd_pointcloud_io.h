@@ -38,11 +38,13 @@ protected:
 
     size_t recordByteSize; // number of bytes in a pcd point record
     char* dataBuffer;
+    
 private:
     std::vector<char> dataBufferContainer;
 
     // reader
     const std::unique_ptr<std::istream> reader;
+
 public:
     /***
      * @brief Pcd point cloud point constructor
@@ -116,8 +118,6 @@ public:
      */
     static std::shared_ptr<PcdPointCloudPoint> createAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface);
 
-    // destructor
-    ~PcdPointCloudPoint() override;
 private:
     bool gotoNextAscii();
     bool gotoNextBinary();

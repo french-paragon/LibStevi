@@ -99,10 +99,6 @@ bool SdcPointCloudPoint::gotoNext() {
     return true;
 }
 
-SdcPointCloudPoint::~SdcPointCloudPoint()
-{
-}
-
 SdcPointCloudHeader::SdcPointCloudHeader(const uint32_t headerSize, const uint16_t majorVersion, const uint16_t minorVersion, const std::string& headerInformation)
 : headerSize{headerSize}, majorVersion{majorVersion}, minorVersion{minorVersion}, headerInformation{headerInformation}
 {}

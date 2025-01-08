@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include "io/pointcloud_io.h"
+#include "io/bit_manipulations.h"
 
 #include <random>
 #include <iostream>
@@ -35,6 +36,7 @@ Q_DECLARE_METATYPE(std::vector<uint64_t>)
 Q_DECLARE_METATYPE(std::vector<float>)
 Q_DECLARE_METATYPE(std::vector<double>)
 Q_DECLARE_METATYPE(std::vector<std::string>)
+Q_DECLARE_METATYPE(std::vector<std::byte>)
 
 class TestPointCloudIO: public QObject
 {
@@ -143,6 +145,7 @@ void TestPointCloudIO::testCastedPointCloudAttribute_data()
     QTest::addColumn<std::vector<float>>("result_vector_float");
     QTest::addColumn<std::vector<double>>("result_vector_double");
     QTest::addColumn<std::vector<std::string>>("result_vector_string");
+    QTest::addColumn<std::vector<std::byte>>("result_vector_byte");
 
     // Row 1: Single scalar value
     QTest::newRow("integer_value")
@@ -163,7 +166,29 @@ void TestPointCloudIO::testCastedPointCloudAttribute_data()
         << std::vector<uint64_t>{42}
         << std::vector<float>{42.0f}
         << std::vector<double>{42.0}
-        << std::vector<std::string>{"42"}; 
+        << std::vector<std::string>{"42"}
+        << std::vector<std::byte>{};
+
+    QTest::newRow("integer_8bit_value")
+        << StereoVision::IO::PointCloudGenericAttribute(uint8_t{6}) 
+        << int8_t(6) << uint8_t(6)
+        << int16_t(6) << uint16_t(6)
+        << int32_t(6) << uint32_t(6)
+        << int64_t(6) << uint64_t(6)
+        << float(6.0f) << double(6.0)
+        << std::string("6") 
+        << std::vector<int8_t>{6}        
+        << std::vector<uint8_t>{6}
+        << std::vector<int16_t>{6}
+        << std::vector<uint16_t>{6}
+        << std::vector<int32_t>{6}
+        << std::vector<uint32_t>{6}
+        << std::vector<int64_t>{6}
+        << std::vector<uint64_t>{6}
+        << std::vector<float>{6.0f}
+        << std::vector<double>{6.0}
+        << std::vector<std::string>{"6"}
+        << std::vector<std::byte>{};
 
     QTest::newRow("floating_point_value")
         << StereoVision::IO::PointCloudGenericAttribute(double{14.4}) 
@@ -183,7 +208,8 @@ void TestPointCloudIO::testCastedPointCloudAttribute_data()
         << std::vector<uint64_t>{14}
         << std::vector<float>{14.4f}
         << std::vector<double>{14.4}
-        << std::vector<std::string>{"14.4"}; 
+        << std::vector<std::string>{"14.4"}
+        << std::vector<std::byte>{};
 
     QTest::newRow("string_single_value")
         << StereoVision::IO::PointCloudGenericAttribute(std::string{"3.9"}) 
@@ -203,7 +229,8 @@ void TestPointCloudIO::testCastedPointCloudAttribute_data()
         << std::vector<uint64_t>{3}
         << std::vector<float>{3.9f}
         << std::vector<double>{3.9}
-        << std::vector<std::string>{"3.9"}; 
+        << std::vector<std::string>{"3.9"}
+        << std::vector<std::byte>{};
 
     QTest::newRow("string_multiple_values")
         << StereoVision::IO::PointCloudGenericAttribute(std::string{"1 3.55 1e1"}) 
@@ -223,7 +250,8 @@ void TestPointCloudIO::testCastedPointCloudAttribute_data()
         << std::vector<uint64_t>{1, 3, 10}
         << std::vector<float>{1.0f, 3.55f, 10.0f}
         << std::vector<double>{1.0, 3.55, 10.0}
-        << std::vector<std::string>{"1", "3.55", "1e1"}; 
+        << std::vector<std::string>{"1", "3.55", "1e1"}
+        << std::vector<std::byte>{};
 
     // Row 2: Vector of values
     QTest::newRow("vector_multiple_values")
@@ -244,7 +272,8 @@ void TestPointCloudIO::testCastedPointCloudAttribute_data()
         << std::vector<uint64_t>{10, 20, 30}
         << std::vector<float>{10.0f, 20.0f, 30.0f}
         << std::vector<double>{10.0, 20.0, 30.0}
-        << std::vector<std::string>{"10", "20", "30"};
+        << std::vector<std::string>{"10", "20", "30"}
+        << std::vector<std::byte>{};
 
     QTest::newRow("vector_single_value")
         << StereoVision::IO::PointCloudGenericAttribute(std::vector<float>{10.2f})
@@ -264,7 +293,38 @@ void TestPointCloudIO::testCastedPointCloudAttribute_data()
         << std::vector<uint64_t>{10}
         << std::vector<float>{10.2f}
         << std::vector<double>{10.2f}
-        << std::vector<std::string>{"10.2"};
+        << std::vector<std::string>{"10.2"}
+        << std::vector<std::byte>{};
+
+    std::vector<std::byte> bytes{std::byte{0x3F}, std::byte{0xB}, std::byte{0x0}, std::byte{0xAD}};
+    QTest::newRow("vector_bytes")
+    << StereoVision::IO::PointCloudGenericAttribute(bytes)
+    << int8_t{} << uint8_t{}
+    << int16_t{} << uint16_t{} // undefied
+    << int32_t{} << uint32_t{} // undefied
+    << int64_t{} << uint64_t{} // undefied
+    << float{} << double{} // undefied
+    << std::string("0x3f0b00ad")                  
+    << std::vector<int8_t>{
+            StereoVision::IO::bit_cast<int8_t>(bytes[0]),
+            StereoVision::IO::bit_cast<int8_t>(bytes[1]),
+            StereoVision::IO::bit_cast<int8_t>(bytes[2]),
+            StereoVision::IO::bit_cast<int8_t>(bytes[3])}    
+    << std::vector<uint8_t>{
+            StereoVision::IO::bit_cast<uint8_t>(bytes[0]),
+            StereoVision::IO::bit_cast<uint8_t>(bytes[1]),    
+            StereoVision::IO::bit_cast<uint8_t>(bytes[2]),
+            StereoVision::IO::bit_cast<uint8_t>(bytes[3])}
+    << std::vector<int16_t>{} // undefied
+    << std::vector<uint16_t>{} // undefied
+    << std::vector<int32_t>{} // undefied
+    << std::vector<uint32_t>{} // undefied
+    << std::vector<int64_t>{} // undefied
+    << std::vector<uint64_t>{} // undefied
+    << std::vector<float>{} // undefied
+    << std::vector<double>{} // undefied
+    << std::vector<std::string>{"0x3f", "0x0b", "0x00", "0xad"}
+    << bytes;
 }
 
 void TestPointCloudIO::testCastedPointCloudAttribute()
@@ -292,6 +352,7 @@ void TestPointCloudIO::testCastedPointCloudAttribute()
     QFETCH(std::vector<float>, result_vector_float);
     QFETCH(std::vector<double>, result_vector_double);
     QFETCH(std::vector<std::string>, result_vector_string);
+    QFETCH(std::vector<std::byte>, result_vector_byte);
 
     // Test each conversion
     QCOMPARE(StereoVision::IO::castedPointCloudAttribute<int8_t>(input), result_int8_t);
@@ -318,6 +379,7 @@ void TestPointCloudIO::testCastedPointCloudAttribute()
     QCOMPARE(StereoVision::IO::castedPointCloudAttribute<std::vector<float>>(input), result_vector_float);
     QCOMPARE(StereoVision::IO::castedPointCloudAttribute<std::vector<double>>(input), result_vector_double);
     QCOMPARE(StereoVision::IO::castedPointCloudAttribute<std::vector<std::string>>(input), result_vector_string);
+    QCOMPARE(StereoVision::IO::castedPointCloudAttribute<std::vector<std::byte>>(input), result_vector_byte);
 }
 
 QTEST_MAIN(TestPointCloudIO)

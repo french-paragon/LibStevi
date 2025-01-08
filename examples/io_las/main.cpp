@@ -30,7 +30,9 @@ int main(int argc, char const *argv[]) {
     std::ifstream reader(pcdFilePath, std::ios::binary);
 	// create a Las header
     auto lasPointCloudHeader = StereoVision::IO::LasPointCloudHeader::readHeader(reader);
-    
+
+    std::cout << std::endl;
+
 
     return 0;
 }
