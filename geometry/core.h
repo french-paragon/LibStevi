@@ -98,7 +98,7 @@ public:
     }
 
     template <typename Tc>
-    AffineTransform<Tc> cast() {
+    AffineTransform<Tc> cast() const {
         return AffineTransform<Tc>(R.template cast<Tc>(), t.template cast<Tc>());
     }
 

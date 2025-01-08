@@ -356,7 +356,7 @@ public:
     }
 
     template <typename Tc>
-    RigidBodyTransform<Tc> cast() {
+    RigidBodyTransform<Tc> cast() const {
         return RigidBodyTransform<Tc>(r.template cast<Tc>(), t.template cast<Tc>());
     }
 
@@ -477,7 +477,7 @@ public:
     }
 
     template <typename Tc>
-    ShapePreservingTransform<Tc> cast() {
+    ShapePreservingTransform<Tc> cast() const {
         return ShapePreservingTransform<Tc>(r.template cast<Tc>(), t.template cast<Tc>(), static_cast<Tc>(s));
     }
 
