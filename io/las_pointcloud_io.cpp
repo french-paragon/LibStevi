@@ -2,31 +2,562 @@
 #include <array>
 #include <iostream>
 #include "las_pointcloud_io.h"
+#include "bit_manipulations.h"
+#include "fstreamCustomBuffer.h"
 
 namespace StereoVision {
 namespace IO {
 
-std::optional<PointCloudGenericAttribute> LasPointCloudHeader::getAttributeById(int id) const
-{
+using namespace std::literals::string_view_literals;
+
+// constants
+// buffersize when reading las files
+constexpr static size_t lasFileReaderBufferSize = 1 << 16;
+// write
+constexpr static size_t lasFileWriterBufferSize = 1 << 16;
+
+// private constexpr function to compute the offset from an array of sizes
+template <size_t N, typename T = size_t, size_t N_MAX = N, const std::array<T, N_MAX>& sizes, const std::array<bool, N_MAX>& usePriorDataOffset>
+static constexpr size_t computeOffset() {
+    if constexpr (N == 0) { // base case
+        return 0; 
+    } else if constexpr (std::get<N>(usePriorDataOffset)) { // if usePriorDataOffset is true, same offset than previous data
+        return computeOffset<N-1, T, N_MAX, sizes, usePriorDataOffset>();
+    } else {
+        return std::get<N - 1>(sizes) + computeOffset<N-1, T, N_MAX, sizes, usePriorDataOffset>(); // add size to the last offset
+    }
+}
+
+template <size_t N, const auto& sizes, const auto& usePriorDataOffset>
+static constexpr size_t computeOffset() {
+    return computeOffset<N, size_t, sizes.size(), sizes, usePriorDataOffset>();
+}
+
+// factory function that generate a LasPointCloudPoint object given a istream, the recordByteSize, the format and the dataBuffer.
+// the object might be in an invalid state before the first call to gotoNext.
+// TODO: implement this function
+
+template <class D>
+class LasPointCloudPoint_Base : public LasPointCloudPoint {
+public:
+
+    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize, char* dataBuffer) :
+        reader{std::move(reader)},
+        LasPointCloudPoint(recordByteSize, dataBuffer) {}
+
+    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize) :
+        reader{std::move(reader)},
+        LasPointCloudPoint(recordByteSize) { }
+
+protected:
+    const std::unique_ptr<std::istream> reader;
+
+private:
+    // structure to get the return type for each attribute from the derived class
+    template <class Derived, size_t N>
+    struct GetReturnType {
+        using type = typename std::tuple_element<N, typename Derived::returnTypeList>::type;
+    };
+
+    // structure to get the record format number
+    template<class Derived>
+    struct GetRecordFormatNumber;
+
+    template<template<size_t> class DerivedTemplate, size_t RecordFormatNumber>
+    struct GetRecordFormatNumber<DerivedTemplate<RecordFormatNumber>> {
+        static constexpr size_t value = RecordFormatNumber;
+    };
+
+    static constexpr size_t recordFormatNumber = GetRecordFormatNumber<D>::value;
+
+    // tell if the format is a legacy format
+    static constexpr bool isLegacyFormat = recordFormatNumber <= 5;
+
+    static constexpr bool containsColor = recordFormatNumber == 2 || recordFormatNumber == 3 || recordFormatNumber == 5
+        || recordFormatNumber == 7 || recordFormatNumber == 8 || recordFormatNumber == 10;
+
+    static constexpr bool containsGPS = recordFormatNumber != 0 && recordFormatNumber != 2;
+
+    static constexpr bool containsWavePacket = recordFormatNumber == 4 || recordFormatNumber == 5
+        || recordFormatNumber == 9 || recordFormatNumber == 10;
+
+    static constexpr bool containsNIR = recordFormatNumber == 8 || recordFormatNumber == 10;
+
+    // we use std::tuple to store the return type for each attribute
+    template<size_t N>
+    using returnType = typename GetReturnType<D, N>::type;
+
+    // get the byte size of the field's data in the buffer
+    template<size_t N>
+    static constexpr size_t size = std::get<N>(D::fieldByteSize);
+
+    // get the offset of the data in the buffer
+    template<size_t N>
+    static constexpr size_t offset = computeOffset<N, D::fieldByteSize, D::usePriorDataOffset>();
+
+    // if the type is a vector, get the number of elements. If it's a string, get the maximum number of characters for the string.
+    template<size_t N>
+    static constexpr size_t count = std::get<N>(D::fieldCount);
+
+    // tell if the attribute is in a bitfield
+    template<size_t N>
+    static constexpr bool isBitfield = std::get<N>(D::isBitfield);
+
+    // the size of the bitfield
+    template<size_t N>
+    static constexpr size_t bitfieldSize = std::get<N>(D::bitfieldSize);
+
+    // the offset in bits of the bitfield
+    template<size_t N>
+    static constexpr size_t bitfieldOffset = std::get<N>(D::bitfieldOffset);
+
+public:
+    PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;
+
+    std::optional<PtColor<PointCloudGenericAttribute>> getPointColor() const override;
+
+    std::optional<PointCloudGenericAttribute> getAttributeById(int id) const override {
+        return getAttributeById_helper(id);
+    }
+
+    std::optional<PointCloudGenericAttribute> getAttributeByName(const char* attributeName) const override;
+
+    std::vector<std::string> attributeList() const override;
+
+    bool gotoNext() override;
+private:
+    /**
+     * @brief helper functions to get the attribute by id.
+     * 
+     * If N > nbAttributes, return nullopt.
+     * If N == id, return the attribute.
+     * If N != id, recursively call the function with N+1.
+     */
+    template<size_t N = size_t{0}>
+    std::optional<PointCloudGenericAttribute> getAttributeById_helper(int id) const {
+        if constexpr (N >= D::nbAttributes) {
+            return std::nullopt;
+        } else {
+            if (N == id) {
+                // depending on the type, we can have different behavior
+                if constexpr (std::is_same_v<returnType<N>, std::string>) {
+                    const auto begin = getRecordDataBuffer() + offset<N>;
+                    const auto end = std::find(begin, begin + size<N>, '\0');
+                    return std::string{begin, end}; // return the string
+                } else if constexpr (is_vector_v<returnType<N>>) { // if the type is a vector
+                    // value type of the vector
+                    using value_type = typename std::remove_cv_t<returnType<N>>::value_type;
+                    // make sure that count*sizeof(value_type) = size
+                    static_assert(sizeof(value_type) * count<N> == size<N>, "The size of the vector is not correct");
+                    return vectorFromBytes<value_type>(getRecordDataBuffer() + offset<N>, count<N>);
+                } else { // just a basic type
+                    // test the size
+                    static_assert(sizeof(returnType<N>) == size<N>, "The size of the attribute is not correct");
+                    // test if the type is a bitfield
+                    if constexpr (isBitfield<N>) {
+                        static_assert(sizeof(typeof(bitfieldSize<N>)) >= sizeof(returnType<N>), "The size of the bitfield is too large");
+                        auto data = fromBytes<returnType<N>>(getRecordDataBuffer() + offset<N>);
+                        // shift and mask
+                        data = data >> bitfieldOffset<N> & ((1 << bitfieldSize<N>) - 1);
+                        return data;
+                    } else {
+                        return fromBytes<returnType<N>>(getRecordDataBuffer() + offset<N>);;
+                    }
+                }
+            } else {
+                return getAttributeById_helper<N+1>(id);
+            }
+        }
+    }
+};
+
+// the different record formats
+
+template<size_t RecordFormatNumber>
+class LasPointCloudPoint_Format;
+
+template<>
+class LasPointCloudPoint_Format<0> : public LasPointCloudPoint_Base<LasPointCloudPoint_Format<0>> {
+public:
+    using LasPointCloudPoint_Base<LasPointCloudPoint_Format<0>>::LasPointCloudPoint_Base;
+
+    static constexpr size_t nbAttributes = 15;
+
+    using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
+        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t>;
+
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
+        "NumberOfReturns"sv, "ScanDirectionFlag"sv, "EdgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
+        "keyPointFlag"sv, "withheldFlag"sv, "scanAngleRank"sv, "userData"sv, "pointSourceID"sv};
+
+    constexpr static std::array<size_t, nbAttributes> fieldByteSize =    {4, 4, 4, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2};
+    constexpr static std::array<size_t, nbAttributes> fieldCount =       {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    // infos related to bitfields
+    constexpr static std::array<bool, nbAttributes> usePriorDataOffset = {0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0};
+    constexpr static std::array<bool, nbAttributes> isBitfield =         {0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldSize =     {0, 0, 0, 0, 3, 3, 1, 1, 5, 1, 1, 1, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldOffset =   {0, 0, 0, 0, 0, 3, 6, 7, 0, 5, 6, 7, 0, 0, 0};
+
+    static constexpr size_t x_id = 0;
+    static constexpr size_t y_id = 1;
+    static constexpr size_t z_id = 2;
+};
+
+template<>
+class LasPointCloudPoint_Format<1> : public LasPointCloudPoint_Base<LasPointCloudPoint_Format<1>> {
+public:
+    using LasPointCloudPoint_Base<LasPointCloudPoint_Format<1>>::LasPointCloudPoint_Base;
+
+    static constexpr size_t nbAttributes = 16;
+
+    using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
+        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double>;
+
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
+        "NumberOfReturns"sv, "ScanDirectionFlag"sv, "EdgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
+        "keyPointFlag"sv, "withheldFlag"sv, "scanAngleRank"sv, "userData"sv, "pointSourceID"sv, "GPSTime"sv};
+
+    constexpr static std::array<size_t, nbAttributes> fieldByteSize =    {4, 4, 4, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 8};
+    constexpr static std::array<size_t, nbAttributes> fieldCount =       {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    // infos related to bitfields
+    constexpr static std::array<bool, nbAttributes> usePriorDataOffset = {0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0};
+    constexpr static std::array<bool, nbAttributes> isBitfield =         {0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldSize =     {0, 0, 0, 0, 3, 3, 1, 1, 5, 1, 1, 1, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldOffset =   {0, 0, 0, 0, 0, 3, 6, 7, 0, 5, 6, 7, 0, 0, 0, 0};
+
+    static constexpr size_t x_id = 0;
+    static constexpr size_t y_id = 1;
+    static constexpr size_t z_id = 2;
+};
+
+template<>
+class LasPointCloudPoint_Format<2> : public LasPointCloudPoint_Base<LasPointCloudPoint_Format<2>> {
+public:
+    using LasPointCloudPoint_Base<LasPointCloudPoint_Format<2>>::LasPointCloudPoint_Base;
+    
+    static constexpr size_t nbAttributes = 18;
+
+    using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
+        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t>;
+
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
+        "NumberOfReturns"sv, "ScanDirectionFlag"sv, "EdgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
+        "keyPointFlag"sv, "withheldFlag"sv, "scanAngleRank"sv, "userData"sv, "pointSourceID"sv, "red"sv, "green"sv,
+        "blue"sv};
+
+    constexpr static std::array<size_t, nbAttributes> fieldByteSize =    {4, 4, 4, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2};
+    constexpr static std::array<size_t, nbAttributes> fieldCount =       {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    // infos related to bitfields
+    constexpr static std::array<bool, nbAttributes> usePriorDataOffset = {0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<bool, nbAttributes> isBitfield =         {0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldSize =     {0, 0, 0, 0, 3, 3, 1, 1, 5, 1, 1, 1, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldOffset =   {0, 0, 0, 0, 0, 3, 6, 7, 0, 5, 6, 7, 0, 0, 0, 0, 0, 0};
+
+    static constexpr size_t x_id = 0;
+    static constexpr size_t y_id = 1;
+    static constexpr size_t z_id = 2;
+
+    static constexpr auto r_id = 15;
+    static constexpr auto g_id = 16;
+    static constexpr auto b_id = 17;
+};
+
+template<>
+class LasPointCloudPoint_Format<3> : public LasPointCloudPoint_Base<LasPointCloudPoint_Format<3>> {
+public:
+    using LasPointCloudPoint_Base<LasPointCloudPoint_Format<3>>::LasPointCloudPoint_Base;
+    
+    static constexpr size_t nbAttributes = 19;
+
+    using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
+        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double, uint16_t, uint16_t, uint16_t>;
+
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
+        "NumberOfReturns"sv, "ScanDirectionFlag"sv, "EdgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
+        "keyPointFlag"sv, "withheldFlag"sv, "scanAngleRank"sv, "userData"sv, "pointSourceID"sv, "GPSTime"sv, "red"sv,
+        "green"sv, "blue"sv};
+
+    constexpr static std::array<size_t, nbAttributes> fieldByteSize =    {4, 4, 4, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 8, 2, 2, 2};
+    constexpr static std::array<size_t, nbAttributes> fieldCount =       {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    // infos related to bitfields
+    constexpr static std::array<bool, nbAttributes> usePriorDataOffset = {0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<bool, nbAttributes> isBitfield =         {0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldSize =     {0, 0, 0, 0, 3, 3, 1, 1, 5, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldOffset =   {0, 0, 0, 0, 0, 3, 6, 7, 0, 5, 6, 7, 0, 0, 0, 0, 0, 0, 0};
+
+    static constexpr size_t x_id = 0;
+    static constexpr size_t y_id = 1;
+    static constexpr size_t z_id = 2;
+
+    static constexpr auto r_id = 16;
+    static constexpr auto g_id = 17;
+    static constexpr auto b_id = 18;
+};
+
+template<>
+class LasPointCloudPoint_Format<4> : public LasPointCloudPoint_Base<LasPointCloudPoint_Format<4>> {
+public:
+    using LasPointCloudPoint_Base<LasPointCloudPoint_Format<4>>::LasPointCloudPoint_Base;
+    
+    static constexpr size_t nbAttributes = 23;
+
+    using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
+        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double, uint8_t, uint64_t, uint32_t, float,
+        float, float, float>;
+
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
+        "NumberOfReturns"sv, "ScanDirectionFlag"sv, "EdgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
+        "keyPointFlag"sv, "withheldFlag"sv, "scanAngleRank"sv, "userData"sv, "pointSourceID"sv, "GPSTime"sv,
+        "wavePacketDescriptorIndex"sv, "byteOffsetToWaveformData"sv, "waveformPacketSizeInBytes"sv,
+        "returnPointWaveformLocation"sv, "parametricDx"sv, "parametricDy"sv, "parametricDz"sv};
+
+    constexpr static std::array<size_t, nbAttributes> fieldByteSize =    {4, 4, 4, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 8, 1, 8, 4, 4, 4, 4, 4};
+    constexpr static std::array<size_t, nbAttributes> fieldCount =       {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    // infos related to bitfields
+    constexpr static std::array<bool, nbAttributes> usePriorDataOffset = {0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<bool, nbAttributes> isBitfield =         {0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldSize =     {0, 0, 0, 0, 3, 3, 1, 1, 5, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldOffset =   {0, 0, 0, 0, 0, 3, 6, 7, 0, 5, 6, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+    static constexpr size_t x_id = 0;
+    static constexpr size_t y_id = 1;
+    static constexpr size_t z_id = 2;
+};
+
+template<>
+class LasPointCloudPoint_Format<5> : public LasPointCloudPoint_Base<LasPointCloudPoint_Format<5>> {
+public:
+    using LasPointCloudPoint_Base<LasPointCloudPoint_Format<5>>::LasPointCloudPoint_Base;
+    
+    static constexpr size_t nbAttributes = 26;
+
+    using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
+        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double, uint16_t, uint16_t, uint16_t, uint8_t,
+        uint64_t, uint32_t, float, float, float, float>;
+
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
+        "NumberOfReturns"sv, "ScanDirectionFlag"sv, "EdgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
+        "keyPointFlag"sv, "withheldFlag"sv, "scanAngleRank"sv, "userData"sv, "pointSourceID"sv, "GPSTime"sv, "red"sv,
+        "green"sv, "blue"sv, "wavePacketDescriptorIndex"sv, "byteOffsetToWaveformData"sv, "waveformPacketSizeInBytes"sv,
+        "returnPointWaveformLocation"sv, "parametricDx"sv, "parametricDy"sv, "parametricDz"sv};
+
+    constexpr static std::array<size_t, nbAttributes> fieldByteSize =    {4, 4, 4, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 8, 2, 2, 2, 1, 8, 4, 4, 4, 4, 4};
+    constexpr static std::array<size_t, nbAttributes> fieldCount =       {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    // infos related to bitfields
+    constexpr static std::array<bool, nbAttributes> usePriorDataOffset = {0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<bool, nbAttributes> isBitfield =         {0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldSize =     {0, 0, 0, 0, 3, 3, 1, 1, 5, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldOffset =   {0, 0, 0, 0, 0, 3, 6, 7, 0, 5, 6, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+    static constexpr size_t x_id = 0;
+    static constexpr size_t y_id = 1;
+    static constexpr size_t z_id = 2;
+
+    static constexpr auto r_id = 16;
+    static constexpr auto g_id = 17;
+    static constexpr auto b_id = 18;
+};
+
+template<>
+class LasPointCloudPoint_Format<6> : public LasPointCloudPoint_Base<LasPointCloudPoint_Format<6>> {
+public:
+    using LasPointCloudPoint_Base<LasPointCloudPoint_Format<6>>::LasPointCloudPoint_Base;
+    
+    static constexpr size_t nbAttributes = 18;
+
+    using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+        uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, int16_t, uint16_t, double>;
+
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
+        "NumberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
+        "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "userData"sv, "scanAngle"sv,
+        "pointSourceID"sv, "GPSTime"sv};
+
+    constexpr static std::array<size_t, nbAttributes> fieldByteSize =    {4, 4, 4, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 8};
+    constexpr static std::array<size_t, nbAttributes> fieldCount =       {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    // infos related to bitfields
+    constexpr static std::array<bool, nbAttributes> usePriorDataOffset = {0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0};
+    constexpr static std::array<bool, nbAttributes> isBitfield =         {0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldSize =     {0, 0, 0, 0, 4, 4, 1, 1, 1, 1, 2, 1, 1, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldOffset =   {0, 0, 0, 0, 0, 4, 0, 1, 2, 3, 4, 6, 7, 0, 0, 0, 0, 0};
+
+    static constexpr size_t x_id = 0;
+    static constexpr size_t y_id = 1;
+    static constexpr size_t z_id = 2;
+};
+
+template<>
+class LasPointCloudPoint_Format<7> : public LasPointCloudPoint_Base<LasPointCloudPoint_Format<7>> {
+public:
+    using LasPointCloudPoint_Base<LasPointCloudPoint_Format<7>>::LasPointCloudPoint_Base;
+    
+    static constexpr size_t nbAttributes = 21;
+
+    using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+        uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, int16_t, uint16_t, double, uint16_t, uint16_t, uint16_t>;
+
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
+        "NumberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
+        "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "userData"sv, "scanAngle"sv,
+        "pointSourceID"sv, "GPSTime"sv, "red"sv, "green"sv, "blue"sv};
+
+    constexpr static std::array<size_t, nbAttributes> fieldByteSize =    {4, 4, 4, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 8, 2, 2, 2};
+    constexpr static std::array<size_t, nbAttributes> fieldCount =       {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    // infos related to bitfields
+    constexpr static std::array<bool, nbAttributes> usePriorDataOffset = {0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<bool, nbAttributes> isBitfield =         {0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldSize =     {0, 0, 0, 0, 4, 4, 1, 1, 1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldOffset =   {0, 0, 0, 0, 0, 4, 0, 1, 2, 3, 4, 6, 7, 0, 0, 0, 0, 0, 0, 0, 0};
+
+    static constexpr size_t x_id = 0;
+    static constexpr size_t y_id = 1;
+    static constexpr size_t z_id = 2;
+
+    static constexpr size_t r_id = 18;
+    static constexpr size_t g_id = 19;
+    static constexpr size_t b_id = 20;
+};
+
+template<>
+class LasPointCloudPoint_Format<8> : public LasPointCloudPoint_Base<LasPointCloudPoint_Format<8>> {
+public:
+    using LasPointCloudPoint_Base<LasPointCloudPoint_Format<8>>::LasPointCloudPoint_Base;
+    
+    static constexpr size_t nbAttributes = 22;
+
+    using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+        uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, int16_t, uint16_t, double, uint16_t, uint16_t, uint16_t,
+        uint16_t>;
+
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
+        "NumberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
+        "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "userData"sv, "scanAngle"sv,
+        "pointSourceID"sv, "GPSTime"sv, "red"sv, "green"sv, "blue"sv, "NIR"sv};
+
+    constexpr static std::array<size_t, nbAttributes> fieldByteSize =    {4, 4, 4, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 8, 2, 2, 2, 2};
+    constexpr static std::array<size_t, nbAttributes> fieldCount =       {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    // infos related to bitfields
+    constexpr static std::array<bool, nbAttributes> usePriorDataOffset = {0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<bool, nbAttributes> isBitfield =         {0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldSize =     {0, 0, 0, 0, 4, 4, 1, 1, 1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldOffset =   {0, 0, 0, 0, 0, 4, 0, 1, 2, 3, 4, 6, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+
+    static constexpr size_t x_id = 0;
+    static constexpr size_t y_id = 1;
+    static constexpr size_t z_id = 2;
+
+    static constexpr size_t r_id = 18;
+    static constexpr size_t g_id = 19;
+    static constexpr size_t b_id = 20;
+};
+
+template<>
+class LasPointCloudPoint_Format<9> : public LasPointCloudPoint_Base<LasPointCloudPoint_Format<9>> {
+public:
+    using LasPointCloudPoint_Base<LasPointCloudPoint_Format<9>>::LasPointCloudPoint_Base;
+    
+    static constexpr size_t nbAttributes = 25;
+
+    using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+        uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, int16_t, uint16_t, double, uint8_t, uint64_t, uint32_t,
+        float, float, float, float>;
+
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
+        "NumberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
+        "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "userData"sv, "scanAngle"sv,
+        "pointSourceID"sv, "GPSTime"sv, "wavePacketDescriptorIndex"sv,
+        "byteOffsetToWaveformData"sv, "waveformPacketSizeInBytes"sv, "returnPointWaveformLocation"sv, "parametricDx"sv,
+        "parametricDy"sv, "parametricDz"sv};
+
+    constexpr static std::array<size_t, nbAttributes> fieldByteSize =    {4, 4, 4, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 8, 1, 8, 4, 4, 4, 4, 4};
+    constexpr static std::array<size_t, nbAttributes> fieldCount =       {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    // infos related to bitfields
+    constexpr static std::array<bool, nbAttributes> usePriorDataOffset = {0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<bool, nbAttributes> isBitfield =         {0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldSize =     {0, 0, 0, 0, 4, 4, 1, 1, 1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldOffset =   {0, 0, 0, 0, 0, 4, 0, 1, 2, 3, 4, 6, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+    static constexpr size_t x_id = 0;
+    static constexpr size_t y_id = 1;
+    static constexpr size_t z_id = 2;
+};
+
+template<>
+class LasPointCloudPoint_Format<10> : public LasPointCloudPoint_Base<LasPointCloudPoint_Format<10>> {
+public:
+    using LasPointCloudPoint_Base<LasPointCloudPoint_Format<10>>::LasPointCloudPoint_Base;
+    
+    static constexpr size_t nbAttributes = 29;
+
+    using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+        uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, int16_t, uint16_t, double, uint8_t, uint64_t, uint32_t,
+        float, float, float, float>;
+
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
+        "NumberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
+        "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "userData"sv, "scanAngle"sv,
+        "pointSourceID"sv, "GPSTime"sv, "red"sv, "green"sv, "blue"sv, "NIR"sv, "wavePacketDescriptorIndex"sv,
+        "byteOffsetToWaveformData"sv, "waveformPacketSizeInBytes"sv, "returnPointWaveformLocation"sv, "parametricDx"sv,
+        "parametricDy"sv, "parametricDz"sv};
+
+    constexpr static std::array<size_t, nbAttributes> fieldByteSize =    {4, 4, 4, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 8, 2, 2, 2, 2, 1, 8, 4, 4, 4, 4, 4};
+    constexpr static std::array<size_t, nbAttributes> fieldCount =       {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    // infos related to bitfields
+    constexpr static std::array<bool, nbAttributes> usePriorDataOffset = {0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<bool, nbAttributes> isBitfield =         {0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldSize =     {0, 0, 0, 0, 4, 4, 1, 1, 1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr static std::array<size_t, nbAttributes> bitfieldOffset =   {0, 0, 0, 0, 0, 4, 0, 1, 2, 3, 4, 6, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+    static constexpr size_t x_id = 0;
+    static constexpr size_t y_id = 1;
+    static constexpr size_t z_id = 2;
+
+    static constexpr size_t r_id = 18;
+    static constexpr size_t g_id = 19;
+    static constexpr size_t b_id = 20;
+};
+std::optional<PointCloudGenericAttribute> LasPointCloudHeader::getAttributeById(int id) const {
+    // TODO: implement
     return std::optional<PointCloudGenericAttribute>();
 }
 
-std::optional<PointCloudGenericAttribute> LasPointCloudHeader::getAttributeByName(const char *attributeName) const
-{
+std::optional<PointCloudGenericAttribute> LasPointCloudHeader::getAttributeByName(const char *attributeName) const {
+    // TODO: implement
     return std::optional<PointCloudGenericAttribute>();
 }
-std::vector<std::string> LasPointCloudHeader::attributeList() const
-{
+std::vector<std::string> LasPointCloudHeader::attributeList() const {
+    // TODO: add vlr attributes
     return publicHeaderBlock.publicHeaderAttributes;
 }
 std::unique_ptr<LasPointCloudHeader> LasPointCloudHeader::readHeader(std::istream &reader)
 {
-    LasPublicHeaderBlock::readPublicHeader(reader);
-    return std::unique_ptr<LasPointCloudHeader>();
+    auto header = std::make_unique<LasPointCloudHeader>();
+    auto publicHeader = LasPublicHeaderBlock::readPublicHeader(reader);
+    if (!publicHeader) return nullptr;
+    header->publicHeaderBlock = std::move(*publicHeader);
+    auto vlrs = LasVariableLengthRecord::readVariableLengthRecords(reader, publicHeader->numberOfVariableLengthRecords);
+    if (!vlrs) return nullptr;
+    header->variableLengthRecords = std::move(*vlrs);
+    // test if there is EVLRs
+    if (publicHeader->numberOfExtendedVariableLengthRecords > 0) {
+        // move the reader to the start of the EVLRs
+        reader.seekg(publicHeader->startOfFirstExtendedVariableLengthRecord);
+        if (reader.fail()) return nullptr;
+        // read the EVLRs
+        auto evlrs = LasExtendedVariableLengthRecord::readVariableLengthRecords(reader, publicHeader->numberOfExtendedVariableLengthRecords);
+        if (!evlrs) return nullptr;
+        header->extendedVariableLengthRecords = std::move(*evlrs);
+    }
+
+    // seek the reader to the start of the points
+    reader.seekg(publicHeader->offsetToPointData);
+    if (reader.fail()) return nullptr;
+
+    return header;
 }
 
 std::optional<LasPublicHeaderBlock> LasPublicHeaderBlock::readPublicHeader(std::istream &reader) {
-    // read the data
     LasPublicHeaderBlock header;
     reader.read(header.fileSignature.data(), fileSignature_size);
     reader.read(reinterpret_cast<char*>(&header.fileSourceID), fileSourceID_size);
@@ -65,57 +596,6 @@ std::optional<LasPublicHeaderBlock> LasPublicHeaderBlock::readPublicHeader(std::
     reader.read(reinterpret_cast<char*>(&header.numberOfExtendedVariableLengthRecords), numberOfExtendedVariableLengthRecords_size);
     reader.read(reinterpret_cast<char*>(&header.numberOfPointRecords), numberOfPointRecords_size);
     reader.read(reinterpret_cast<char*>(header.numberOfPointsByReturn.data()), numberOfPointsByReturn_size);
-
-    // display the data
-    std::cout << "file signature: " << std::string(header.fileSignature.data(), fileSignature_size) << std::endl;
-    std::cout << "file source id: " << header.fileSourceID << std::endl;
-    std::cout << "global encoding: " << header.globalEncoding << std::endl;
-    std::cout << "project id guid data1: " << header.projectID_GUID_Data1 << std::endl;
-    std::cout << "project id guid data2: " << header.projectID_GUID_Data2 << std::endl;
-    std::cout << "project id guid data3: " << header.projectID_GUID_Data3 << std::endl;
-    std::cout << "project id guid data4: ";
-    for (auto&& guiddata4 : header.projectID_GUID_Data4) {
-        std::cout << guiddata4 << " ";
-    }
-    std::cout << std::endl;
-    std::cout << "version major: " << static_cast<uint16_t>(header.versionMajor) << std::endl;
-    std::cout << "version minor: " << static_cast<uint16_t>(header.versionMinor) << std::endl;
-    std::cout << "system identifier: " << std::string(header.systemIdentifier.data(), systemIdentifier_size) << std::endl;
-    std::cout << "generating software: " << std::string(header.generatingSoftware.data(), generatingSoftware_size) << std::endl;
-    std::cout << "file creation day of year: " << header.fileCreationDayOfYear << std::endl;
-    std::cout << "file creation year: " << header.fileCreationYear << std::endl;
-    std::cout << "header size: " << header.headerSize << std::endl;
-    std::cout << "offset to point data: " << header.offsetToPointData << std::endl;
-    std::cout << "number of variable length records: " << header.numberOfVariableLengthRecords << std::endl;
-    std::cout << "point data record format: " << static_cast<uint16_t>(header.pointDataRecordFormat) << std::endl;
-    std::cout << "point data record length: " << header.pointDataRecordLength << std::endl;
-    std::cout << "legacy number of point records: " << header.legacyNumberOfPointRecords << std::endl;
-    std::cout << "legacy number of points by return: ";
-    for (auto&& legacyNumberOfPointsByReturn : header.legacyNumberOfPointsByReturn) {
-        std::cout << legacyNumberOfPointsByReturn << " ";
-    }
-    std::cout << std::endl;
-    std::cout << "x scale factor: " << header.xScaleFactor << std::endl;
-    std::cout << "y scale factor: " << header.yScaleFactor << std::endl;
-    std::cout << "z scale factor: " << header.zScaleFactor << std::endl;
-    std::cout << "x offset: " << header.xOffset << std::endl;
-    std::cout << "y offset: " << header.yOffset << std::endl;
-    std::cout << "z offset: " << header.zOffset << std::endl;
-    std::cout << "max x: " << header.maxX << std::endl;
-    std::cout << "min x: " << header.minX << std::endl;
-    std::cout << "max y: " << header.maxY << std::endl;
-    std::cout << "min y: " << header.minY << std::endl;
-    std::cout << "max z: " << header.maxZ << std::endl;
-    std::cout << "min z: " << header.minZ << std::endl;
-    std::cout << "start of waveform data packet record: " << header.startOfWaveformDataPacketRecord << std::endl;
-    std::cout << "start of first extended variable length record: " << header.startOfFirstExtendedVariableLengthRecord << std::endl;
-    std::cout << "number of extended variable length records: " << header.numberOfExtendedVariableLengthRecords << std::endl;
-    std::cout << "number of point records: " << header.numberOfPointRecords << std::endl;
-    std::cout << "number of points by return: ";
-    for (auto&& numberOfPointsByReturn : header.numberOfPointsByReturn) {
-        std::cout << numberOfPointsByReturn << " ";
-    }
-    std::cout << std::endl;
 
     if (reader.fail()) return std::nullopt;
 
@@ -161,6 +641,95 @@ void LasPublicHeaderBlock::writePublicHeader(std::ostream &writer, const LasPubl
     writer.write(reinterpret_cast<const char*>(&header.numberOfExtendedVariableLengthRecords), numberOfExtendedVariableLengthRecords_size);
     writer.write(reinterpret_cast<const char*>(&header.numberOfPointRecords), numberOfPointRecords_size);
     writer.write(reinterpret_cast<const char*>(header.numberOfPointsByReturn.data()), numberOfPointsByReturn_size);
+}
+
+template <class D>
+PtGeometry<PointCloudGenericAttribute> LasPointCloudPoint_Base<D>::getPointPosition() const {
+    return PtGeometry<PointCloudGenericAttribute>{
+        fromBytes<returnType<D::x_id>>(getRecordDataBuffer() + offset<D::x_id>),
+        fromBytes<returnType<D::y_id>>(getRecordDataBuffer() + offset<D::y_id>),
+        fromBytes<returnType<D::z_id>>(getRecordDataBuffer() + offset<D::z_id>)};
+}
+
+template <class D>
+inline std::optional<PtColor<PointCloudGenericAttribute>> LasPointCloudPoint_Base<D>::getPointColor() const {
+    if constexpr (containsColor) {
+        return PtColor<PointCloudGenericAttribute>{
+            fromBytes<returnType<D::r_id>>(getRecordDataBuffer() + offset<D::r_id>),
+            fromBytes<returnType<D::g_id>>(getRecordDataBuffer() + offset<D::g_id>),
+            fromBytes<returnType<D::b_id>>(getRecordDataBuffer() + offset<D::b_id>),
+            std::numeric_limits<returnType<D::r_id>>::max() // no alpha channel
+            };
+    } else {
+        return std::nullopt;
+    }
+}
+
+template <class D>
+std::optional<PointCloudGenericAttribute> LasPointCloudPoint_Base<D>::getAttributeByName(const char *attributeName) const {
+    constexpr auto begin = D::attributeNames.begin();
+    constexpr auto end = begin + D::nbAttributes;
+    auto it = std::find(begin, end, attributeName);
+    if (it != end) {
+        return getAttributeById(std::distance(begin, it));
+    }
+    return std::nullopt; // Attribute not found
+}
+
+template <class D>
+std::vector<std::string> LasPointCloudPoint_Base<D>::attributeList() const {
+    return std::vector<std::string>(D::attributeNames.begin(), D::attributeNames.begin() + D::nbAttributes);
+}
+
+template <class Derived>
+bool LasPointCloudPoint_Base<Derived>::gotoNext() {
+    reader->read(dataBuffer, recordByteSize);
+    if (!reader->good()) return false;
+    return true;
+}
+
+LasPointCloudPoint::LasPointCloudPoint(size_t recordByteSize) :
+    LasPointCloudPoint(recordByteSize, nullptr)
+{
+    dataBufferContainer.resize(recordByteSize);
+    dataBuffer = dataBufferContainer.data();
+}
+
+LasPointCloudPoint::LasPointCloudPoint(size_t recordByteSize, char *dataBuffer) :
+    recordByteSize{recordByteSize}, dataBuffer{dataBuffer} { }
+
+std::optional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesystem::path &lasFilePath) {
+    // // open the file
+    // auto reader = std::make_unique<ifstreamCustomBuffer<lasFileReaderBufferSize>>();
+
+    // constexpr auto maxPrecision{std::numeric_limits<double>::digits10 + 1};
+    // reader->precision(maxPrecision); // set the precision for the reader
+
+    // reader->open(lasFilePath, std::ios_base::binary);
+
+    // if (!reader->is_open()) return std::nullopt;
+
+    // // read the header
+    // auto header = LasPointCloudHeader::readHeader(*reader);
+    // // test if header ptr is not null
+    // if (header == nullptr) {
+    //     return std::nullopt;
+    // }
+
+    // // create a point cloud
+    // auto pointCloud = std::make_unique<LasPointCloudPoint>(std::move(reader), header->publicHeaderBlock.pointDataRecordLength);
+
+    // // return the point cloud
+    // if (pointCloud->gotoNext()) {
+    //         FullPointCloudAccessInterface fullPointInterface;
+    //         fullPointInterface.headerAccess = std::move(header);
+    //         fullPointInterface.pointAccess = std::move(pointCloud);
+    //         return fullPointInterface;
+    // }
+
+    // TODO: implement this function
+
+    return std::nullopt;
 }
 
 }

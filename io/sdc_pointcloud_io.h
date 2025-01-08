@@ -143,9 +143,7 @@ public:
     
     inline auto getRecordByteSize() const { return recordByteSize; }
     inline auto* getRecordDataBuffer() const { return dataBufferPtr; }
-
-    // destructor
-    ~SdcPointCloudPoint() override;
+    
 private:
     // compute the number of attributes based on the version
     static inline size_t computeNbAttributes(uint16_t majorVersion, uint16_t minorVersion) {

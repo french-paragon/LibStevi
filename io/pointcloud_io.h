@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <vector>
 #include <map>
 #include <string>
+#include <cstring>
 #include <sstream>
 #include <tuple>
 #include <variant>
@@ -54,9 +55,15 @@ struct PtColor<void>{
 };
 
 using PointCloudGenericAttribute =
-std::variant<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, float, double, std::string,
-std::vector<int8_t>, std::vector<uint8_t>, std::vector<int16_t>, std::vector<uint16_t>, std::vector<int32_t>,
-std::vector<uint32_t>, std::vector<int64_t>, std::vector<uint64_t>, std::vector<float>, std::vector<double>, std::vector<std::string>>;
+std::variant<
+    // basic types
+    int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, float, double, std::string,
+    // list types
+    std::vector<int8_t>, std::vector<uint8_t>, std::vector<int16_t>, std::vector<uint16_t>, std::vector<int32_t>,
+    std::vector<uint32_t>, std::vector<int64_t>, std::vector<uint64_t>, std::vector<float>, std::vector<double>,
+    std::vector<std::string>,
+    // packet of bytes
+    std::vector<std::byte>>;
 
 inline bool isAttributeList(PointCloudGenericAttribute const& val) {
     return std::holds_alternative<std::vector<int8_t>>(val) or
@@ -85,9 +92,9 @@ struct is_vector<std::vector<T, Alloc>> : std::true_type {};
 template <typename T>
 inline constexpr bool is_vector_v = is_vector<T>::value;
 
-template<typename T>
-T castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
-
+template<typename T_>
+T_ castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
+    using T = std::decay_t<T_>;
     constexpr bool isSimpleReturnType = std::is_integral_v<T> || std::is_floating_point_v<T> || std::is_same_v<std::string, T>;
     constexpr bool isVectorReturnType = is_vector_v<T>;
 
@@ -100,7 +107,7 @@ T castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
     // to string visitor
     // any supported type can be converted to string
     auto toString = [](auto&& attr) {
-        std::stringstream strs;
+        std::ostringstream strs;
         using U = std::decay_t<decltype(attr)>;
         if constexpr (std::is_same_v<U, std::string>) {
             strs << attr;
@@ -130,9 +137,17 @@ T castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
                     for (size_t i = 0; i < attr.size()-1; i++) { strs << static_cast<uintmax_t>(attr[i]) << " "; }
                     if (attr.size() > 0) { strs << static_cast<uintmax_t>(attr[attr.size()-1]); }
                 }
+            } else if constexpr (std::is_same_v<value_type, std::byte>) {
+                // print them in hex
+                if (attr.size() > 0) { strs << "0x"; }
+                for (const auto& byte : attr) {
+                    strs << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte);
+                }
             } else {
                 static_assert(false, "Unsupported vector type");
             }
+        } else if constexpr (std::is_same_v<U, std::byte>) {
+            strs << "0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(attr);
         } else {
             static_assert(false, "Unsupported type");
         }
@@ -171,9 +186,11 @@ T castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
                         }
                         if constexpr (std::is_same_v<returnVectorValue_t, std::string>) {
                             vec.push_back(token);
-                        } else {
+                        } else if constexpr (std::is_arithmetic_v<returnVectorValue_t>) {
                             double tmp = std::stod(token);
                             vec.push_back(static_cast<returnVectorValue_t>(tmp));
+                        } else {
+                            return T{};
                         }
                     }
                     return vec;
@@ -189,7 +206,8 @@ T castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
             } else if constexpr (isVectorHeldType && isVectorReturnType) { //* vector => vector conversion
                 using returnVectorValue_t = typename T::value_type;
                 using variantVectorValue_t = std::remove_cv_t<std::remove_reference_t<typename variantHeld_t::value_type>>;
-                if constexpr(std::is_convertible_v<variantVectorValue_t, returnVectorValue_t>) {
+                
+                 if constexpr(std::is_convertible_v<variantVectorValue_t, returnVectorValue_t>) {
                     T vec;
                     vec.reserve(arg.size());
                     for(auto&& e: arg) {
@@ -211,14 +229,27 @@ T castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
                         vec.push_back(static_cast<returnVectorValue_t>(tmp));
                     }
                     return vec;
+                } else if constexpr ((std::is_same_v<std::byte, variantVectorValue_t> or std::is_same_v<std::byte, returnVectorValue_t>)
+                                     and sizeof(variantVectorValue_t) == sizeof(returnVectorValue_t)
+                                     and (std::is_integral_v<variantVectorValue_t> or std::is_integral_v<returnVectorValue_t>)) {
+                    // reinterpret the bytes
+                    T vec;
+                    vec.resize(arg.size());
+                    for(auto i = 0; i < arg.size(); i++) {
+                        std::memcpy(&vec[i], &arg[i], sizeof(returnVectorValue_t));
+                    }
+                    return vec;
                 } else {
                     return T{}; // empty vector
                 }
             } else if constexpr (isVectorHeldType && isSimpleReturnType) { //* vector => simple type conversion
+                if (arg.empty()) return T{};
                 // case vector => string is already handled above
                 using variantVectorValue_t = std::remove_cv_t<std::remove_reference_t<typename variantHeld_t::value_type>>;
                 // it might be possible to convert it by taking the first element
-                if constexpr (std::is_same_v<std::string, variantVectorValue_t>) {
+                if constexpr (std::is_same_v<T, variantVectorValue_t>) {
+                    return arg[0];
+                } else if constexpr (std::is_same_v<std::string, variantVectorValue_t>) {
                     // vector => number
                     double tmp = std::stod(arg[0]);
                     return static_cast<T>(tmp);
