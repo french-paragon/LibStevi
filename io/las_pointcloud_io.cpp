@@ -33,9 +33,20 @@ static constexpr size_t computeOffset() {
     return computeOffset<N, size_t, sizes.size(), sizes, usePriorDataOffset>();
 }
 
-// factory function that generate a LasPointCloudPoint object given a istream, the recordByteSize, the format and the dataBuffer.
-// the object might be in an invalid state before the first call to gotoNext.
-// TODO: implement this function
+
+/**
+ * @brief Factory function that generate a LasPointCloudPoint object given a istream, the recordByteSize, the record format number (0-11) and the dataBuffer.
+ * The data will be in an invalid state until gotoNext is called.
+ * @param reader the istream
+ * @param recordByteSize the size of the point record
+ * @param format the record format number
+ * @param dataBuffer the data buffer
+ * @return std::unique_ptr<LasPointCloudPoint>
+ */
+static std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint(std::unique_ptr<std::istream> reader, size_t recordByteSize, size_t recordFormatNumber, char* dataBuffer = nullptr);
+
+template <size_t N = size_t{0}>
+static std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::unique_ptr<std::istream> reader, size_t recordByteSize, size_t recordFormatNumber, char* dataBuffer);
 
 template <class D>
 class LasPointCloudPoint_Base : public LasPointCloudPoint {
@@ -43,7 +54,7 @@ public:
 
     LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize, char* dataBuffer) :
         reader{std::move(reader)},
-        LasPointCloudPoint(recordByteSize, dataBuffer) {}
+        LasPointCloudPoint(recordByteSize, dataBuffer) { }
 
     LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize) :
         reader{std::move(reader)},
@@ -491,8 +502,8 @@ public:
     static constexpr size_t nbAttributes = 29;
 
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
-        uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, int16_t, uint16_t, double, uint8_t, uint64_t, uint32_t,
-        float, float, float, float>;
+        uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, int16_t, uint16_t, double, uint16_t, uint16_t, uint16_t,
+        uint16_t, uint8_t, uint64_t, uint32_t, float, float, float, float>;
 
     constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
         "NumberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
@@ -518,16 +529,28 @@ public:
     static constexpr size_t b_id = 20;
 };
 std::optional<PointCloudGenericAttribute> LasPointCloudHeader::getAttributeById(int id) const {
-    // TODO: implement
-    return std::optional<PointCloudGenericAttribute>();
+    // TODO: add support for VLRs and EVLRs
+    if (id < 0) {
+        return std::nullopt;
+    } else if (id < publicHeaderBlock.publicHeaderAttributes.size()) {
+            return publicHeaderBlock.getPublicHeaderAttributeById(id);
+    } else {
+        return std::nullopt;
+    }
 }
 
 std::optional<PointCloudGenericAttribute> LasPointCloudHeader::getAttributeByName(const char *attributeName) const {
-    // TODO: implement
-    return std::optional<PointCloudGenericAttribute>();
+    // TODO: add support for VLRs and EVLRs
+    auto it = std::find(publicHeaderBlock.publicHeaderAttributes.begin(), publicHeaderBlock.publicHeaderAttributes.end(), attributeName);
+    if (it != publicHeaderBlock.publicHeaderAttributes.end()) {
+        auto id = std::distance(publicHeaderBlock.publicHeaderAttributes.begin(), it);
+        return publicHeaderBlock.getPublicHeaderAttributeById(id);
+    } else {
+        return std::nullopt;
+    }
 }
 std::vector<std::string> LasPointCloudHeader::attributeList() const {
-    // TODO: add vlr attributes
+    // TODO: add support for VLRs and EVLRs
     return publicHeaderBlock.publicHeaderAttributes;
 }
 std::unique_ptr<LasPointCloudHeader> LasPointCloudHeader::readHeader(std::istream &reader)
@@ -643,6 +666,87 @@ void LasPublicHeaderBlock::writePublicHeader(std::ostream &writer, const LasPubl
     writer.write(reinterpret_cast<const char*>(header.numberOfPointsByReturn.data()), numberOfPointsByReturn_size);
 }
 
+std::optional<PointCloudGenericAttribute> LasPublicHeaderBlock::getPublicHeaderAttributeById(int id) const {
+    switch (id) {
+    case 0:
+        return std::string{fileSignature.begin(), fileSignature.end()};
+    case 1:
+        return fileSourceID;
+    case 2:
+        return globalEncoding;
+    case 3:
+        return projectID_GUID_Data1;
+    case 4:
+        return projectID_GUID_Data2;
+    case 5:
+        return projectID_GUID_Data3;
+    case 6:
+        return std::string{projectID_GUID_Data4.begin(), projectID_GUID_Data4.end()};
+    case 7:
+        return versionMajor;
+    case 8:
+        return versionMinor;
+    case 9:
+        return std::string{systemIdentifier.begin(), systemIdentifier.end()};
+    case 10:
+        return std::string{generatingSoftware.begin(), generatingSoftware.end()};
+    case 11:
+        return fileCreationDayOfYear;
+    case 12:
+        return fileCreationYear;
+    case 13:
+        return headerSize;
+    case 14:
+        return offsetToPointData;
+    case 15:
+        return numberOfVariableLengthRecords;
+    case 16:
+        return pointDataRecordFormat;
+    case 17:
+        return pointDataRecordLength;
+    case 18:
+        return legacyNumberOfPointRecords;
+    case 19:
+        return std::vector<uint32_t>{legacyNumberOfPointsByReturn.begin(), legacyNumberOfPointsByReturn.end()};
+    case 20:
+        return xScaleFactor;
+    case 21:
+        return yScaleFactor;
+    case 22:
+        return zScaleFactor;
+    case 23:
+        return xOffset;
+    case 24:
+        return yOffset;
+    case 25:
+        return zOffset;
+    case 26:
+        return maxX;
+    case 27:
+        return minX;
+    case 28:
+        return maxY;
+    case 29:
+        return minY;
+    case 30:
+        return maxZ;
+    case 31:
+        return minZ;
+    case 32:
+        return startOfWaveformDataPacketRecord;
+    case 33:
+        return startOfFirstExtendedVariableLengthRecord;
+    case 34:
+        return numberOfExtendedVariableLengthRecords;
+    case 35:
+        return numberOfPointRecords;
+    case 36:
+        return std::vector<uint64_t>{numberOfPointsByReturn.begin(), numberOfPointsByReturn.end()};
+    default:
+        return std::nullopt;
+    }
+}
+
 template <class D>
 PtGeometry<PointCloudGenericAttribute> LasPointCloudPoint_Base<D>::getPointPosition() const {
     return PtGeometry<PointCloudGenericAttribute>{
@@ -699,37 +803,58 @@ LasPointCloudPoint::LasPointCloudPoint(size_t recordByteSize, char *dataBuffer) 
     recordByteSize{recordByteSize}, dataBuffer{dataBuffer} { }
 
 std::optional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesystem::path &lasFilePath) {
-    // // open the file
-    // auto reader = std::make_unique<ifstreamCustomBuffer<lasFileReaderBufferSize>>();
+    // open the file
+    auto reader = std::make_unique<ifstreamCustomBuffer<lasFileReaderBufferSize>>();
 
-    // constexpr auto maxPrecision{std::numeric_limits<double>::digits10 + 1};
-    // reader->precision(maxPrecision); // set the precision for the reader
+    constexpr auto maxPrecision{std::numeric_limits<double>::digits10 + 1};
+    reader->precision(maxPrecision); // set the precision for the reader
 
-    // reader->open(lasFilePath, std::ios_base::binary);
+    reader->open(lasFilePath, std::ios_base::binary);
 
-    // if (!reader->is_open()) return std::nullopt;
+    if (!reader->is_open()) return std::nullopt;
 
-    // // read the header
-    // auto header = LasPointCloudHeader::readHeader(*reader);
-    // // test if header ptr is not null
-    // if (header == nullptr) {
-    //     return std::nullopt;
-    // }
+    // read the header
+    auto header = LasPointCloudHeader::readHeader(*reader);
+    // test if header ptr is not null
+    if (header == nullptr) {
+        return std::nullopt;
+    }
 
-    // // create a point cloud
-    // auto pointCloud = std::make_unique<LasPointCloudPoint>(std::move(reader), header->publicHeaderBlock.pointDataRecordLength);
+    // create a point cloud
+    auto pointCloud = createLasPointCloudPoint(std::move(reader), header->publicHeaderBlock.pointDataRecordLength, header->publicHeaderBlock.pointDataRecordFormat);
 
-    // // return the point cloud
-    // if (pointCloud->gotoNext()) {
-    //         FullPointCloudAccessInterface fullPointInterface;
-    //         fullPointInterface.headerAccess = std::move(header);
-    //         fullPointInterface.pointAccess = std::move(pointCloud);
-    //         return fullPointInterface;
-    // }
+    if (pointCloud == nullptr) {
+        return std::nullopt;
+    }
 
-    // TODO: implement this function
+    // return the point cloud
+    if (pointCloud->gotoNext()) {
+            FullPointCloudAccessInterface fullPointInterface;
+            fullPointInterface.headerAccess = std::move(header);
+            fullPointInterface.pointAccess = std::move(pointCloud);
+            return fullPointInterface;
+    }
 
     return std::nullopt;
+}
+
+template <size_t N>
+std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::unique_ptr<std::istream> reader, size_t recordByteSize, size_t recordFormatNumber, char *dataBuffer) {
+    if constexpr (N > 10) {
+        return nullptr;
+    } else if (N == recordFormatNumber) {
+        if (dataBuffer == nullptr) {
+            return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize);
+        } else  {
+            return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize, dataBuffer);
+        }
+    } else {
+        return createLasPointCloudPoint_helper<N+1>(std::move(reader), recordByteSize, recordFormatNumber, dataBuffer);
+    }
+}
+
+std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint(std::unique_ptr<std::istream> reader, size_t recordByteSize, size_t recordFormatNumber, char *dataBuffer) {
+    return createLasPointCloudPoint_helper(std::move(reader), recordByteSize, recordFormatNumber, dataBuffer);
 }
 
 }
