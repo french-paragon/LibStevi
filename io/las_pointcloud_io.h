@@ -150,9 +150,11 @@ public:
     static std::optional<LasPublicHeaderBlock> readPublicHeader(std::istream& reader);
     // write the header of the LAS file
     static void writePublicHeader(std::ostream& writer, const LasPublicHeaderBlock& header);
+    // get an attribute by its id
+    std::optional<PointCloudGenericAttribute> getPublicHeaderAttributeById(int id) const;
 };
 
-/// Class representing a variable length record
+/// Class representing a variable length record (or extended variable length record)
 template<bool isExtended>
 class LasGenericVariableLengthRecord {
 private:
