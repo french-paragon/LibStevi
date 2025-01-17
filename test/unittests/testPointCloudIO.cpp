@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include "io/pointcloud_io.h"
+#include "io/las_pointcloud_io.h"
 #include "io/bit_manipulations.h"
 
 #include <random>
@@ -51,6 +52,8 @@ private Q_SLOTS:
 
     void testCastedPointCloudAttribute();
     void testCastedPointCloudAttribute_data();
+
+    void testLasExtraBytes();
 
 private:
     std::default_random_engine re;
@@ -380,6 +383,87 @@ void TestPointCloudIO::testCastedPointCloudAttribute()
     QCOMPARE(StereoVision::IO::castedPointCloudAttribute<std::vector<double>>(input), result_vector_double);
     QCOMPARE(StereoVision::IO::castedPointCloudAttribute<std::vector<std::string>>(input), result_vector_string);
     QCOMPARE(StereoVision::IO::castedPointCloudAttribute<std::vector<std::byte>>(input), result_vector_byte);
+}
+
+void TestPointCloudIO::testLasExtraBytes() {
+    std::array<uint8_t, 2> reserved{};
+    uint8_t data_type = 1;
+    uint8_t options = 2;
+    std::array<char, 32> name{"sample"};
+    std::array<uint8_t, 4> unused{0, 1, 2, 3};
+    std::array<std::byte, 8> no_data{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}, std::byte{5}, std::byte{6}, std::byte{7}, std::byte{8}};
+    std::array<uint8_t, 16> deprecated1{"asdf"};
+    std::array<std::byte, 8> min {std::byte{43}, std::byte{44}, std::byte{45}, std::byte{46}, std::byte{47}, std::byte{48}, std::byte{49}, std::byte{50}};
+    std::array<uint8_t, 16> deprecated2{"5678"};
+    std::array<std::byte, 8> max{std::byte{51}, std::byte{52}, std::byte{53}, std::byte{54}, std::byte{55}, std::byte{56}, std::byte{57}, std::byte{58}};
+    std::array<uint8_t, 16> deprecated3{"1234"};
+    double scale = 345.678;
+    std::array<uint8_t, 16> deprecated4{"*+*"};
+    double offset = 123.456;
+    std::array<uint8_t, 16> deprecated5{"deprecated"};
+    std::array<char, 32> description{"test description"};
+    StereoVision::IO::LasExtraBytesDescriptor extraBytes{reserved, data_type, options, name, unused, no_data, deprecated1, min, deprecated2, max, deprecated3, scale, deprecated4, offset, deprecated5, description};
+    // convert to a raw byte array
+    auto rawBytes = extraBytes.toBytes();
+    // reconvert it
+    StereoVision::IO::LasExtraBytesDescriptor extraBytes2{reinterpret_cast<char*>(rawBytes.data())};
+    // display
+    auto rawBytes2 = extraBytes2.toBytes();
+
+    QCOMPARE(rawBytes, rawBytes2);
+
+    // test other constructors
+    uint8_t data_type_3 = 9; // float
+    std::string name_3 = "testFloat";
+    std::string description_3 = "descriptionTest";
+    double no_data_3 = 6;
+    double min_3 = -324;
+    double max_3 = 324;
+    char* min_3_rawPtr = reinterpret_cast<char*>(&min_3);
+    char* max_3_rawPtr = reinterpret_cast<char*>(&max_3);
+    char* no_data_3_rawPtr = reinterpret_cast<char*>(&no_data_3);
+    auto min_3_raw = StereoVision::IO::arrayFromBytes<std::byte, 8>(min_3_rawPtr);
+    auto max_3_raw = StereoVision::IO::arrayFromBytes<std::byte, 8>(max_3_rawPtr);
+    auto no_data_3_raw = StereoVision::IO::arrayFromBytes<std::byte, 8>(no_data_3_rawPtr);
+    double scale_3 = 3;
+    double offset_3 = 5;
+
+    StereoVision::IO::LasExtraBytesDescriptor extraBytes3{data_type_3, name_3, description_3, no_data_3, min_3, max_3, scale_3, offset_3};
+    // convert to raw bytes
+    auto rawBytes3 = extraBytes3.toBytes();
+    // expected extra byte 
+    StereoVision::IO::LasExtraBytesDescriptor expectedExtraBytes3 {std::array<uint8_t, 2>{}, uint8_t{9}, uint8_t{0b00011111}, std::array<char, 32>{"testFloat"},
+        std::array<uint8_t, 4>{}, no_data_3_raw, std::array<uint8_t, 16>{}, min_3_raw, std::array<uint8_t, 16>{},
+        max_3_raw, std::array<uint8_t, 16>{}, scale_3, std::array<uint8_t, 16>{}, offset_3, std::array<uint8_t, 16>{}, std::array<char, 32>{"descriptionTest"}};
+    // raw bytes
+    auto expectedRawBytes3 = expectedExtraBytes3.toBytes();
+
+    // compare them
+    QCOMPARE(rawBytes3, expectedRawBytes3);
+    
+    // again, read + convert
+    StereoVision::IO::LasExtraBytesDescriptor extraBytes4{reinterpret_cast<char*>(rawBytes3.data())};
+    auto rawBytes4 = extraBytes4.toBytes();
+    QCOMPARE(rawBytes4, expectedRawBytes3);
+
+    // same thing with only the data_type and name
+    StereoVision::IO::LasExtraBytesDescriptor extraBytes5{data_type_3, name_3};
+    // convert to raw bytes
+    auto rawBytes5 = extraBytes5.toBytes();
+    // expected extra byte 
+    StereoVision::IO::LasExtraBytesDescriptor expectedExtraBytes5 {std::array<uint8_t, 2>{}, uint8_t{9}, uint8_t{}, std::array<char, 32>{"testFloat"},
+        std::array<uint8_t, 4>{}, std::array<std::byte, 8>{}, std::array<uint8_t, 16>{}, std::array<std::byte, 8>{}, std::array<uint8_t, 16>{},
+        std::array<std::byte, 8>{}, std::array<uint8_t, 16>{}, 0, std::array<uint8_t, 16>{}, 0, std::array<uint8_t, 16>{}, std::array<char, 32>{}};
+    // raw bytes
+    auto expectedRawBytes5 = expectedExtraBytes5.toBytes();
+
+    // compare them
+    QCOMPARE(rawBytes5, expectedRawBytes5);
+    
+    // again, read + convert
+    StereoVision::IO::LasExtraBytesDescriptor extraBytes6{reinterpret_cast<char*>(rawBytes5.data())};
+    auto rawBytes6 = extraBytes6.toBytes();
+    QCOMPARE(rawBytes6, expectedRawBytes5);
 }
 
 QTEST_MAIN(TestPointCloudIO)

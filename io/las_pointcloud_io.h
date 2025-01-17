@@ -152,6 +152,13 @@ public:
     static void writePublicHeader(std::ostream& writer, const LasPublicHeaderBlock& header);
     // get an attribute by its id
     std::optional<PointCloudGenericAttribute> getPublicHeaderAttributeById(int id) const;
+    // get the list of attributes
+    std::vector<std::string> publicHeaderAttributeList() const { return publicHeaderAttributes; }
+    
+    // getters
+    
+    auto getPointDataRecordLength() const { return pointDataRecordLength; }
+    auto getPointDataRecordFormat() const { return pointDataRecordFormat; }
 };
 
 /// Class representing a variable length record (or extended variable length record)
@@ -186,7 +193,7 @@ public:
     uint16_t getRecordId() const;
     auto getRecordLengthAfterHeader() const;
     std::string getDescription() const;
-    inline std::vector<std::byte> getData() const { return data; }
+    inline const std::vector<std::byte>& getData() const { return data; }
 
     // read one variable length record
 
@@ -211,6 +218,68 @@ public:
     
 };
 
+// structure used by las to describe the extra bytes
+struct LasExtraBytesDescriptor {
+    std::array<uint8_t, 2> reserved{};
+    uint8_t data_type{};
+    uint8_t options{};
+    std::array<char, 32> name{};
+    std::array<uint8_t, 4> unused{};
+    std::array<std::byte, 8> no_data{};
+    std::array<uint8_t, 16> deprecated1{};
+    std::array<std::byte, 8> min{};
+    std::array<uint8_t, 16> deprecated2{};
+    std::array<std::byte, 8> max{};
+    std::array<uint8_t, 16> deprecated3{};
+    double scale{};
+    std::array<uint8_t, 16> deprecated4{};
+    double offset{};
+    std::array<uint8_t, 16> deprecated5{};
+    std::array<char, 32> description{};
+
+    // constructors
+
+    /**
+     * @brief Construct a new Las Extra Bytes Descriptor object 
+     * 
+     * @param data_type The data type as defined in the LAS specification
+     * @param name The name of the attribute. The maximum length is 32 characters, otherwise it will be truncated
+     * @param description The description of the attribute
+     * @param no_data A value that should be used when the attribute is not present. If the data_type is a unsigned
+     * integer, the underlying type is considered to be uint64_t. If the data_type is a signed integer, the underlying
+     * type is considered to be int64_t and if the data_type is a floating point, the underlying type is considered to be
+     * double.
+     * @param min The minimum value of the attribute. The underlying type is the same as no_data.
+     * @param max The maximum value of the attribute. The underlying type is the same as min.
+     * @param scale The scale factor
+     * @param offset The offset
+     */
+    LasExtraBytesDescriptor(uint8_t data_type, const std::string& name,
+        const std::optional<std::string>& description = std::nullopt,
+        const std::optional<std::variant<uint64_t, int64_t, double>>& no_data = std::nullopt,
+        const std::optional<std::variant<uint64_t, int64_t, double>>& min = std::nullopt,
+        const std::optional<std::variant<uint64_t, int64_t, double>>& max = std::nullopt,
+        std::optional<double> scale = std::nullopt, std::optional<double> offset = std::nullopt);
+
+    LasExtraBytesDescriptor(const std::array<uint8_t, 2>& reserved, uint8_t data_type,
+        uint8_t options, const std::array<char, 32>& name, const std::array<uint8_t, 4>& unused,
+        const std::array<std::byte, 8>& no_data, const std::array<uint8_t, 16>& deprecated1,
+        const std::array<std::byte, 8>& min, const std::array<uint8_t, 16>& deprecated2,
+        const std::array<std::byte, 8>& max, const std::array<uint8_t, 16>& deprecated3,
+        double scale, const std::array<uint8_t, 16>& deprecated4, double offset,
+        const std::array<uint8_t, 16>& deprecated5, const std::array<char, 32>& description);
+
+    // constructor: read the data from a buffer
+    LasExtraBytesDescriptor(const char* buffer);
+    LasExtraBytesDescriptor(const std::byte* buffer): LasExtraBytesDescriptor(reinterpret_cast<const char*>(buffer)) {}
+
+    // convert to raw bytes
+    void toBytes(char* buffer) const;
+    void toBytes(std::byte* buffer) const { toBytes(reinterpret_cast<char*>(buffer)); }
+
+    std::vector<std::byte> toBytes() const;
+};
+
 class LasPointCloudHeader : public PointCloudHeaderInterface {
 public:
     LasPublicHeaderBlock publicHeaderBlock;
@@ -225,7 +294,27 @@ public:
 
     std::vector<std::string> attributeList() const override;
 
+    /**
+     * @brief Get the pointwise extra attributes names, data types, sizes and offsets
+     * 
+     * @param ignoreUndocumentedExtraBytes If true, the undocumented extra bytes (unknown sequence of bytes) will be ignored
+     * @return A tuple containing the names, data types, sizes and offsets
+     */
+    std::tuple<std::vector<std::string>, std::vector<uint8_t>, std::vector<size_t>, std::vector<size_t>>
+        getPointwiseExtraAttributesInfos(bool ignoreUndocumentedExtraBytes = true) const;
+
+    // read the header
     static std::unique_ptr<LasPointCloudHeader> readHeader(std::istream& reader);
+private:
+    // generate a list of extra bytes descriptors from the VLRs and EVLRs
+    static std::vector<LasExtraBytesDescriptor> generateExtraBytesDescriptors(const std::vector<LasVariableLengthRecord>& variableLengthRecords,
+        const std::vector<LasExtendedVariableLengthRecord>& extendedVariableLengthRecords);
+
+    // from the extra bytes descriptors, generate a list of names, a list of data types (as defined in LAS extra bytes descriptor) a list of sizes, and a list of offsets in bytes
+    static std::tuple<std::vector<std::string>, std::vector<uint8_t>, std::vector<size_t>, std::vector<size_t>>
+        generateExtraBytesInfo(const std::vector<LasExtraBytesDescriptor>& extraBytesDescriptors,
+            bool ignoreUndocumentedExtraBytes = true);
+
 };
 
 class LasPointCloudPoint : public PointCloudPointAccessInterface {
