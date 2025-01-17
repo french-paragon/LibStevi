@@ -33,7 +33,6 @@ static constexpr size_t computeOffset() {
     return computeOffset<N, size_t, sizes.size(), sizes, usePriorDataOffset>();
 }
 
-
 /**
  * @brief Factory function that generate a LasPointCloudPoint object given a istream, the recordByteSize, the record format number (0-11) and the dataBuffer.
  * The data will be in an invalid state until gotoNext is called.
@@ -42,27 +41,59 @@ static constexpr size_t computeOffset() {
  * @param format the record format number
  * @param dataBuffer the data buffer
  * @return std::unique_ptr<LasPointCloudPoint>
+ * extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets
  */
-static std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint(std::unique_ptr<std::istream> reader, size_t recordByteSize, size_t recordFormatNumber, char* dataBuffer = nullptr);
+static std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint(std::unique_ptr<std::istream> reader,
+    size_t recordByteSize, size_t recordFormatNumber, const std::vector<std::string>& extraAttributesNames = {},
+    const std::vector<uint8_t>& extraAttributesTypes = {}, const std::vector<size_t>& extraAttributesSizes = {},
+    const std::vector<size_t>& extraAttributesOffsets = {},char* dataBuffer = nullptr);
 
 template <size_t N = size_t{0}>
-static std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::unique_ptr<std::istream> reader, size_t recordByteSize, size_t recordFormatNumber, char* dataBuffer);
+static std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::unique_ptr<std::istream> reader,
+    size_t recordByteSize, size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
+    const std::vector<uint8_t> &extraAttributesTypes, const std::vector<size_t> &extraAttributesSizes,
+    const std::vector<size_t> &extraAttributesOffsets, char* dataBuffer);
 
 template <class D>
 class LasPointCloudPoint_Base : public LasPointCloudPoint {
 public:
 
-    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize, char* dataBuffer) :
-        reader{std::move(reader)},
-        LasPointCloudPoint(recordByteSize, dataBuffer) { }
+    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize,
+        const std::vector<std::string> &extraAttributesNames, const std::vector<uint8_t> &extraAttributesTypes,
+        const std::vector<size_t> &extraAttributesSizes, const std::vector<size_t> &extraAttributesOffsets,
+        char* dataBuffer) :
+            reader{std::move(reader)},
+            extraAttributesNames{extraAttributesNames},
+            extraAttributesTypes{extraAttributesTypes},
+            extraAttributesSizes{extraAttributesSizes},
+            extraAttributesOffsets{extraAttributesOffsets},
+            LasPointCloudPoint(recordByteSize, dataBuffer) {
 
-    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize) :
-        reader{std::move(reader)},
-        LasPointCloudPoint(recordByteSize) { }
+        //do some checks on the extra parameters and correct them is needed
+        verifyAndCorrectParameters();
+    }
+
+    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize,
+        const std::vector<std::string> &extraAttributesNames, const std::vector<uint8_t> &extraAttributesTypes,
+        const std::vector<size_t> &extraAttributesSizes,
+        const std::vector<size_t> &extraAttributesOffsets) :
+            reader{std::move(reader)},
+            extraAttributesNames{extraAttributesNames},
+            extraAttributesTypes{extraAttributesTypes},
+            extraAttributesSizes{extraAttributesSizes},
+            extraAttributesOffsets{extraAttributesOffsets},
+            LasPointCloudPoint(recordByteSize) {
+        
+        //do some checks on the extra parameters and correct them is needed
+        verifyAndCorrectParameters();
+    }
 
 protected:
     const std::unique_ptr<std::istream> reader;
-
+    std::vector<std::string> extraAttributesNames;
+    std::vector<uint8_t> extraAttributesTypes;
+    std::vector<size_t> extraAttributesSizes;
+    std::vector<size_t> extraAttributesOffsets;
 private:
     // structure to get the return type for each attribute from the derived class
     template <class Derived, size_t N>
@@ -122,13 +153,59 @@ private:
     template<size_t N>
     static constexpr size_t bitfieldOffset = std::get<N>(D::bitfieldOffset);
 
+    static constexpr size_t minimumRecordByteSize = size<D::nbAttributes - 1> + offset<D::nbAttributes - 1>;
 public:
     PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;
 
     std::optional<PtColor<PointCloudGenericAttribute>> getPointColor() const override;
 
     std::optional<PointCloudGenericAttribute> getAttributeById(int id) const override {
-        return getAttributeById_helper(id);
+        
+        if (id < 0) {
+            return std::nullopt;
+        } else if (id < D::nbAttributes) { // default attribute
+            return getAttributeById_helper(id);   
+        } else if (id < D::nbAttributes + extraAttributesNames.size()) { // extra attribute
+            const size_t extra_id = id - D::nbAttributes;
+            // test the type
+            switch (extraAttributesTypes[extra_id]) {
+                case 1: // uint8_t
+                    return fromBytes<uint8_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                    break;
+                case 2: // int8_t
+                    return fromBytes<int8_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                    break;
+                case 3: // uint16_t
+                    return fromBytes<uint16_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                    break;
+                case 4: // int16_t
+                    return fromBytes<int16_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                    break;
+                case 5: // uint32_t
+                    return fromBytes<uint32_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                    break;
+                case 6: // int32_t
+                    return fromBytes<int32_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                    break;
+                case 7: // uint64_t
+                    return fromBytes<uint64_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                    break;
+                case 8: // int64_t
+                    return fromBytes<int64_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                    break;
+                case 9: // float
+                    return fromBytes<float>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                    break;
+                case 10: // double
+                    return fromBytes<double>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                    break;
+                default:
+                    // vector of bytes
+                    return vectorFromBytes<std::byte>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id], extraAttributesSizes[extra_id]);
+            }
+        } else {
+            return std::nullopt;
+        }
     }
 
     std::optional<PointCloudGenericAttribute> getAttributeByName(const char* attributeName) const override;
@@ -180,6 +257,52 @@ private:
             }
         }
     }
+
+    void verifyAndCorrectParameters() {
+        // test the size of the extra attributes
+        bool isSizeValid =
+            extraAttributesNames.size() == extraAttributesTypes.size() &&
+            extraAttributesNames.size() == extraAttributesSizes.size() &&
+            extraAttributesNames.size() == extraAttributesOffsets.size();
+        
+        if (!isSizeValid) { // if the size of the extra attributes is not valid, clear the vectors
+            extraAttributesNames.clear();
+            extraAttributesTypes.clear();
+            extraAttributesSizes.clear();
+            extraAttributesOffsets.clear();
+        } else {
+            // test the size and offset of the extra attributes
+            std::vector<size_t> toRemove = {};
+            for (size_t i = 0; i < extraAttributesNames.size(); i++) {
+                
+                bool isToRemove = extraAttributesSizes[i] == 0 || // size is 0 or too large or size is 0
+                    minimumRecordByteSize + extraAttributesOffsets[i] + extraAttributesSizes[i] > recordByteSize;
+                
+                // check if the name is not already present or empty
+                for (const auto& extraName : extraAttributesNames) {
+                    auto it = std::find(D::attributeNames.begin(), D::attributeNames.begin() + D::nbAttributes, extraName);
+                    if (it != D::attributeNames.begin() + D::nbAttributes || extraName.empty()) {
+                        isToRemove = true;
+                        break;
+                    }
+                }
+
+                if (isToRemove) {
+                    toRemove.push_back(i);
+                }     
+            }
+
+            // remove the elements
+            std::reverse(toRemove.begin(), toRemove.end());
+            for (const auto& i : toRemove) {
+                extraAttributesNames.erase(extraAttributesNames.begin() + i);
+                extraAttributesTypes.erase(extraAttributesTypes.begin() + i);
+                extraAttributesSizes.erase(extraAttributesSizes.begin() + i);
+                extraAttributesOffsets.erase(extraAttributesOffsets.begin() + i);
+            }
+        }
+    }
+    
 };
 
 // the different record formats
@@ -532,7 +655,7 @@ std::optional<PointCloudGenericAttribute> LasPointCloudHeader::getAttributeById(
     // TODO: add support for VLRs and EVLRs
     if (id < 0) {
         return std::nullopt;
-    } else if (id < publicHeaderBlock.publicHeaderAttributes.size()) {
+    } else if (id < publicHeaderBlock.publicHeaderAttributeList().size()) {
             return publicHeaderBlock.getPublicHeaderAttributeById(id);
     } else {
         return std::nullopt;
@@ -541,9 +664,9 @@ std::optional<PointCloudGenericAttribute> LasPointCloudHeader::getAttributeById(
 
 std::optional<PointCloudGenericAttribute> LasPointCloudHeader::getAttributeByName(const char *attributeName) const {
     // TODO: add support for VLRs and EVLRs
-    auto it = std::find(publicHeaderBlock.publicHeaderAttributes.begin(), publicHeaderBlock.publicHeaderAttributes.end(), attributeName);
-    if (it != publicHeaderBlock.publicHeaderAttributes.end()) {
-        auto id = std::distance(publicHeaderBlock.publicHeaderAttributes.begin(), it);
+    auto it = std::find(publicHeaderBlock.publicHeaderAttributeList().begin(), publicHeaderBlock.publicHeaderAttributeList().end(), attributeName);
+    if (it != publicHeaderBlock.publicHeaderAttributeList().end()) {
+        auto id = std::distance(publicHeaderBlock.publicHeaderAttributeList().begin(), it);
         return publicHeaderBlock.getPublicHeaderAttributeById(id);
     } else {
         return std::nullopt;
@@ -551,7 +674,15 @@ std::optional<PointCloudGenericAttribute> LasPointCloudHeader::getAttributeByNam
 }
 std::vector<std::string> LasPointCloudHeader::attributeList() const {
     // TODO: add support for VLRs and EVLRs
-    return publicHeaderBlock.publicHeaderAttributes;
+    return publicHeaderBlock.publicHeaderAttributeList();
+}
+std::tuple<std::vector<std::string>, std::vector<uint8_t>, std::vector<size_t>, std::vector<size_t>>
+    LasPointCloudHeader::getPointwiseExtraAttributesInfos(bool ignoreUndocumentedExtraBytes) const
+{
+    // generate the list of extra bytes descriptors
+    auto extraBytesDescriptors = generateExtraBytesDescriptors(variableLengthRecords, extendedVariableLengthRecords);
+    // generate the list of extra bytes names, data types, sizes and offsets
+    return generateExtraBytesInfo(extraBytesDescriptors, ignoreUndocumentedExtraBytes);
 }
 std::unique_ptr<LasPointCloudHeader> LasPointCloudHeader::readHeader(std::istream &reader)
 {
@@ -578,6 +709,109 @@ std::unique_ptr<LasPointCloudHeader> LasPointCloudHeader::readHeader(std::istrea
     if (reader.fail()) return nullptr;
 
     return header;
+}
+
+std::vector<LasExtraBytesDescriptor> LasPointCloudHeader::generateExtraBytesDescriptors(
+    const std::vector<LasVariableLengthRecord> &variableLengthRecords,
+    const std::vector<LasExtendedVariableLengthRecord> &extendedVariableLengthRecords) {
+
+    std::vector<LasExtraBytesDescriptor> extraBytesDescriptors;
+    
+    bool extraBytesVlrFound = false;
+    size_t nbExtraBytesDescriptors = 0;
+
+    const std::byte* vlrData;
+    for (const auto &vlr : variableLengthRecords) {
+        if (vlr.getUserId() == "LASF_Spec" && vlr.getRecordId() == 4) {
+            extraBytesVlrFound = true;
+            vlrData = vlr.getData().data();
+            nbExtraBytesDescriptors = vlr.getRecordLengthAfterHeader() / 192;
+            break;
+        }
+    }
+
+    for (const auto &evlr : extendedVariableLengthRecords) {
+        if (evlr.getUserId() == "LASF_Spec" && evlr.getRecordId() == 4) {
+            extraBytesVlrFound = true;
+            vlrData = evlr.getData().data();
+            nbExtraBytesDescriptors = evlr.getRecordLengthAfterHeader() / 192;
+            break;
+        }
+    }
+
+    if (extraBytesVlrFound) {
+        for (size_t i = 0; i < nbExtraBytesDescriptors; i++) {
+            extraBytesDescriptors.push_back(LasExtraBytesDescriptor{vlrData + i * 192});
+        }
+    }
+    return extraBytesDescriptors;
+}
+
+std::tuple<std::vector<std::string>, std::vector<uint8_t>, std::vector<size_t>, std::vector<size_t>>
+    LasPointCloudHeader::generateExtraBytesInfo(const std::vector<LasExtraBytesDescriptor> &extraBytesDescriptors,
+    bool ignoreUndocumentedExtraBytes)
+{
+    std::vector<std::string> extraBytesNames;
+    std::vector<uint8_t> extraBytesTypes;
+    std::vector<size_t> extraBytesSizes;
+    std::vector<size_t> extraBytesOffsets;
+
+    size_t currentOffset = 0;
+    // iterate over the extra bytes descriptors
+    for (const auto &descriptor : extraBytesDescriptors) {
+        size_t size;
+        // test if the descriptor is valid
+        if (descriptor.data_type > 10) { // deprecated of reserved. Since we do not know the size of the data, we cannot read the next descriptors
+            break;
+        } else if (descriptor.data_type == 0) { // undocumented data types
+            size = descriptor.options;
+            if (ignoreUndocumentedExtraBytes) {
+                continue;
+            }
+        } else {
+            switch (descriptor.data_type) {
+                case 1: // uint8_t
+                    size = 1;
+                    break;
+                case 2: // int8_t
+                    size = 1;
+                    break;
+                case 3: // uint16_t
+                    size = 2;
+                    break;
+                case 4: // int16_t
+                    size = 2;
+                    break;
+                case 5: // uint32_t
+                    size = 4;
+                    break;
+                case 6: // int32_t
+                    size = 4;
+                    break;
+                case 7: // uint64_t
+                    size = 8;
+                    break;
+                case 8: // int64_t
+                    size = 8;
+                    break;
+                case 9: // float
+                    size = 4;
+                    break;
+                case 10: // double
+                    size = 8;
+                    break;
+                default:
+                    size = 1;
+            }
+        }
+        auto endName = std::find(descriptor.name.begin(), descriptor.name.end(), '\0'); // find the end of the attribute name
+        extraBytesNames.push_back(std::string{descriptor.name.begin(), endName});
+        extraBytesTypes.push_back(descriptor.data_type);
+        extraBytesSizes.push_back(size);
+        extraBytesOffsets.push_back(currentOffset);
+        currentOffset += size;
+    }
+    return {extraBytesNames, extraBytesTypes, extraBytesSizes, extraBytesOffsets};
 }
 
 std::optional<LasPublicHeaderBlock> LasPublicHeaderBlock::readPublicHeader(std::istream &reader) {
@@ -773,16 +1007,28 @@ template <class D>
 std::optional<PointCloudGenericAttribute> LasPointCloudPoint_Base<D>::getAttributeByName(const char *attributeName) const {
     constexpr auto begin = D::attributeNames.begin();
     constexpr auto end = begin + D::nbAttributes;
+
+    // search in default attributes
     auto it = std::find(begin, end, attributeName);
     if (it != end) {
         return getAttributeById(std::distance(begin, it));
     }
+
+    // search in extra attributes
+    auto it2 = std::find(extraAttributesNames.begin(), extraAttributesNames.end(), std::string{attributeName});
+    if (it2 != extraAttributesNames.end()) {
+        return getAttributeById(std::distance(extraAttributesNames.begin(), it2) + D::nbAttributes);
+    }
+
+    // not found
     return std::nullopt; // Attribute not found
 }
 
 template <class D>
 std::vector<std::string> LasPointCloudPoint_Base<D>::attributeList() const {
-    return std::vector<std::string>(D::attributeNames.begin(), D::attributeNames.begin() + D::nbAttributes);
+    auto v = std::vector<std::string>(D::attributeNames.begin(), D::attributeNames.begin() + D::nbAttributes);
+    std::copy(extraAttributesNames.begin(), extraAttributesNames.end(), std::back_inserter(v));
+    return v;
 }
 
 template <class Derived>
@@ -819,9 +1065,14 @@ std::optional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesy
     if (header == nullptr) {
         return std::nullopt;
     }
+    // get the extra attributes
+    auto [extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets]
+        = header->getPointwiseExtraAttributesInfos();
 
     // create a point cloud
-    auto pointCloud = createLasPointCloudPoint(std::move(reader), header->publicHeaderBlock.pointDataRecordLength, header->publicHeaderBlock.pointDataRecordFormat);
+    auto pointCloud = createLasPointCloudPoint(std::move(reader), header->publicHeaderBlock.getPointDataRecordLength(),
+        header->publicHeaderBlock.getPointDataRecordFormat(), extraAttributesNames, extraAttributesTypes,
+        extraAttributesSizes, extraAttributesOffsets, nullptr);
 
     if (pointCloud == nullptr) {
         return std::nullopt;
@@ -839,22 +1090,170 @@ std::optional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesy
 }
 
 template <size_t N>
-std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::unique_ptr<std::istream> reader, size_t recordByteSize, size_t recordFormatNumber, char *dataBuffer) {
+std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::unique_ptr<std::istream> reader,
+    size_t recordByteSize, size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
+    const std::vector<uint8_t> &extraAttributesTypes, const std::vector<size_t> &extraAttributesSizes,
+    const std::vector<size_t> &extraAttributesOffsets, char *dataBuffer) {
     if constexpr (N > 10) {
         return nullptr;
     } else if (N == recordFormatNumber) {
         if (dataBuffer == nullptr) {
-            return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize);
+            return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize, extraAttributesNames,
+                extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets);
         } else  {
-            return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize, dataBuffer);
+            return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize,
+                extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets, dataBuffer);
         }
     } else {
-        return createLasPointCloudPoint_helper<N+1>(std::move(reader), recordByteSize, recordFormatNumber, dataBuffer);
+        return createLasPointCloudPoint_helper<N+1>(std::move(reader), recordByteSize, recordFormatNumber,
+            extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets, dataBuffer);
     }
 }
 
-std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint(std::unique_ptr<std::istream> reader, size_t recordByteSize, size_t recordFormatNumber, char *dataBuffer) {
-    return createLasPointCloudPoint_helper(std::move(reader), recordByteSize, recordFormatNumber, dataBuffer);
+std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint(std::unique_ptr<std::istream> reader, size_t recordByteSize,
+    size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
+    const std::vector<uint8_t> &extraAttributesTypes, const std::vector<size_t> &extraAttributesSizes,
+    const std::vector<size_t> &extraAttributesOffsets, char *dataBuffer) {
+
+    return createLasPointCloudPoint_helper(std::move(reader), recordByteSize, recordFormatNumber, 
+        extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets, dataBuffer);
+}
+
+LasExtraBytesDescriptor::LasExtraBytesDescriptor(uint8_t data_type, const std::string & name,
+    const std::optional<std::string>& description,
+    const std::optional<std::variant<uint64_t, int64_t, double>>& no_data,
+    const std::optional<std::variant<uint64_t, int64_t, double>>& min,
+    const std::optional<std::variant<uint64_t, int64_t, double>>& max,
+    std::optional<double> scale, std::optional<double> offset):
+        data_type{data_type} {
+    
+    constexpr std::byte no_data_bit {0b00000001};
+    constexpr std::byte min_bit     {0b00000010};
+    constexpr std::byte max_bit     {0b00000100};
+    constexpr std::byte scale_bit   {0b00001000};
+    constexpr std::byte offset_bit  {0b00010000};
+
+    std::byte options{0b0000000};
+
+    size_t name_nbChars = std::min(name.size(), this->name.size());
+    for (size_t i = 0; i < name_nbChars; i++) {
+        this->name[i] = name[i];
+    }
+
+    if (description.has_value()) {
+        size_t description_nbChars = std::min(description->size(), this->description.size());
+        for (size_t i = 0; i < description_nbChars; i++) {
+            this->description[i] = description->at(i);
+        }
+    }
+
+    if (no_data.has_value()) {
+        options |= no_data_bit;
+        if (std::holds_alternative<uint64_t>(*no_data)) {
+            auto value = std::get<uint64_t>(*no_data);
+            this->no_data = arrayFromBytes<std::byte, 8>(reinterpret_cast<const std::byte*>(&value));
+        } else if (std::holds_alternative<int64_t>(*no_data)) {
+            auto value = std::get<int64_t>(*no_data);
+            this->no_data = arrayFromBytes<std::byte, 8>(reinterpret_cast<const std::byte*>(&value));
+        } else if (std::holds_alternative<double>(*no_data)) {
+            auto value = std::get<double>(*no_data);
+            this->no_data = arrayFromBytes<std::byte, 8>(reinterpret_cast<const std::byte*>(&value));
+        }
+    }
+
+    if (min.has_value()) {
+        options |= min_bit;
+        if (std::holds_alternative<uint64_t>(*min)) {
+            auto value = std::get<uint64_t>(*min);
+            this->min = arrayFromBytes<std::byte, 8>(reinterpret_cast<const std::byte*>(&value));
+        } else if (std::holds_alternative<int64_t>(*min)) {
+            auto value = std::get<int64_t>(*min);
+            this->min = arrayFromBytes<std::byte, 8>(reinterpret_cast<const std::byte*>(&value));
+        } else if (std::holds_alternative<double>(*min)) {
+            auto value = std::get<double>(*min);
+            this->min = arrayFromBytes<std::byte, 8>(reinterpret_cast<const std::byte*>(&value));
+        }
+    }
+
+    if (max.has_value()) {
+        options |= max_bit;
+        if (std::holds_alternative<uint64_t>(*max)) {
+            auto value = std::get<uint64_t>(*max);
+            this->max = arrayFromBytes<std::byte, 8>(reinterpret_cast<const std::byte*>(&value));
+        } else if (std::holds_alternative<int64_t>(*max)) {
+            auto value = std::get<int64_t>(*max);
+            this->max = arrayFromBytes<std::byte, 8>(reinterpret_cast<const std::byte*>(&value));
+        } else if (std::holds_alternative<double>(*max)) {
+            auto value = std::get<double>(*max);
+            this->max = arrayFromBytes<std::byte, 8>(reinterpret_cast<const std::byte*>(&value));
+        }
+    }
+
+    if (scale.has_value()) {
+        options |= scale_bit;
+        this->scale = *scale;
+    }
+
+    if (offset.has_value()) {
+        options |= offset_bit;
+        this->offset = *offset;
+    }
+
+    this->options = bit_cast<uint8_t>(options);
+}
+
+LasExtraBytesDescriptor::LasExtraBytesDescriptor(const std::array<uint8_t, 2> &reserved, uint8_t data_type,
+    uint8_t options, const std::array<char, 32> &name, const std::array<uint8_t, 4> &unused,
+    const std::array<std::byte, 8> &no_data, const std::array<uint8_t, 16> &deprecated1,
+    const std::array<std::byte, 8> &min, const std::array<uint8_t, 16> &deprecated2,
+    const std::array<std::byte, 8> &max, const std::array<uint8_t, 16> &deprecated3,
+    double scale, const std::array<uint8_t, 16> &deprecated4, double offset,
+    const std::array<uint8_t, 16> &deprecated5, const std::array<char, 32> &description):
+        reserved{reserved}, data_type{data_type}, options{options}, name{name}, unused{unused},
+        no_data{no_data}, deprecated1{deprecated1}, min{min}, deprecated2{deprecated2}, max{max},
+        deprecated3{deprecated3}, scale{scale}, deprecated4{deprecated4}, offset{offset}, deprecated5{deprecated5},
+        description{description}
+{ }
+
+LasExtraBytesDescriptor::LasExtraBytesDescriptor(const char *buffer) :
+    LasExtraBytesDescriptor(arrayFromBytes<uint8_t, 2>(buffer), fromBytes<uint8_t>(buffer + 2),
+        fromBytes<uint8_t>(buffer + 3), arrayFromBytes<char, 32>(buffer + 4),
+        arrayFromBytes<uint8_t, 4>(buffer + 36), arrayFromBytes<std::byte, 8>(buffer + 40),
+        arrayFromBytes<uint8_t, 16>(buffer + 48), arrayFromBytes<std::byte, 8>(buffer + 64),
+        arrayFromBytes<uint8_t, 16>(buffer + 72), arrayFromBytes<std::byte, 8>(buffer + 88),
+        arrayFromBytes<uint8_t, 16>(buffer + 96), fromBytes<double>(buffer + 112),
+        arrayFromBytes<uint8_t, 16>(buffer + 120), fromBytes<double>(buffer + 136),
+        arrayFromBytes<uint8_t, 16>(buffer + 144), arrayFromBytes<char, 32>(buffer + 160))
+{ }
+
+void LasExtraBytesDescriptor::toBytes(char *buffer) const {
+    // bytestream
+    std::ostringstream writer;
+    writer.rdbuf()->pubsetbuf(buffer, 192);
+    // write the data
+    writer.write(reinterpret_cast<const char*>(reserved.data()), 2);
+    writer.write(reinterpret_cast<const char*>(&data_type), 1);
+    writer.write(reinterpret_cast<const char*>(&options), 1);
+    writer.write(reinterpret_cast<const char*>(name.data()), 32);
+    writer.write(reinterpret_cast<const char*>(unused.data()), 4);
+    writer.write(reinterpret_cast<const char*>(no_data.data()), 8);
+    writer.write(reinterpret_cast<const char*>(deprecated1.data()), 16);
+    writer.write(reinterpret_cast<const char*>(min.data()), 8);
+    writer.write(reinterpret_cast<const char*>(deprecated2.data()), 16);
+    writer.write(reinterpret_cast<const char*>(max.data()), 8);
+    writer.write(reinterpret_cast<const char*>(deprecated3.data()), 16);
+    writer.write(reinterpret_cast<const char*>(&scale), 8);
+    writer.write(reinterpret_cast<const char*>(deprecated4.data()), 16);
+    writer.write(reinterpret_cast<const char*>(&offset), 8);
+    writer.write(reinterpret_cast<const char*>(deprecated5.data()), 16);
+    writer.write(reinterpret_cast<const char*>(description.data()), 32);
+}
+
+std::vector<std::byte> LasExtraBytesDescriptor::toBytes() const {
+    std::vector<std::byte> bytes;
+    bytes.resize(192);
+    this->toBytes(reinterpret_cast<char*>(bytes.data()));
+    return bytes;
 }
 
 }
