@@ -14,6 +14,7 @@ namespace IO {
 // constants
 // buffersize when reading a sdc file
 constexpr static size_t sdcFileReaderBufferSize = 1 << 16;
+constexpr static size_t sdcFileWriterBufferSize = 1 << 16;
 
 SdcPointCloudPoint::SdcPointCloudPoint(std::unique_ptr<std::istream> reader, uint16_t majorVersion, uint16_t minorVersion):
     majorVersion{majorVersion},
@@ -99,12 +100,17 @@ bool SdcPointCloudPoint::gotoNext() {
     return true;
 }
 
-SdcPointCloudHeader::SdcPointCloudHeader(const uint32_t headerSize, const uint16_t majorVersion, const uint16_t minorVersion, const std::string& headerInformation)
+bool SdcPointCloudPoint::write(std::ostream &stream) const {
+    stream.write(getRecordDataBuffer(), recordByteSize);
+    return stream.good();
+}
+
+SdcPointCloudHeader::SdcPointCloudHeader(const uint32_t headerSize, const uint16_t majorVersion,
+    const uint16_t minorVersion, const std::vector<std::byte>& headerInformation)
 : headerSize{headerSize}, majorVersion{majorVersion}, minorVersion{minorVersion}, headerInformation{headerInformation}
 {}
 
-std::optional<PointCloudGenericAttribute> SdcPointCloudHeader::getAttributeById(int id) const
-{
+std::optional<PointCloudGenericAttribute> SdcPointCloudHeader::getAttributeById(int id) const {
     switch (id) {
         case 0:
             return PointCloudGenericAttribute{headerSize};
@@ -119,8 +125,7 @@ std::optional<PointCloudGenericAttribute> SdcPointCloudHeader::getAttributeById(
     }
 }
 
-std::optional<PointCloudGenericAttribute> SdcPointCloudHeader::getAttributeByName(const char *attributeName) const
-{
+std::optional<PointCloudGenericAttribute> SdcPointCloudHeader::getAttributeByName(const char *attributeName) const {
     auto it = std::find(attributeNames.begin(), attributeNames.end(), attributeName);
     if (it != attributeNames.end()) {
         return getAttributeById(std::distance(attributeNames.begin(), it));
@@ -128,13 +133,19 @@ std::optional<PointCloudGenericAttribute> SdcPointCloudHeader::getAttributeByNam
     return std::nullopt; // Attribute not found
 }
 
-std::vector<std::string> SdcPointCloudHeader::attributeList() const
-{
+std::vector<std::string> SdcPointCloudHeader::attributeList() const {
     return attributeNames;
 }
 
-std::optional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesystem::path &sdcFilePath)
-{
+bool SdcPointCloudHeader::write(std::ostream &stream) const {
+    stream.write(reinterpret_cast<const char*>(&headerSize), 4);
+    stream.write(reinterpret_cast<const char*>(&majorVersion), 2);
+    stream.write(reinterpret_cast<const char*>(&minorVersion), 2);
+    stream.write(reinterpret_cast<const char*>(headerInformation.data()), headerInformation.size());
+    return stream.good();
+}
+
+std::optional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesystem::path &sdcFilePath) {
     // read the file
 
     auto inputFile = std::make_unique<ifstreamCustomBuffer<sdcFileReaderBufferSize>>();
@@ -144,15 +155,20 @@ std::optional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesy
     // return null if the file can't be opened
     if (!inputFile->is_open()) return std::nullopt;
 
+    return openPointCloudSdc(std::move(inputFile));
+}
+
+std::optional<FullPointCloudAccessInterface> openPointCloudSdc(std::unique_ptr<std::istream> stream) {
+    if (!stream) return std::nullopt;
     // first 4 bytes are the size of the header
     uint32_t headerSize;
-    inputFile->read(reinterpret_cast<char*>(&headerSize), 4);
-    if (!inputFile->good()) return std::nullopt;
+    stream->read(reinterpret_cast<char*>(&headerSize), 4);
+    if (!stream->good()) return std::nullopt;
 
     // read the rest of the header
      std::vector<char> bufferHeader(headerSize - 4);
-    inputFile->read(bufferHeader.data(), headerSize - 4);
-    if (!inputFile->good()) return std::nullopt;
+    stream->read(bufferHeader.data(), headerSize - 4);
+    if (!stream->good()) return std::nullopt;
 
     // next 2 bytes are the major version
     auto majorVersion = fromBytes<uint16_t>(bufferHeader.data());
@@ -161,10 +177,10 @@ std::optional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesy
     auto minorVersion = fromBytes<uint16_t>(bufferHeader.data() + 2);
 
     // next headerSize - 8 bytes are the header informations
-    std::string headerInformation{bufferHeader.data() + 4, headerSize - 4};
+    auto headerInformation = vectorFromBytes<std::byte>(bufferHeader.data() + 4, headerSize - 4);
 
     auto header = std::make_unique<SdcPointCloudHeader>(headerSize, majorVersion, minorVersion, headerInformation);
-    auto cloudpoint = std::make_unique<SdcPointCloudPoint>(std::move(inputFile), majorVersion, minorVersion);
+    auto cloudpoint = std::make_unique<SdcPointCloudPoint>(std::move(stream), majorVersion, minorVersion);
     
     FullPointCloudAccessInterface fullPointInterface;
     // read the first point
@@ -174,6 +190,50 @@ std::optional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesy
         return fullPointInterface;
     }
     return std::nullopt;
+}
+
+bool writePointCloudSdc(const std::filesystem::path &sdcFilePath, FullPointCloudAccessInterface &pointCloud)
+{
+
+    auto outputFile = std::make_unique<ofstreamCustomBuffer<sdcFileWriterBufferSize>>();
+
+    outputFile->open(sdcFilePath, std::ios_base::binary);
+
+    // fail if the file can't be opened
+    if (!outputFile->is_open()) return false;
+
+    // set the precision to the maximum
+    constexpr auto maxPrecision{std::numeric_limits<double>::digits10 + 1};
+    *outputFile << std::setprecision(maxPrecision);
+
+    return writePointCloudSdc(*outputFile, pointCloud);
+}
+
+bool writePointCloudSdc(std::ostream &stream, FullPointCloudAccessInterface &pointCloud) {
+    // try to cast the point cloud to a sdc point cloud
+    auto sdcPointCloud = dynamic_cast<SdcPointCloudPoint*>(pointCloud.pointAccess.get());
+    if (!sdcPointCloud) {
+        return false; // point cloud is not a sdc point cloud
+    }
+
+    // correct the header to match the point cloud
+    auto header = dynamic_cast<SdcPointCloudHeader*>(pointCloud.headerAccess.get());
+    auto newHeader = std::unique_ptr<SdcPointCloudHeader>();
+    if (!header || !header->majorVersion != sdcPointCloud->majorVersion || !header->minorVersion != sdcPointCloud->minorVersion) {
+        // create a new header
+        newHeader = std::make_unique<SdcPointCloudHeader>(uint32_t{8}, sdcPointCloud->majorVersion, sdcPointCloud->minorVersion, std::vector<std::byte>());
+        header = newHeader.get();
+    }
+
+    // write the header
+    if (!header->write(stream)) return false;
+
+    // write the points
+    while (sdcPointCloud->gotoNext()) {
+        if (!sdcPointCloud->write(stream)) return false;
+    }
+
+    return true;
 }
 
 } // namespace IO
