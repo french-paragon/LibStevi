@@ -200,6 +200,15 @@ public:
 std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesystem::path& pcdFilePath);
 
 /**
+ * @brief Open a pcd file from a stream and returns a FullPointCloudAccessInterface
+ * 
+ * @param reader The stream to read from
+ * @return A FullPointCloudAccessInterface containing the header and the points.
+ *         If the file can't be opened, an empty optional is returned
+ */
+std::optional<FullPointCloudAccessInterface> openPointCloudPcd(std::unique_ptr<std::istream> reader);
+
+/**
  * @brief
  * 
  * Write a point cloud to a pcd file.
@@ -211,6 +220,20 @@ std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesy
  * @return True if the point cloud was written to the pcd file, false otherwise
  */
 bool writePointCloudPcd(const std::filesystem::path& pcdFilePath, FullPointCloudAccessInterface& pointCloud,
+    std::optional<PcdDataStorageType> dataStorageType = std::nullopt);
+
+/**
+ * @brief
+ * 
+ * Write a point cloud to a stream.
+ * 
+ * @param writer The stream to write to
+ * @param pointCloud The point cloud to write to the stream
+ * @param dataStorageType The data storage type to use. If not specified, the data storage type defined in the header will be used
+ * 
+ * @return True if the point cloud was written to the stream, false otherwise
+ */
+bool writePointCloudPcd(std::ostream& writer, FullPointCloudAccessInterface& pointCloud,
     std::optional<PcdDataStorageType> dataStorageType = std::nullopt);
 
 } // namespace IO

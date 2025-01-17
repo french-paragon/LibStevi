@@ -14,7 +14,10 @@ namespace IO
 class SdcPointCloudPoint : public PointCloudPointAccessInterface
 {
 public:
-    SdcPointCloudPoint(std::unique_ptr<std::istream> reader, uint16_t majorVersion, uint16_t minorVersion);
+    // ****************************************
+    // version informations
+    const uint16_t majorVersion;
+    const uint16_t minorVersion;
 private:
     // ************ attribute ids ************
     static constexpr auto time_id = 0;
@@ -84,11 +87,6 @@ private:
                                         offset7, offset8, offset9, offset10, offset11, offset12, offset13, offset14,
                                         offset15};
 
-    // ****************************************
-    // version informations
-    const uint16_t majorVersion;
-    const uint16_t minorVersion;
-
     // *************** field names ***********
     static constexpr std::string_view time_attName = "time";
     static constexpr std::string_view range_attName = "range";
@@ -129,6 +127,8 @@ private:
     char* dataBufferPtr = dataBuffer.data();
 
 public:
+    SdcPointCloudPoint(std::unique_ptr<std::istream> reader, uint16_t majorVersion, uint16_t minorVersion);
+
     PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;
 
     std::optional<PtColor<PointCloudGenericAttribute>> getPointColor() const override;
@@ -143,6 +143,15 @@ public:
     
     inline auto getRecordByteSize() const { return recordByteSize; }
     inline auto* getRecordDataBuffer() const { return dataBufferPtr; }
+
+    /**
+     * @brief write a point cloud to a stream
+     * 
+     * @param stream the stream to write to
+     * @return true if successful
+     * @return false if failed
+     */
+    bool write(std::ostream& stream) const;
     
 private:
     // compute the number of attributes based on the version
@@ -172,7 +181,7 @@ public:
     const uint32_t headerSize;
     const uint16_t majorVersion;
     const uint16_t minorVersion;
-    const std::string headerInformation;
+    const std::vector<std::byte> headerInformation;
 
 private:
     // attribute names order should appear in the same order than the corresponding id of the attributes
@@ -180,13 +189,22 @@ private:
 
 public:
     // constructor
-    SdcPointCloudHeader(const uint32_t headerSize, const uint16_t majorVersion, const uint16_t minorVersion, const std::string& headerInformation);
+    SdcPointCloudHeader(const uint32_t headerSize, const uint16_t majorVersion, const uint16_t minorVersion, const std::vector<std::byte>& headerInformation);
 
     std::optional<PointCloudGenericAttribute> getAttributeById(int id) const override;
 
     std::optional<PointCloudGenericAttribute> getAttributeByName(const char* attributeName) const override;
 
     std::vector<std::string> attributeList() const override;
+
+    /**
+     * @brief Write the point cloud header to a stream
+     * 
+     * @param stream The stream to write the header to
+     * @return true if the header was written successfully
+     * @return false otherwise
+     */
+    bool write(std::ostream& stream) const;
 };
 
 
@@ -202,6 +220,43 @@ public:
  *         If the file can't be opened, an empty optional is returned
  */
 std::optional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesystem::path& sdcFilePath);
+
+/**
+ * @brief
+ * 
+ * Open a sdc point cloud from a stream and returns a FullPointCloudAccessInterface
+ * containing the header and the points.
+ * 
+ * @param stream The stream to open the point cloud from
+ * 
+ * @return A FullPointCloudAccessInterface containing the header and the points.
+ *         If the stream can't be opened, an empty optional is returned
+ * 
+ */
+std::optional<FullPointCloudAccessInterface> openPointCloudSdc(std::unique_ptr<std::istream> stream);
+
+/**
+ * @brief
+ * 
+ * Write a sdc point cloud to a sdc file.
+ * 
+ * @param sdcFilePath The path to the sdc file to write.
+ * @param pointCloud The point cloud to write to the sdc file.
+ * 
+ * @return True if the point cloud was written to the sdc file, false otherwise
+ */
+bool writePointCloudSdc(const std::filesystem::path& sdcFilePath, FullPointCloudAccessInterface& pointCloud);
+
+/**
+ * @brief write a sdc point cloud to a output stream
+ * 
+ * @param stream the stream to write to
+ * @param pointCloud the point cloud to write
+ * @return true if successful
+ * @return false if failed
+ * 
+ */
+bool writePointCloudSdc(std::ostream& stream, FullPointCloudAccessInterface& pointCloud);
 
 } // namespace IO
 } // namespace StereoVision

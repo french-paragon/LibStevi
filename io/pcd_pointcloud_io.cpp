@@ -21,8 +21,7 @@ namespace IO {
 // buffersize when reading pcd files
 constexpr static size_t pcdFileReaderBufferSize = 1 << 16;
 // write
-constexpr static size_t pcdFileWriterBufferSize_binary = 1 << 16;
-constexpr static size_t pcdFileWriterBufferSize_ascii = 1 << 16;
+constexpr static size_t pcdFileWriterBufferSize = 1 << 16;
 
 static std::ostream &operator<<(std::ostream &os, const PcdDataStorageType &data);
 static std::istream &operator>>(std::istream &is, PcdDataStorageType &data);
@@ -358,8 +357,7 @@ bool PcdPointCloudPoint::gotoNextBinaryCompressed()
     return false;
 }
 
-std::shared_ptr<PcdPointCloudPoint> PcdPointCloudPoint::createAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface)
-{
+std::shared_ptr<PcdPointCloudPoint> PcdPointCloudPoint::createAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface) {
     // test if nullptr. If so, return nullptr
     if (pointCloudPointAccessInterface == nullptr) {return nullptr;}
     
@@ -806,6 +804,10 @@ std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesy
 
     if (!reader->is_open()) return std::nullopt;
 
+    return openPointCloudPcd(std::move(reader));
+}
+
+std::optional<FullPointCloudAccessInterface> openPointCloudPcd(std::unique_ptr<std::istream> reader) {
     // read the header
     auto header = PcdPointCloudHeader::readHeader(*reader);
     // test if header ptr is not null
@@ -828,8 +830,25 @@ std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesy
 }
 
 bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloudAccessInterface &pointCloud,
-    std::optional<PcdDataStorageType> dataStorageType)
-{
+    std::optional<PcdDataStorageType> dataStorageType) {
+    
+   // open the file
+    auto writer = std::make_unique<fstreamCustomBuffer<pcdFileWriterBufferSize>>();
+
+    writer->open(pcdFilePath, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
+
+    if (!writer->is_open()) return false;
+
+    // set the precision to the maximum
+    constexpr auto maxPrecision{std::numeric_limits<double>::digits10 + 1};
+    *writer << std::setprecision(maxPrecision);
+
+    return writePointCloudPcd(*writer, pointCloud, dataStorageType);
+}
+
+bool writePointCloudPcd(std::ostream &writer, FullPointCloudAccessInterface &pointCloud,
+    std::optional<PcdDataStorageType> dataStorageType) {
+    
     // position of some header elements that might change
     std::streampos headerWidthPos;
     std::streampos headerHeightPos;
@@ -872,30 +891,8 @@ bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloud
         pcdPointAccessAdapter->getFieldCount(), headerWidth, headerHeight,
         headerViewpoint, headerPoints, usedDataStorageType};
 
-
-   // open the file
-    auto writer = std::unique_ptr<std::fstream>{nullptr};
-
-    // set the buffer size
-    if (usedDataStorageType == PcdDataStorageType::ascii) {
-        writer = std::make_unique<fstreamCustomBuffer<pcdFileWriterBufferSize_ascii>>();
-    } else if (usedDataStorageType == PcdDataStorageType::binary) {
-        writer = std::make_unique<fstreamCustomBuffer<pcdFileWriterBufferSize_binary>>();
-    }  else {
-        // default
-        writer = std::make_unique<fstreamCustomBuffer<pcdFileWriterBufferSize_binary>>();
-    }
-
-    writer->open(pcdFilePath, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
-
-    if (!writer->is_open()) return false;
-
-    // set the precision to the maximum
-    constexpr auto maxPrecision{std::numeric_limits<double>::digits10 + 1};
-    *writer << std::setprecision(maxPrecision);
-
     // write the header
-    if (!PcdPointCloudHeader::writeHeader(*writer, newHeader, headerWidthPos, headerHeightPos, headerPointsPos)) {
+    if (!PcdPointCloudHeader::writeHeader(writer, newHeader, headerWidthPos, headerHeightPos, headerPointsPos)) {
         return false;
     }
 
@@ -905,13 +902,13 @@ bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloud
     switch (usedDataStorageType) {
         case PcdDataStorageType::ascii:
             do {
-                if (!PcdPointCloudPoint::writePointAscii(*writer, *pcdPointAccessAdapter)) return false;
+                if (!PcdPointCloudPoint::writePointAscii(writer, *pcdPointAccessAdapter)) return false;
                 nbPoints++;
             } while (pcdPointAccessAdapter->gotoNext());
             break;
         case PcdDataStorageType::binary:
             do {
-                if (!PcdPointCloudPoint::writePointBinary(*writer, *pcdPointAccessAdapter)) return false;
+                if (!PcdPointCloudPoint::writePointBinary(writer, *pcdPointAccessAdapter)) return false;
                 nbPoints++;
             } while (pcdPointAccessAdapter->gotoNext());
             break;
@@ -940,14 +937,14 @@ bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloud
         widthStr.resize(maxSizeStr, ' ');
         heightStr.resize(maxSizeStr, ' ');
         // rewrite them
-        writer->seekp(headerPointsPos);
-        writer->write(pointsStr.c_str(), maxSizeStr);
-        writer->seekp(headerWidthPos);
-        writer->write(widthStr.c_str(), maxSizeStr);
-        writer->seekp(headerHeightPos);
-        writer->write(heightStr.c_str(), maxSizeStr);
+        writer.seekp(headerPointsPos);
+        writer.write(pointsStr.c_str(), maxSizeStr);
+        writer.seekp(headerWidthPos);
+        writer.write(widthStr.c_str(), maxSizeStr);
+        writer.seekp(headerHeightPos);
+        writer.write(heightStr.c_str(), maxSizeStr);
         // seek to the end of the file
-        writer->seekp(0, std::ios_base::end);
+        writer.seekp(0, std::ios_base::end);
     }
 
     return true;
