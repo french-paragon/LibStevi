@@ -711,6 +711,24 @@ std::unique_ptr<LasPointCloudHeader> LasPointCloudHeader::readHeader(std::istrea
     return header;
 }
 
+bool LasPointCloudHeader::writeVLRs(std::ostream &writer) const {
+    for (const auto &vlr : variableLengthRecords) {
+        // write the VLRs header and data
+        writer.write(reinterpret_cast<const char*>(vlr.getHeaderData().data()), vlr.getHeaderData().size());
+        writer.write(reinterpret_cast<const char*>(vlr.getData().data()), vlr.getData().size());
+    }
+    return writer.good();
+}
+
+bool LasPointCloudHeader::writeEVLRs(std::ostream &writer) const {
+    for (const auto &evlr : extendedVariableLengthRecords) {
+        // write the EVLRs header and data
+        writer.write(reinterpret_cast<const char*>(evlr.getHeaderData().data()), evlr.getHeaderData().size());
+        writer.write(reinterpret_cast<const char*>(evlr.getData().data()), evlr.getData().size());
+    }
+    return writer.good();
+}
+
 std::vector<LasExtraBytesDescriptor> LasPointCloudHeader::generateExtraBytesDescriptors(
     const std::vector<LasVariableLengthRecord> &variableLengthRecords,
     const std::vector<LasExtendedVariableLengthRecord> &extendedVariableLengthRecords) {
@@ -860,7 +878,7 @@ std::optional<LasPublicHeaderBlock> LasPublicHeaderBlock::readPublicHeader(std::
 
 }
 
-void LasPublicHeaderBlock::writePublicHeader(std::ostream &writer, const LasPublicHeaderBlock &header) {
+bool LasPublicHeaderBlock::writePublicHeader(std::ostream &writer, const LasPublicHeaderBlock &header) {
     writer.write(header.fileSignature.data(), fileSignature_size);
     writer.write(reinterpret_cast<const char*>(&header.fileSourceID), fileSourceID_size);
     writer.write(reinterpret_cast<const char*>(&header.globalEncoding), globalEncoding_size);
@@ -898,6 +916,8 @@ void LasPublicHeaderBlock::writePublicHeader(std::ostream &writer, const LasPubl
     writer.write(reinterpret_cast<const char*>(&header.numberOfExtendedVariableLengthRecords), numberOfExtendedVariableLengthRecords_size);
     writer.write(reinterpret_cast<const char*>(&header.numberOfPointRecords), numberOfPointRecords_size);
     writer.write(reinterpret_cast<const char*>(header.numberOfPointsByReturn.data()), numberOfPointsByReturn_size);
+
+    return writer.good();
 }
 
 std::optional<PointCloudGenericAttribute> LasPublicHeaderBlock::getPublicHeaderAttributeById(int id) const {
@@ -1034,19 +1054,22 @@ std::vector<std::string> LasPointCloudPoint_Base<D>::attributeList() const {
 template <class Derived>
 bool LasPointCloudPoint_Base<Derived>::gotoNext() {
     reader->read(dataBuffer, recordByteSize);
-    if (!reader->good()) return false;
-    return true;
+    return reader->good();
 }
 
 LasPointCloudPoint::LasPointCloudPoint(size_t recordByteSize) :
-    LasPointCloudPoint(recordByteSize, nullptr)
-{
+    LasPointCloudPoint(recordByteSize, nullptr) {
     dataBufferContainer.resize(recordByteSize);
     dataBuffer = dataBufferContainer.data();
 }
 
 LasPointCloudPoint::LasPointCloudPoint(size_t recordByteSize, char *dataBuffer) :
     recordByteSize{recordByteSize}, dataBuffer{dataBuffer} { }
+
+bool LasPointCloudPoint::write(std::ostream &writer) const {
+    writer.write(dataBuffer, recordByteSize);
+    return writer.good();
+}
 
 std::optional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesystem::path &lasFilePath) {
     // open the file
@@ -1059,6 +1082,10 @@ std::optional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesy
 
     if (!reader->is_open()) return std::nullopt;
 
+    return openPointCloudLas(std::move(reader));
+}
+
+std::optional<FullPointCloudAccessInterface> openPointCloudLas(std::unique_ptr<std::istream> reader) {
     // read the header
     auto header = LasPointCloudHeader::readHeader(*reader);
     // test if header ptr is not null
@@ -1087,6 +1114,55 @@ std::optional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesy
     }
 
     return std::nullopt;
+}
+
+bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &pointCloud) {
+    // test if point cloud ptr is not null
+    if (pointCloud.pointAccess == nullptr) {
+        return false;
+    }
+    
+    // try to cast the point cloud to a las point cloud
+    auto lasPointCloud = dynamic_cast<LasPointCloudPoint*>(pointCloud.pointAccess.get());
+    if (!lasPointCloud) {
+        return false; // point cloud is not a las point cloud
+        //TODO: use adapters
+    }
+
+    // try to cast the header to a las header
+    auto lasHeader = dynamic_cast<LasPointCloudHeader*>(pointCloud.headerAccess.get());
+    if (!lasHeader) {
+        return false; // header is not a las header
+        //TODO: create header + check that it matches the data of the pointcloud
+    }
+
+    // write the public header + the VLRs
+    lasHeader->writePublicHeader(writer);
+    lasHeader->writeVLRs(writer);
+
+    // write the point cloud
+    do {
+        lasPointCloud->write(writer);
+        if (writer.fail()) return false;
+    } while (lasPointCloud->gotoNext());
+
+    // write the evlrs
+    return lasHeader->writeEVLRs(writer);
+}
+
+bool writePointCloudLas(const std::filesystem::path &lasFilePath, FullPointCloudAccessInterface &pointCloud) {
+   // open the file
+    auto writer = std::make_unique<fstreamCustomBuffer<lasFileWriterBufferSize>>();
+
+    writer->open(lasFilePath, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
+
+    if (!writer->is_open()) return false;
+
+    // set the precision to the maximum
+    constexpr auto maxPrecision{std::numeric_limits<double>::digits10 + 1};
+    *writer << std::setprecision(maxPrecision);
+
+    return writePointCloudLas(*writer, pointCloud);
 }
 
 template <size_t N>

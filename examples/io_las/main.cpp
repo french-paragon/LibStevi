@@ -100,5 +100,32 @@ int main(int argc, char const *argv[]) {
     std::cout << "Elapsed time for reading: " << elapsed.count() << " s\n";
     std::cout << "-------------------------------------------------\n";
 
+    
+    // write the las
+    startTime = std::chrono::high_resolution_clock::now();
+    
+    std::filesystem::path lasFilePathOut = lasFilePath;
+    lasFilePathOut.replace_extension("out.las");
+    
+    // re-open the file
+    auto fullAccessOpt2 = StereoVision::IO::openPointCloudLas(lasFilePath);
+    if (!fullAccessOpt2) {
+        std::cout << "Could not open the las file, check the path" << std::endl;
+        return 1;
+    }
+    std::cout << "file opened" << std::endl;
+    auto& fullAccess2 = *fullAccessOpt2;
+
+    if (!StereoVision::IO::writePointCloudLas(lasFilePathOut, fullAccess2)) {
+        std::cout << "Could not write the las file, check the path" << std::endl;
+        return 1;
+    }
+
+    // stop the timer
+    endTime = std::chrono::high_resolution_clock::now();
+    elapsed = endTime - startTime;
+    std::cout << "Elapsed time for writing: " << elapsed.count() << " s\n";
+    std::cout << "-------------------------------------------------\n";
+
     return 0;
 }

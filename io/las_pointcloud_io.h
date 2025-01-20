@@ -149,7 +149,7 @@ public:
     // read the header of the LAS file
     static std::optional<LasPublicHeaderBlock> readPublicHeader(std::istream& reader);
     // write the header of the LAS file
-    static void writePublicHeader(std::ostream& writer, const LasPublicHeaderBlock& header);
+    static bool writePublicHeader(std::ostream& writer, const LasPublicHeaderBlock& header);
     // get an attribute by its id
     std::optional<PointCloudGenericAttribute> getPublicHeaderAttributeById(int id) const;
     // get the list of attributes
@@ -194,6 +194,7 @@ public:
     auto getRecordLengthAfterHeader() const;
     std::string getDescription() const;
     inline const std::vector<std::byte>& getData() const { return data; }
+    inline const std::array<char, vlrHeaderSize>& getHeaderData() const { return vlrHeaderData; }
 
     // read one variable length record
 
@@ -305,6 +306,12 @@ public:
 
     // read the header
     static std::unique_ptr<LasPointCloudHeader> readHeader(std::istream& reader);
+
+    // write
+    bool writePublicHeader(std::ostream& writer) const {return LasPublicHeaderBlock::writePublicHeader(writer, publicHeaderBlock); }
+    bool writeVLRs(std::ostream& writer) const;
+    bool writeEVLRs(std::ostream& writer) const;
+
 private:
     // generate a list of extra bytes descriptors from the VLRs and EVLRs
     static std::vector<LasExtraBytesDescriptor> generateExtraBytesDescriptors(const std::vector<LasVariableLengthRecord>& variableLengthRecords,
@@ -314,7 +321,6 @@ private:
     static std::tuple<std::vector<std::string>, std::vector<uint8_t>, std::vector<size_t>, std::vector<size_t>>
         generateExtraBytesInfo(const std::vector<LasExtraBytesDescriptor>& extraBytesDescriptors,
             bool ignoreUndocumentedExtraBytes = true);
-
 };
 
 class LasPointCloudPoint : public PointCloudPointAccessInterface {
@@ -343,6 +349,7 @@ private:
 public:
     inline auto* getRecordDataBuffer() const { return dataBuffer; }
     inline auto getRecordByteSize() const { return recordByteSize; }
+    bool write(std::ostream& writer) const;
 };
 
 /**
@@ -357,6 +364,45 @@ public:
  *         If the file can't be opened, an empty optional is returned
  */
 std::optional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesystem::path& lasFilePath);
+
+/**
+ * @brief
+ * 
+ * Open a LAS point cloud from a stream and returns a FullPointCloudAccessInterface
+ * containing the header and the points.
+ * 
+ * @param reader The stream to open the point cloud from
+ * 
+ * @return A FullPointCloudAccessInterface containing the header and the points.
+ *         If the stream can't be opened, an empty optional is returned
+ * 
+ */
+std::optional<FullPointCloudAccessInterface> openPointCloudLas(std::unique_ptr<std::istream> reader);
+
+/**
+ * @brief Write a point cloud to a las file
+ * 
+ * @param writer The stream to write the point cloud to
+ * @param pointCloud The point cloud to write to the stream
+ *
+ * @return True if the point cloud was written to the stream, false otherwise
+ * 
+ */
+bool writePointCloudLas(std::ostream& writer, FullPointCloudAccessInterface& pointCloud);
+
+/**
+ * @brief
+ * 
+ * Write a point cloud to a las file.
+ * 
+ * @param lasFilePath The path to the las file to write.
+ * @param pointCloud The point cloud to write to the las file.
+ * @param dataStorageType The data storage type to use. If not specified, the data storage type defined in the header will be used
+ * 
+ * @return True if the point cloud was written to the las file, false otherwise
+ */
+bool writePointCloudLas(const std::filesystem::path& lasFilePath, FullPointCloudAccessInterface& pointCloud);
+
 
 /*************** Implementation ***************/
 
