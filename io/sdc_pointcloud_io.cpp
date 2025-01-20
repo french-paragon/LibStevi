@@ -177,7 +177,7 @@ std::optional<FullPointCloudAccessInterface> openPointCloudSdc(std::unique_ptr<s
     auto minorVersion = fromBytes<uint16_t>(bufferHeader.data() + 2);
 
     // next headerSize - 8 bytes are the header informations
-    auto headerInformation = vectorFromBytes<std::byte>(bufferHeader.data() + 4, headerSize - 4);
+    auto headerInformation = vectorFromBytes<std::byte>(bufferHeader.data() + 4, headerSize - 8);
 
     auto header = std::make_unique<SdcPointCloudHeader>(headerSize, majorVersion, minorVersion, headerInformation);
     auto cloudpoint = std::make_unique<SdcPointCloudPoint>(std::move(stream), majorVersion, minorVersion);
@@ -219,9 +219,20 @@ bool writePointCloudSdc(std::ostream &stream, FullPointCloudAccessInterface &poi
     // correct the header to match the point cloud
     auto header = dynamic_cast<SdcPointCloudHeader*>(pointCloud.headerAccess.get());
     auto newHeader = std::unique_ptr<SdcPointCloudHeader>();
-    if (!header || !header->majorVersion != sdcPointCloud->majorVersion || !header->minorVersion != sdcPointCloud->minorVersion) {
+
+    if (header == nullptr || header->majorVersion != sdcPointCloud->majorVersion ||
+        !header->minorVersion != sdcPointCloud->minorVersion) {
+
+        uint32_t headerSize{8};
+        std::vector<std::byte> headerInformation{};
+
+        if (header != nullptr) {
+            headerSize = header->headerSize;
+            headerInformation = header->headerInformation;
+        }
         // create a new header
-        newHeader = std::make_unique<SdcPointCloudHeader>(uint32_t{8}, sdcPointCloud->majorVersion, sdcPointCloud->minorVersion, std::vector<std::byte>());
+        newHeader = std::make_unique<SdcPointCloudHeader>(headerSize, sdcPointCloud->majorVersion,
+            sdcPointCloud->minorVersion, headerInformation);
         header = newHeader.get();
     }
 

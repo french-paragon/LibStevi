@@ -82,5 +82,25 @@ int main(int argc, char const *argv[]) {
     std::cout << "Elapsed time: " << elapsed.count() << " s\n";
     std::cout << "-------------------------------------------------\n";
 
+    // sdc write
+    std::filesystem::path sdcFilePathOut = sdcFilePath;
+    sdcFilePathOut.replace_extension("out.sdc");
+    
+    // re-open the file
+    auto fullAccessOpt2 = StereoVision::IO::openPointCloudSdc(sdcFilePath);
+
+    if (!fullAccessOpt2) {
+        std::cout << "Could not open the sdc file, check the path" << std::endl;
+        return 1;
+    }
+    auto& fullAccess2 = *fullAccessOpt2;
+    // start timer + write
+    startTime = std::chrono::high_resolution_clock::now();
+    if (!StereoVision::IO::writePointCloudSdc(sdcFilePathOut, fullAccess2)) return 1;
+    endTime = std::chrono::high_resolution_clock::now();
+    elapsed = endTime - startTime;
+    std::cout << "Elapsed time for writing: " << elapsed.count() << " s\n";
+    std::cout << "-------------------------------------------------\n";
+
     return 0;
 }
