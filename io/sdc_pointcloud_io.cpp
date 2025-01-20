@@ -229,9 +229,9 @@ bool writePointCloudSdc(std::ostream &stream, FullPointCloudAccessInterface &poi
     if (!header->write(stream)) return false;
 
     // write the points
-    while (sdcPointCloud->gotoNext()) {
+    do {
         if (!sdcPointCloud->write(stream)) return false;
-    }
+    } while (sdcPointCloud->gotoNext());
 
     return true;
 }
