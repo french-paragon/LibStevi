@@ -17,6 +17,9 @@
 namespace StereoVision {
 namespace IO {
 
+using PcdDataLayout = std::tuple<std::vector<std::string>, std::vector<std::string>, std::vector<size_t>,
+    std::vector<uint8_t>, std::vector<size_t>>;
+
 // constants
 // buffersize when reading pcd files
 constexpr static size_t pcdFileReaderBufferSize = 1 << 16;
@@ -28,23 +31,41 @@ static std::istream &operator>>(std::istream &is, PcdDataStorageType &data);
 
 /// @brief From any pointcloud point, get the names of the attributes, their byte size, their type and their count
 /// @param pointcloudPointAccessInterface The pointcloud point access interface
-/// @return A tuple containing the attributes names, their byte size, their type and their count
-static std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>
-    getPcdDataLayoutFromPointcloudPoint(const PointCloudPointAccessInterface& pointcloudPointAccessInterface);
+/// @return A tuple containing the sanitized attributes names, original attributes names, their byte size, their type and their count
+static PcdDataLayout getPcdDataLayoutFromPointcloudPoint(const PointCloudPointAccessInterface& pointcloudPointAccessInterface);
+
+/**
+ * @brief sanitize a string to be a valid pcd attribute name. Only alphanumeric characters and underscores are allowed.
+ * 
+ * @param str the string to sanitize
+ * @return std::string the sanitized string
+ */
+static std::string sanitizeAttributeNamePcd(const std::string& str);
 
 /// @brief adapter class to obtain a PcdPointCloudPoint from any PointCloudPointAccessInterface
 class PcdPointCloudPointBasicAdapter : public PcdPointCloudPoint
 {
 protected:
     PointCloudPointAccessInterface* pointCloudPointAccessInterface = nullptr;
+    const std::vector<std::string> originalAttributeNames;
 public:
     PcdPointCloudPointBasicAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface);
 
+    PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;
+
+    std::optional<PtColor<PointCloudGenericAttribute>> getPointColor() const override;
+
+    std::optional<PointCloudGenericAttribute> getAttributeById(int id) const override;
+
+    std::optional<PointCloudGenericAttribute> getAttributeByName(const char* attributeName) const override;
+
+    std::vector<std::string> attributeList() const override;
+    
     bool gotoNext() override;
 
 protected:
     PcdPointCloudPointBasicAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface,
-        const std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>& attributeInformations);
+        const PcdDataLayout& attributeInformations);
 
     /**
      * @brief fill the internal data buffer with the values of the attributes of the current point.
@@ -66,7 +87,7 @@ public:
 
 protected:
     PcdPointCloudPointFromSdcAdapter(SdcPointCloudPoint* sdcPointCloudPoint,
-        const std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>& attributeInformations);
+        const PcdDataLayout& attributeInformations);
 };
 
 /// @brief adapter class to obtain a PcdPointCloudHeader from any PointCloudHeaderInterface
@@ -726,11 +747,10 @@ static std::istream &operator>>(std::istream &is, PcdDataStorageType &data)
     return is;
 }
 
-std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>
-    getPcdDataLayoutFromPointcloudPoint(const PointCloudPointAccessInterface &pointcloudPointAccessInterface)
-{
+PcdDataLayout getPcdDataLayoutFromPointcloudPoint(const PointCloudPointAccessInterface &pointcloudPointAccessInterface) {
     // try to guess header parameters from the point cloud directly
-    auto attributeNames = std::vector<std::string>{};
+    auto originalAttributeNames = std::vector<std::string>{};
+    auto sanitizedAttributeNames = std::vector<std::string>{};
     auto size = std::vector<size_t>{};
     auto type = std::vector<uint8_t>{};
     auto count = std::vector<size_t>{};
@@ -747,7 +767,7 @@ std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, 
                 using T = std::decay_t<decltype(arg)>;
                 // simple types
                 if constexpr (std::is_floating_point_v<T> || std::is_integral_v<T>) {
-                    attributeNames.push_back(attributeName);
+                    originalAttributeNames.push_back(attributeName);
                     nbAttributes++;
                     size.push_back(sizeof(T));
                     count.push_back(1);
@@ -764,7 +784,7 @@ std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, 
                     // get the contained type
                     using V_t = std::decay_t<typename T::value_type>;
                     if constexpr (std::is_floating_point_v<V_t> || std::is_integral_v<V_t> || std::is_same_v<V_t, std::byte>) {
-                        attributeNames.push_back(attributeName);
+                        originalAttributeNames.push_back(attributeName);
                         nbAttributes++;
                         size.push_back(sizeof(V_t));
                         count.push_back(arg.size());
@@ -790,7 +810,45 @@ std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, 
             }, attr);
         }
     }
-    return {attributeNames, size, type, count};
+
+    // sanitize attribute names and remove duplicates
+    std::vector<size_t> toRemove;
+    for (size_t i = 0; i < nbAttributes; i++) {
+        auto sanitizedAttributeName = sanitizeAttributeNamePcd(originalAttributeNames[i]);
+        auto it = std::find(sanitizedAttributeNames.begin(), sanitizedAttributeNames.end(), sanitizedAttributeName);
+        if (it != sanitizedAttributeNames.end()) {
+            toRemove.push_back(i);
+        } else {
+            sanitizedAttributeNames.push_back(sanitizedAttributeName);
+        }
+    }
+
+    // remove duplicates
+    std::reverse(toRemove.begin(), toRemove.end());
+    for (auto i : toRemove) {
+        originalAttributeNames.erase(originalAttributeNames.begin() + i);
+        size.erase(size.begin() + i);
+        type.erase(type.begin() + i);
+        count.erase(count.begin() + i);
+    }
+
+    return {sanitizedAttributeNames, originalAttributeNames, size, type, count};
+}
+
+std::string sanitizeAttributeNamePcd(const std::string &str) {
+    std::string sanitizedStr;
+
+    for (char c : str) {
+        if (c == '_'|| std::isalnum(static_cast<unsigned char>(c))) {
+            sanitizedStr += c;
+        } else if (std::isspace(static_cast<unsigned char>(c))) {
+            // Replace spaces with underscores
+            sanitizedStr += '_';
+        }
+        // Other characters are ignored
+    }
+
+    return sanitizedStr;
 }
 
 std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesystem::path &pcdFilePath) {
@@ -951,15 +1009,40 @@ bool writePointCloudPcd(std::ostream &writer, FullPointCloudAccessInterface &poi
 }
 
 PcdPointCloudPointBasicAdapter::PcdPointCloudPointBasicAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface,
-    const std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>& attributeInformations) :
-    PcdPointCloudPoint{nullptr, std::get<0>(attributeInformations), std::get<1>(attributeInformations), std::get<2>(attributeInformations),
-        std::get<3>(attributeInformations), PcdDataStorageType::ascii}, pointCloudPointAccessInterface(pointCloudPointAccessInterface)
+    const PcdDataLayout& attributeInformations) :
+    originalAttributeNames(std::get<1>(attributeInformations)),
+    PcdPointCloudPoint{nullptr, std::get<0>(attributeInformations), std::get<2>(attributeInformations), std::get<3>(attributeInformations),
+        std::get<4>(attributeInformations), PcdDataStorageType::ascii}, pointCloudPointAccessInterface(pointCloudPointAccessInterface)
 {
     adaptInternalState(); // set the internal state for the first time
 }
 
 PcdPointCloudPointBasicAdapter::PcdPointCloudPointBasicAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface):
     PcdPointCloudPointBasicAdapter(pointCloudPointAccessInterface, getPcdDataLayoutFromPointcloudPoint(*pointCloudPointAccessInterface)) {}
+
+PtGeometry<PointCloudGenericAttribute> PcdPointCloudPointBasicAdapter::getPointPosition() const {
+    return pointCloudPointAccessInterface->getPointPosition();
+}
+
+std::optional<PtColor<PointCloudGenericAttribute>> PcdPointCloudPointBasicAdapter::getPointColor() const {
+    return pointCloudPointAccessInterface->getPointColor();
+}
+
+std::optional<PointCloudGenericAttribute> PcdPointCloudPointBasicAdapter::getAttributeById(int id) const {
+    if (id < 0 || id >= originalAttributeNames.size()) return std::nullopt;
+    return pointCloudPointAccessInterface->getAttributeByName(originalAttributeNames[id].c_str());
+}
+
+std::optional<PointCloudGenericAttribute> PcdPointCloudPointBasicAdapter::getAttributeByName(const char *attributeName) const {
+    // find the attribute in the list of sanitized attribute names
+    auto it = std::find(originalAttributeNames.begin(), originalAttributeNames.end(), attributeName);
+    if (it == originalAttributeNames.end()) return std::nullopt;
+    return pointCloudPointAccessInterface->getAttributeByName((*it).c_str());
+}
+
+std::vector<std::string> PcdPointCloudPointBasicAdapter::attributeList() const {
+    return attributeNames;
+}
 
 bool PcdPointCloudPointBasicAdapter::gotoNext() {
     return pointCloudPointAccessInterface->gotoNext() && adaptInternalState();
@@ -984,7 +1067,7 @@ bool PcdPointCloudPointBasicAdapter::adaptInternalState() {
         auto type = fieldType[fieldIt];
 
         // try to get the attribute
-        auto attrOpt = pointCloudPointAccessInterface->getAttributeById(fieldIt);
+        auto attrOpt = getAttributeById(fieldIt);
         if (!attrOpt.has_value()) return false;
         const auto& attr = attrOpt.value();
 
@@ -1207,10 +1290,12 @@ bool PcdPointCloudPointFromSdcAdapter::gotoNext()
    return sdcPointCloudPoint->gotoNext();
 }
 
-PcdPointCloudPointFromSdcAdapter::PcdPointCloudPointFromSdcAdapter(SdcPointCloudPoint *sdcPointCloudPoint,
-    const std::tuple<std::vector<std::string>, std::vector<size_t>, std::vector<uint8_t>, std::vector<size_t>>& attributeInformations) :
-    PcdPointCloudPoint{nullptr, std::get<0>(attributeInformations), std::get<1>(attributeInformations), std::get<2>(attributeInformations),
-        std::get<3>(attributeInformations), PcdDataStorageType::ascii, sdcPointCloudPoint->getRecordDataBuffer()}, sdcPointCloudPoint(sdcPointCloudPoint)
+PcdPointCloudPointFromSdcAdapter::PcdPointCloudPointFromSdcAdapter(SdcPointCloudPoint *sdcPointCloudPoint, 
+    const PcdDataLayout& attributeInformations) :
+        PcdPointCloudPoint{nullptr, std::get<0>(attributeInformations), std::get<2>(attributeInformations),
+            std::get<3>(attributeInformations), std::get<4>(attributeInformations), PcdDataStorageType::ascii,
+            sdcPointCloudPoint->getRecordDataBuffer()},
+        sdcPointCloudPoint(sdcPointCloudPoint)
 {
     
 }
