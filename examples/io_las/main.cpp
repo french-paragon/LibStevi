@@ -29,7 +29,7 @@ int main(int argc, char const *argv[]) {
 	// start timer
 	auto startTime = std::chrono::high_resolution_clock::now();
 
-    auto fullAccessOpt = StereoVision::IO::openPointCloudLas(lasFilePath);
+    auto fullAccessOpt = StereoVision::IO::openPointCloud(lasFilePath);
 
     if (!fullAccessOpt) {
         std::cout << "Could not open the las file, check the path" << std::endl;
@@ -108,7 +108,7 @@ int main(int argc, char const *argv[]) {
     lasFilePathOut.replace_extension("out.las");
     
     // re-open the file
-    auto fullAccessOpt2 = StereoVision::IO::openPointCloudLas(lasFilePath);
+    auto fullAccessOpt2 = StereoVision::IO::openPointCloud(lasFilePath);
     if (!fullAccessOpt2) {
         std::cout << "Could not open the las file, check the path" << std::endl;
         return 1;

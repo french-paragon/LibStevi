@@ -54,47 +54,22 @@ static std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::
     const std::vector<uint8_t> &extraAttributesTypes, const std::vector<size_t> &extraAttributesSizes,
     const std::vector<size_t> &extraAttributesOffsets, char* dataBuffer);
 
+struct LasDataLayout {
+    size_t format;
+    size_t recordByteSize;
+    std::vector<std::string> attributeNames;
+    std::vector<uint8_t> fieldType;
+    std::vector<size_t> fieldByteSize;
+    std::vector<size_t> fieldOffset;
+    std::vector<bool> usePriorDataOffset;
+    std::vector<bool> isBitfield;
+    std::vector<size_t> bitfieldSize;
+    std::vector<size_t> bitfieldOffset;
+};
+
 template <class D>
 class LasPointCloudPoint_Base : public LasPointCloudPoint {
 public:
-
-    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize,
-        const std::vector<std::string> &extraAttributesNames, const std::vector<uint8_t> &extraAttributesTypes,
-        const std::vector<size_t> &extraAttributesSizes, const std::vector<size_t> &extraAttributesOffsets,
-        char* dataBuffer) :
-            reader{std::move(reader)},
-            extraAttributesNames{extraAttributesNames},
-            extraAttributesTypes{extraAttributesTypes},
-            extraAttributesSizes{extraAttributesSizes},
-            extraAttributesOffsets{extraAttributesOffsets},
-            LasPointCloudPoint(recordByteSize, dataBuffer) {
-
-        //do some checks on the extra parameters and correct them is needed
-        verifyAndCorrectParameters();
-    }
-
-    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize,
-        const std::vector<std::string> &extraAttributesNames, const std::vector<uint8_t> &extraAttributesTypes,
-        const std::vector<size_t> &extraAttributesSizes,
-        const std::vector<size_t> &extraAttributesOffsets) :
-            reader{std::move(reader)},
-            extraAttributesNames{extraAttributesNames},
-            extraAttributesTypes{extraAttributesTypes},
-            extraAttributesSizes{extraAttributesSizes},
-            extraAttributesOffsets{extraAttributesOffsets},
-            LasPointCloudPoint(recordByteSize) {
-        
-        //do some checks on the extra parameters and correct them is needed
-        verifyAndCorrectParameters();
-    }
-
-protected:
-    const std::unique_ptr<std::istream> reader;
-    std::vector<std::string> extraAttributesNames;
-    std::vector<uint8_t> extraAttributesTypes;
-    std::vector<size_t> extraAttributesSizes;
-    std::vector<size_t> extraAttributesOffsets;
-private:
     // structure to get the return type for each attribute from the derived class
     template <class Derived, size_t N>
     struct GetReturnType {
@@ -154,7 +129,54 @@ private:
     static constexpr size_t bitfieldOffset = std::get<N>(D::bitfieldOffset);
 
     static constexpr size_t minimumRecordByteSize = size<D::nbAttributes - 1> + offset<D::nbAttributes - 1>;
+protected:
+    const std::unique_ptr<std::istream> reader;
+    std::vector<std::string> extraAttributesNames;
+    std::vector<uint8_t> extraAttributesTypes;
+    std::vector<size_t> extraAttributesSizes;
+    std::vector<size_t> extraAttributesOffsets;
 public:
+
+    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize,
+        const std::vector<std::string> &extraAttributesNames, const std::vector<uint8_t> &extraAttributesTypes,
+        const std::vector<size_t> &extraAttributesSizes, const std::vector<size_t> &extraAttributesOffsets,
+        char* dataBuffer) :
+            reader{std::move(reader)},
+            extraAttributesNames{extraAttributesNames},
+            extraAttributesTypes{extraAttributesTypes},
+            extraAttributesSizes{extraAttributesSizes},
+            extraAttributesOffsets{extraAttributesOffsets},
+            LasPointCloudPoint(recordByteSize, dataBuffer) {
+
+        //do some checks on the extra parameters and correct them is needed
+        verifyAndCorrectParameters();
+    }
+
+    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize,
+        const std::vector<std::string> &extraAttributesNames, const std::vector<uint8_t> &extraAttributesTypes,
+        const std::vector<size_t> &extraAttributesSizes,
+        const std::vector<size_t> &extraAttributesOffsets) :
+            reader{std::move(reader)},
+            extraAttributesNames{extraAttributesNames},
+            extraAttributesTypes{extraAttributesTypes},
+            extraAttributesSizes{extraAttributesSizes},
+            extraAttributesOffsets{extraAttributesOffsets},
+            LasPointCloudPoint(recordByteSize) {
+        
+        //do some checks on the extra parameters and correct them is needed
+        verifyAndCorrectParameters();
+    }
+
+    template <size_t N = 0>
+    static uint8_t getLasDataType(size_t id);
+
+    template <typename T>
+    static uint8_t getLasDataType();
+
+    template <size_t N = 0>
+    static size_t getFieldOffset(size_t id);
+
+
     PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;
 
     std::optional<PtColor<PointCloudGenericAttribute>> getPointColor() const override;
@@ -258,50 +280,7 @@ private:
         }
     }
 
-    void verifyAndCorrectParameters() {
-        // test the size of the extra attributes
-        bool isSizeValid =
-            extraAttributesNames.size() == extraAttributesTypes.size() &&
-            extraAttributesNames.size() == extraAttributesSizes.size() &&
-            extraAttributesNames.size() == extraAttributesOffsets.size();
-        
-        if (!isSizeValid) { // if the size of the extra attributes is not valid, clear the vectors
-            extraAttributesNames.clear();
-            extraAttributesTypes.clear();
-            extraAttributesSizes.clear();
-            extraAttributesOffsets.clear();
-        } else {
-            // test the size and offset of the extra attributes
-            std::vector<size_t> toRemove = {};
-            for (size_t i = 0; i < extraAttributesNames.size(); i++) {
-                
-                bool isToRemove = extraAttributesSizes[i] == 0 || // size is 0 or too large or size is 0
-                    minimumRecordByteSize + extraAttributesOffsets[i] + extraAttributesSizes[i] > recordByteSize;
-                
-                // check if the name is not already present or empty
-                for (const auto& extraName : extraAttributesNames) {
-                    auto it = std::find(D::attributeNames.begin(), D::attributeNames.begin() + D::nbAttributes, extraName);
-                    if (it != D::attributeNames.begin() + D::nbAttributes || extraName.empty()) {
-                        isToRemove = true;
-                        break;
-                    }
-                }
-
-                if (isToRemove) {
-                    toRemove.push_back(i);
-                }     
-            }
-
-            // remove the elements
-            std::reverse(toRemove.begin(), toRemove.end());
-            for (const auto& i : toRemove) {
-                extraAttributesNames.erase(extraAttributesNames.begin() + i);
-                extraAttributesTypes.erase(extraAttributesTypes.begin() + i);
-                extraAttributesSizes.erase(extraAttributesSizes.begin() + i);
-                extraAttributesOffsets.erase(extraAttributesOffsets.begin() + i);
-            }
-        }
-    }
+    void verifyAndCorrectParameters();
     
 };
 
@@ -320,8 +299,8 @@ public:
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
         uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t>;
 
-    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
-        "NumberOfReturns"sv, "ScanDirectionFlag"sv, "EdgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
+        "numberOfReturns"sv, "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
         "keyPointFlag"sv, "withheldFlag"sv, "scanAngleRank"sv, "userData"sv, "pointSourceID"sv};
 
     constexpr static std::array<size_t, nbAttributes> fieldByteSize =    {4, 4, 4, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2};
@@ -347,8 +326,8 @@ public:
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
         uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double>;
 
-    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
-        "NumberOfReturns"sv, "ScanDirectionFlag"sv, "EdgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
+        "numberOfReturns"sv, "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
         "keyPointFlag"sv, "withheldFlag"sv, "scanAngleRank"sv, "userData"sv, "pointSourceID"sv, "GPSTime"sv};
 
     constexpr static std::array<size_t, nbAttributes> fieldByteSize =    {4, 4, 4, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 8};
@@ -374,8 +353,8 @@ public:
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
         uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t>;
 
-    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
-        "NumberOfReturns"sv, "ScanDirectionFlag"sv, "EdgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
+        "numberOfReturns"sv, "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
         "keyPointFlag"sv, "withheldFlag"sv, "scanAngleRank"sv, "userData"sv, "pointSourceID"sv, "red"sv, "green"sv,
         "blue"sv};
 
@@ -406,8 +385,8 @@ public:
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
         uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double, uint16_t, uint16_t, uint16_t>;
 
-    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
-        "NumberOfReturns"sv, "ScanDirectionFlag"sv, "EdgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
+        "numberOfReturns"sv, "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
         "keyPointFlag"sv, "withheldFlag"sv, "scanAngleRank"sv, "userData"sv, "pointSourceID"sv, "GPSTime"sv, "red"sv,
         "green"sv, "blue"sv};
 
@@ -439,8 +418,8 @@ public:
         uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double, uint8_t, uint64_t, uint32_t, float,
         float, float, float>;
 
-    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
-        "NumberOfReturns"sv, "ScanDirectionFlag"sv, "EdgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
+        "numberOfReturns"sv, "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
         "keyPointFlag"sv, "withheldFlag"sv, "scanAngleRank"sv, "userData"sv, "pointSourceID"sv, "GPSTime"sv,
         "wavePacketDescriptorIndex"sv, "byteOffsetToWaveformData"sv, "waveformPacketSizeInBytes"sv,
         "returnPointWaveformLocation"sv, "parametricDx"sv, "parametricDy"sv, "parametricDz"sv};
@@ -469,8 +448,8 @@ public:
         uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double, uint16_t, uint16_t, uint16_t, uint8_t,
         uint64_t, uint32_t, float, float, float, float>;
 
-    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
-        "NumberOfReturns"sv, "ScanDirectionFlag"sv, "EdgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
+        "numberOfReturns"sv, "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
         "keyPointFlag"sv, "withheldFlag"sv, "scanAngleRank"sv, "userData"sv, "pointSourceID"sv, "GPSTime"sv, "red"sv,
         "green"sv, "blue"sv, "wavePacketDescriptorIndex"sv, "byteOffsetToWaveformData"sv, "waveformPacketSizeInBytes"sv,
         "returnPointWaveformLocation"sv, "parametricDx"sv, "parametricDy"sv, "parametricDz"sv};
@@ -502,8 +481,8 @@ public:
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
         uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, int16_t, uint16_t, double>;
 
-    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
-        "NumberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
+        "numberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
         "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "userData"sv, "scanAngle"sv,
         "pointSourceID"sv, "GPSTime"sv};
 
@@ -530,8 +509,8 @@ public:
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
         uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, int16_t, uint16_t, double, uint16_t, uint16_t, uint16_t>;
 
-    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
-        "NumberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
+        "numberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
         "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "userData"sv, "scanAngle"sv,
         "pointSourceID"sv, "GPSTime"sv, "red"sv, "green"sv, "blue"sv};
 
@@ -563,8 +542,8 @@ public:
         uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, int16_t, uint16_t, double, uint16_t, uint16_t, uint16_t,
         uint16_t>;
 
-    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
-        "NumberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
+        "numberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
         "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "userData"sv, "scanAngle"sv,
         "pointSourceID"sv, "GPSTime"sv, "red"sv, "green"sv, "blue"sv, "NIR"sv};
 
@@ -597,8 +576,8 @@ public:
         uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, int16_t, uint16_t, double, uint8_t, uint64_t, uint32_t,
         float, float, float, float>;
 
-    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
-        "NumberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
+        "numberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
         "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "userData"sv, "scanAngle"sv,
         "pointSourceID"sv, "GPSTime"sv, "wavePacketDescriptorIndex"sv,
         "byteOffsetToWaveformData"sv, "waveformPacketSizeInBytes"sv, "returnPointWaveformLocation"sv, "parametricDx"sv,
@@ -628,8 +607,8 @@ public:
         uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, int16_t, uint16_t, double, uint16_t, uint16_t, uint16_t,
         uint16_t, uint8_t, uint64_t, uint32_t, float, float, float, float>;
 
-    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "ReturnNumber"sv,
-        "NumberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
+    constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
+        "numberOfReturns"sv, "syntheticFlag"sv, "keyPointFlag"sv, "withheldFlag"sv, "overlapFlag"sv, "scannerChannel"sv,
         "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "userData"sv, "scanAngle"sv,
         "pointSourceID"sv, "GPSTime"sv, "red"sv, "green"sv, "blue"sv, "NIR"sv, "wavePacketDescriptorIndex"sv,
         "byteOffsetToWaveformData"sv, "waveformPacketSizeInBytes"sv, "returnPointWaveformLocation"sv, "parametricDx"sv,
@@ -651,6 +630,80 @@ public:
     static constexpr size_t g_id = 19;
     static constexpr size_t b_id = 20;
 };
+
+class LasPointCloudPointBasicAdapter : public LasPointCloudPoint {
+protected:
+    PointCloudPointAccessInterface* pointCloudPointAccessInterface = nullptr;
+    const size_t format;
+    const size_t recordByteSize;
+    const std::vector<std::string> attributeNames;
+    const std::vector<uint8_t> fieldType;
+    const std::vector<size_t> fieldByteSize;
+    const std::vector<size_t> fieldOffset;
+    const std::vector<bool> usePriorDataOffset;
+    const std::vector<bool> isBitfield;
+    const std::vector<size_t> bitfieldSize;
+    const std::vector<size_t> bitfieldOffset;
+
+public:
+    LasPointCloudPointBasicAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface);
+
+    PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;
+
+    std::optional<PtColor<PointCloudGenericAttribute>> getPointColor() const override;
+
+    std::optional<PointCloudGenericAttribute> getAttributeById(int id) const override;
+
+    std::optional<PointCloudGenericAttribute> getAttributeByName(const char* attributeName) const override;
+
+    std::vector<std::string> attributeList() const override;
+    
+    bool gotoNext() override;
+
+    /**
+     * @brief Function that return the format number suiteable for the given pointCloudPointAccessInterface
+     * 
+     * @param pointCloudPointAccessInterface The point cloud point access interface
+     * @param defaultFormat The default format to use if none is found
+     * @return const size_t The format
+     */
+    static size_t getSuitableFormat(const PointCloudPointAccessInterface& pointCloudPointAccessInterface,
+        const std::optional<size_t>& defaultFormat = std::nullopt);
+
+    /** @brief From any pointcloud point, get the sanitized attributes names, the original names of the attributes,
+     * their byte size, their type and their count
+     * @param pointcloudPointAccessInterface The pointcloud point access interface
+     * @return A tuple containing the sanitized attributes names, original attributes names, their byte size, their type and their count
+     */
+    static LasDataLayout getLasDataLayoutFromPointcloudPoint(const PointCloudPointAccessInterface& pointcloudPointAccessInterface);
+protected:
+
+    LasPointCloudPointBasicAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface,
+        const LasDataLayout& attributeInformations);
+
+    /**
+     * @brief cast a PointCloudGenericAttribute to the given lasType as defined in hte extra bytes vlr descriptor
+     * 
+     * @param attribute the attribute to cast 
+     * @param lasType the las type
+     * @param numberUndocumentedBytes the number of undocumented bytes of the attribute if the type is a sequence of bytes
+     * @return * PointCloudGenericAttribute the casted attribute
+     */
+    static PointCloudGenericAttribute castAttributeToLasType(const PointCloudGenericAttribute& attribute, uint8_t lasType,
+    std::optional<size_t> numberUndocumentedBytes = std::nullopt);
+    
+    /**
+     * @brief fill the internal state with the values of the attributes of the current point.
+     * 
+     * @return true if the internal state was properly adapted, false otherwise
+     */
+    bool adaptInternalState();
+
+private:
+    template<size_t Format = 0>
+    static LasDataLayout getLasDataLayoutFromPointcloudPoint_helper(const PointCloudPointAccessInterface& pointcloudPointAccessInterface, size_t format);
+};
+
 std::optional<PointCloudGenericAttribute> LasPointCloudHeader::getAttributeById(int id) const {
     // TODO: add support for VLRs and EVLRs
     if (id < 0) {
@@ -1057,6 +1110,52 @@ bool LasPointCloudPoint_Base<Derived>::gotoNext() {
     return reader->good();
 }
 
+template <class D>
+void LasPointCloudPoint_Base<D>::verifyAndCorrectParameters() {
+    // test the size of the extra attributes
+    bool isSizeValid =
+        extraAttributesNames.size() == extraAttributesTypes.size() &&
+        extraAttributesNames.size() == extraAttributesSizes.size() &&
+        extraAttributesNames.size() == extraAttributesOffsets.size();
+    
+    if (!isSizeValid) { // if the size of the extra attributes is not valid, clear the vectors
+        extraAttributesNames.clear();
+        extraAttributesTypes.clear();
+        extraAttributesSizes.clear();
+        extraAttributesOffsets.clear();
+    } else {
+        // test the size and offset of the extra attributes
+        std::vector<size_t> toRemove = {};
+        for (size_t i = 0; i < extraAttributesNames.size(); i++) {
+            
+            bool isToRemove = extraAttributesSizes[i] == 0 || // size is 0 or too large or size is 0
+                minimumRecordByteSize + extraAttributesOffsets[i] + extraAttributesSizes[i] > recordByteSize;
+            
+            // check if the name is not already present or empty
+            for (const auto& extraName : extraAttributesNames) {
+                auto it = std::find(D::attributeNames.begin(), D::attributeNames.begin() + D::nbAttributes, extraName);
+                if (it != D::attributeNames.begin() + D::nbAttributes || extraName.empty()) {
+                    isToRemove = true;
+                    break;
+                }
+            }
+
+            if (isToRemove) {
+                toRemove.push_back(i);
+            }     
+        }
+
+        // remove the elements
+        std::reverse(toRemove.begin(), toRemove.end());
+        for (const auto& i : toRemove) {
+            extraAttributesNames.erase(extraAttributesNames.begin() + i);
+            extraAttributesTypes.erase(extraAttributesTypes.begin() + i);
+            extraAttributesSizes.erase(extraAttributesSizes.begin() + i);
+            extraAttributesOffsets.erase(extraAttributesOffsets.begin() + i);
+        }
+    }
+}
+
 LasPointCloudPoint::LasPointCloudPoint(size_t recordByteSize) :
     LasPointCloudPoint(recordByteSize, nullptr) {
     dataBufferContainer.resize(recordByteSize);
@@ -1123,16 +1222,20 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
     }
     
     // try to cast the point cloud to a las point cloud
-    auto lasPointCloud = dynamic_cast<LasPointCloudPoint*>(pointCloud.pointAccess.get());
-    if (!lasPointCloud) {
-        return false; // point cloud is not a las point cloud
-        //TODO: use adapters
-    }
+    // auto lasPointCloud = dynamic_cast<LasPointCloudPoint*>(pointCloud.pointAccess.get());
+    // if (!lasPointCloud) {
+    //     return false; // point cloud is not a las point cloud
+    //     //TODO: use adapters
+    // }
+    auto lasPointCloud = std::make_unique<LasPointCloudPointBasicAdapter>(pointCloud.pointAccess.get());
 
     // try to cast the header to a las header
     auto lasHeader = dynamic_cast<LasPointCloudHeader*>(pointCloud.headerAccess.get());
+
+    auto newHeader = std::make_unique<LasPointCloudHeader>();
     if (!lasHeader) {
-        return false; // header is not a las header
+        lasHeader = newHeader.get();
+        // return false; // header is not a las header
         //TODO: create header + check that it matches the data of the pointcloud
     }
 
@@ -1330,6 +1433,416 @@ std::vector<std::byte> LasExtraBytesDescriptor::toBytes() const {
     bytes.resize(192);
     this->toBytes(reinterpret_cast<char*>(bytes.data()));
     return bytes;
+}
+
+LasPointCloudPointBasicAdapter::LasPointCloudPointBasicAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface) :
+        LasPointCloudPointBasicAdapter(pointCloudPointAccessInterface, getLasDataLayoutFromPointcloudPoint(*pointCloudPointAccessInterface))
+{ }
+
+PtGeometry<PointCloudGenericAttribute> LasPointCloudPointBasicAdapter::getPointPosition() const {
+    return pointCloudPointAccessInterface->getPointPosition();
+}
+
+std::optional<PtColor<PointCloudGenericAttribute>> LasPointCloudPointBasicAdapter::getPointColor() const {
+    return pointCloudPointAccessInterface->getPointColor();
+}
+
+std::optional<PointCloudGenericAttribute> LasPointCloudPointBasicAdapter::getAttributeById(int id) const {
+    if (id < 0 || id >= attributeNames.size()) return std::nullopt;
+    auto attOpt = pointCloudPointAccessInterface->getAttributeByName(attributeNames[id].c_str());
+    return castAttributeToLasType(attOpt.value_or(0), fieldType[id], fieldByteSize[id]);
+}
+
+std::optional<PointCloudGenericAttribute> LasPointCloudPointBasicAdapter::getAttributeByName(
+        const char *attributeName) const {
+    // search for the attribute name to only accept known attributes
+    auto it = std::find(attributeNames.begin(), attributeNames.end(), attributeName);
+    return getAttributeById(it - attributeNames.begin());
+}
+
+std::vector<std::string> LasPointCloudPointBasicAdapter::attributeList() const {
+    return attributeNames;
+}
+
+bool LasPointCloudPointBasicAdapter::gotoNext() {
+    return pointCloudPointAccessInterface->gotoNext() && adaptInternalState();
+}
+
+size_t LasPointCloudPointBasicAdapter::getSuitableFormat(const PointCloudPointAccessInterface &pointCloudPointAccessInterface,
+    const std::optional<size_t> &defaultFormat) {
+
+    auto isDefaultFormat = defaultFormat.has_value();
+    size_t defaultFormatValue = defaultFormat.value_or(6);
+
+    defaultFormatValue = defaultFormatValue <= 10 ? defaultFormatValue : 6;
+
+    bool isLegacyFormat = pointCloudPointAccessInterface.getAttributeByName("scanAngleRank").has_value();
+    bool containsColor = pointCloudPointAccessInterface.getAttributeByName("red").has_value();
+    bool containsGPS = pointCloudPointAccessInterface.getAttributeByName("gpsTime").has_value();
+    bool containsWavePacket = pointCloudPointAccessInterface.getAttributeByName("wavePacketDescriptorIndex").has_value();
+    bool containsNIR = pointCloudPointAccessInterface.getAttributeByName("NIR").has_value();
+
+    size_t format;
+    if (isLegacyFormat) {
+        // 1: gps
+        // 2: rgb
+        // 3: rgb + gps
+        // 4: gps + wp
+        // 5: rgb + gps + wp
+        if (containsColor) { // 2,3,5
+            if (containsGPS) { // 3,5
+                if (containsWavePacket) { // 5
+                    format = 5;
+                } else { // 3
+                    format = 3;
+                }
+            } else { // 2
+                format = 2;
+            }
+        } else { // 0,1,4
+            if (containsGPS) { // 1,4
+                if (containsWavePacket) { // 4
+                    format = 4;
+                } else { // 1
+                    format = 1;
+                }
+            } else { // 0
+                format = 0;
+            }
+        }
+    } else {
+        format = 10;
+        // 7: rgb
+        // 8: rgb + nir
+        // 9: wp
+        // 10: rgb + nir + wp
+        if (containsColor) { // 7,8,10
+            if (containsNIR) { // 8,10
+                if (containsWavePacket) { // 10
+                    format = 10;
+                } else { // 8
+                    format = 8;
+                }
+            } else { // 7
+                format = 7;
+            }
+        } else { // 6,9
+            if (containsWavePacket) { // 9
+                format = 9;
+            } else { // 6
+                format = 6;
+            }
+        }
+    }
+
+    return format;
+}
+
+LasDataLayout LasPointCloudPointBasicAdapter::getLasDataLayoutFromPointcloudPoint(const PointCloudPointAccessInterface& pointcloudPointAccessInterface) {
+    auto format = getSuitableFormat(pointcloudPointAccessInterface);
+    return getLasDataLayoutFromPointcloudPoint_helper(pointcloudPointAccessInterface, format);
+}
+
+
+LasPointCloudPointBasicAdapter::LasPointCloudPointBasicAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface,
+    const LasDataLayout &attributeInformations) :
+        pointCloudPointAccessInterface{pointCloudPointAccessInterface}, format{attributeInformations.format},
+        recordByteSize{attributeInformations.recordByteSize}, attributeNames{attributeInformations.attributeNames},
+        fieldType{attributeInformations.fieldType}, fieldByteSize{attributeInformations.fieldByteSize},
+        fieldOffset{attributeInformations.fieldOffset}, usePriorDataOffset{attributeInformations.usePriorDataOffset},
+        isBitfield{attributeInformations.isBitfield}, bitfieldSize{attributeInformations.bitfieldSize},
+        bitfieldOffset{attributeInformations.bitfieldOffset}, LasPointCloudPoint{attributeInformations.recordByteSize} {
+    adaptInternalState();
+}
+
+PointCloudGenericAttribute LasPointCloudPointBasicAdapter::castAttributeToLasType(
+    const PointCloudGenericAttribute &attribute, uint8_t lasType, std::optional<size_t> numberUndocumentedBytes)
+{
+    switch (lasType) {
+        case 1: // uint8_t
+            return castedPointCloudAttribute<uint8_t>(attribute);
+            break;
+        case 2: // int8_t
+            return castedPointCloudAttribute<int8_t>(attribute);
+            break;
+        case 3: // uint16_t
+            return castedPointCloudAttribute<uint16_t>(attribute);
+            break;
+        case 4: // int16_t
+            return castedPointCloudAttribute<int16_t>(attribute);
+            break;
+        case 5: // uint32_t
+            return castedPointCloudAttribute<uint32_t>(attribute);
+            break;
+        case 6: // int32_t
+            return castedPointCloudAttribute<int32_t>(attribute);
+            break;
+        case 7: // uint64_t
+            return castedPointCloudAttribute<uint64_t>(attribute);
+            break;
+        case 8: // int64_t
+            return castedPointCloudAttribute<int64_t>(attribute);
+            break;
+        case 9: // float
+            return castedPointCloudAttribute<float>(attribute);
+            break;
+        case 10: // double
+            return castedPointCloudAttribute<double>(attribute);
+            break;
+        default:
+            // vector of bytes
+            auto v = castedPointCloudAttribute<std::vector<std::byte>>(attribute);
+            if (numberUndocumentedBytes.has_value()) {
+                v.resize(numberUndocumentedBytes.value());
+            }
+            return v;
+    }
+}
+
+bool LasPointCloudPointBasicAdapter::adaptInternalState() {
+    static_assert(sizeof(float) == 4 && sizeof(double) == 8);
+
+    if (pointCloudPointAccessInterface == nullptr) return false;
+
+    for (size_t fieldIt = 0; fieldIt < fieldByteSize.size(); fieldIt++) {
+        auto size = fieldByteSize[fieldIt];
+        auto type = fieldType[fieldIt];
+
+        // try to get the attribute
+        auto attrOpt = getAttributeById(fieldIt);
+        if (attrOpt.has_value()) {
+            const auto& attr = attrOpt.value();
+
+            auto* position = getRecordDataBuffer() + fieldOffset[fieldIt];
+
+            // if we have a bitfield, save the byte
+            std::byte bitField = bit_cast<std::byte>(*position);
+            
+            switch (type) {
+                case 1: { // uint8_t
+                    auto attrData = std::get<uint8_t>(attr);
+                    std::memcpy(position, &attrData, size);
+                    break;
+                }
+                case 2: { // int8_t
+                    auto attrData = std::get<int8_t>(attr);
+                    std::memcpy(position, &attrData, size);
+                    break;
+                }
+                case 3: { // uint16_t
+                    auto attrData = std::get<uint16_t>(attr);
+                    std::memcpy(position, &attrData, size);
+                    break;
+                }
+                case 4: { // int16_t
+                    auto attrData = std::get<int16_t>(attr);
+                    std::memcpy(position, &attrData, size);
+                    break;
+                }
+                case 5: { // uint32_t
+                    auto attrData = std::get<uint32_t>(attr);
+                    std::memcpy(position, &attrData, size);
+                    break;
+                }
+                case 6: { // int32_t
+                    auto attrData = std::get<int32_t>(attr);
+                    std::memcpy(position, &attrData, size);
+                    break;
+                }
+                case 7: { // uint64_t
+                    auto attrData = std::get<uint64_t>(attr);
+                    std::memcpy(position, &attrData, size);
+                    break;
+                }
+                case 8: { // int64_t
+                    auto attrData = std::get<int64_t>(attr);
+                    std::memcpy(position, &attrData, size);
+                    break;
+                }
+                case 9: { // float
+                    auto attrData = std::get<float>(attr);
+                    std::memcpy(position, &attrData, size);
+                    break;
+                }
+                case 10: { // double
+                    auto attrData = std::get<double>(attr);
+                    std::memcpy(position, &attrData, size);
+                    break;
+                }
+                default:
+                    // vector of bytes
+                    auto attrData = std::get<std::vector<std::byte>>(attr);
+                    std::memcpy(position, attrData.data(), size);
+            }
+
+            //case with bitfield
+            if (isBitfield[fieldIt]) {
+                // add the bit flag
+                bool flag = bit_cast<std::byte>(*position) != std::byte{0x00};
+                if (flag) {
+                    bitField |= std::byte{0x01} << bitfieldOffset[fieldIt];
+                }
+            }
+        }
+    }
+    return true;
+}
+
+template <size_t Format>
+LasDataLayout LasPointCloudPointBasicAdapter::getLasDataLayoutFromPointcloudPoint_helper(
+        const PointCloudPointAccessInterface &pointcloudPointAccessInterface, size_t format) {
+    
+    if constexpr (Format > 10) { // default case
+        return getLasDataLayoutFromPointcloudPoint_helper<10>(pointcloudPointAccessInterface, 10);
+    } else if (format == Format) {
+
+        LasDataLayout dataLayout;
+        
+        // visit the variant
+        auto visitorCustomAttributes = [](auto &&attr) {
+            using T = std::decay_t<decltype(attr)>;
+            uint8_t type;
+            size_t size;
+            if constexpr (std::is_same_v<T, uint8_t>) {
+                type = 1; // uint8_t
+                size = 1;
+            } else if constexpr (std::is_same_v<T, int8_t>) {
+                type = 2; // int8_t
+                size = 1;
+            } else if constexpr (std::is_same_v<T, uint16_t>) {
+                type = 3; // uint16_t
+                size = 2;
+            } else if constexpr (std::is_same_v<T, int16_t>) {
+                type = 4; // int16_t
+                size = 2;
+            } else if constexpr (std::is_same_v<T, uint32_t>) {
+                type = 5; // uint32_t
+                size = 4;
+            } else if constexpr (std::is_same_v<T, int32_t>) {
+                type = 6; // int32_t
+                size = 4;
+            } else if constexpr (std::is_same_v<T, uint64_t>) {
+                type = 7; // uint64_t
+                size = 8;
+            } else if constexpr (std::is_same_v<T, int64_t>) {
+                type = 8; // int64_t
+                size = 8;
+            } else if constexpr (std::is_same_v<T, float>) {
+                type = 9; // float
+                size = 4;
+            } else if constexpr (std::is_same_v<T, double>) {
+                type = 10; // double
+                size = 8;
+            } else if constexpr (std::is_same_v<T, std::vector<std::byte>>) {
+                type = 0; // Default case, unknown type which is a sequence of bytes
+                size = attr.size();
+            } else {
+                type = 0; // Default case, unknown type which is a sequence of bytes
+                size = 0;
+            }
+            return std::tuple<uint8_t, size_t>{type, size};
+        };
+
+        // fill the data layout with the minimum fields of the format
+
+        dataLayout.format = Format;
+        dataLayout.recordByteSize = LasPointCloudPoint_Format<Format>::minimumRecordByteSize;
+        
+        size_t nbAttributes = LasPointCloudPoint_Format<Format>::nbAttributes;
+
+
+        for (size_t i = 0; i < nbAttributes; ++i) {
+            dataLayout.attributeNames.push_back(std::string{LasPointCloudPoint_Format<Format>::attributeNames[i]});
+            dataLayout.fieldType.push_back(LasPointCloudPoint_Format<Format>::getLasDataType(i));
+            dataLayout.fieldByteSize.push_back(LasPointCloudPoint_Format<Format>::fieldByteSize[i]);
+            dataLayout.fieldOffset.push_back(LasPointCloudPoint_Format<Format>::getFieldOffset(i));
+            dataLayout.usePriorDataOffset.push_back(LasPointCloudPoint_Format<Format>::usePriorDataOffset[i]);
+            dataLayout.isBitfield.push_back(LasPointCloudPoint_Format<Format>::isBitfield[i]);
+            dataLayout.bitfieldSize.push_back(LasPointCloudPoint_Format<Format>::bitfieldSize[i]);
+            dataLayout.bitfieldOffset.push_back(LasPointCloudPoint_Format<Format>::bitfieldOffset[i]);
+        }
+        size_t offset = LasPointCloudPoint_Format<Format>::minimumRecordByteSize;
+        // now get all the custom attributes
+        for (const auto& attrName : pointcloudPointAccessInterface.attributeList()) {
+            // find the attribute in the list
+            auto it = std::find(dataLayout.attributeNames.begin(), dataLayout.attributeNames.end(), attrName);
+            if (it == dataLayout.attributeNames.end()) { // if not found, it is a new custom attribute
+                // try to get it
+                auto attrOpt = pointcloudPointAccessInterface.getAttributeByName(attrName.c_str());
+                if (attrOpt.has_value()) {
+                    auto attrValue = attrOpt.value();
+                    auto [type, size] = std::visit(visitorCustomAttributes, attrValue);
+                    dataLayout.attributeNames.push_back(attrName);
+                    dataLayout.fieldType.push_back(type);
+                    dataLayout.fieldByteSize.push_back(size);
+                    dataLayout.fieldOffset.push_back(offset);
+                    dataLayout.usePriorDataOffset.push_back(false);
+                    dataLayout.isBitfield.push_back(false);
+                    dataLayout.bitfieldSize.push_back(0);
+                    dataLayout.bitfieldOffset.push_back(0);
+                    
+                    dataLayout.recordByteSize += size;
+                    offset += size;
+                    nbAttributes++;
+                }
+            }
+        }
+        return dataLayout;
+    } else { // default case
+        return getLasDataLayoutFromPointcloudPoint_helper<Format + 1>(pointcloudPointAccessInterface, format);
+    }
+}
+
+template <class D>
+template <size_t N>
+uint8_t LasPointCloudPoint_Base<D>::getLasDataType(size_t id) {
+    if constexpr (N > D::nbAttributes - 1) {
+        return getLasDataType<D::nbAttributes - 1>(D::nbAttributes - 1);
+    } else if (N == id) {
+        return getLasDataType<returnType<N>>();
+    } else {
+        return getLasDataType<N+1>(id);
+    }
+}
+
+template <class D>
+template <typename T>
+uint8_t LasPointCloudPoint_Base<D>::getLasDataType() {
+    if constexpr (std::is_same_v<T, uint8_t>) {
+        return 1; // uint8_t
+    } else if constexpr (std::is_same_v<T, int8_t>) {
+        return 2; // int8_t
+    } else if constexpr (std::is_same_v<T, uint16_t>) {
+        return 3; // uint16_t
+    } else if constexpr (std::is_same_v<T, int16_t>) {
+        return 4; // int16_t
+    } else if constexpr (std::is_same_v<T, uint32_t>) {
+        return 5; // uint32_t
+    } else if constexpr (std::is_same_v<T, int32_t>) {
+        return 6; // int32_t
+    } else if constexpr (std::is_same_v<T, uint64_t>) {
+        return 7; // uint64_t
+    } else if constexpr (std::is_same_v<T, int64_t>) {
+        return 8; // int64_t
+    } else if constexpr (std::is_same_v<T, float>) {
+        return 9; // float
+    } else if constexpr (std::is_same_v<T, double>) {
+        return 10; // double
+    } else {
+        return 0; // Default case, unknown type which is a sequence of bytes
+    }
+}
+
+template <class D>
+template <size_t N>
+size_t LasPointCloudPoint_Base<D>::getFieldOffset(size_t id) {
+    if constexpr(N > D::nbAttributes - 1) {
+        return getFieldOffset<D::nbAttributes - 1>(D::nbAttributes - 1);
+    } else if (N == id) {
+        return offset<N>;
+    } else {
+        return getFieldOffset<N+1>(id);
+    }
 }
 
 }
