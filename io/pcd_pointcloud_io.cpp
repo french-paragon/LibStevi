@@ -29,9 +29,11 @@ constexpr static size_t pcdFileWriterBufferSize = 1 << 16;
 static std::ostream &operator<<(std::ostream &os, const PcdDataStorageType &data);
 static std::istream &operator>>(std::istream &is, PcdDataStorageType &data);
 
-/// @brief From any pointcloud point, get the names of the attributes, their byte size, their type and their count
-/// @param pointcloudPointAccessInterface The pointcloud point access interface
-/// @return A tuple containing the sanitized attributes names, original attributes names, their byte size, their type and their count
+/** @brief From any pointcloud point, get the sanitized attributes names, the original names of the attributes,
+ * their byte size, their type and their count
+ * @param pointcloudPointAccessInterface The pointcloud point access interface
+ * @return A tuple containing the sanitized attributes names, original attributes names, their byte size, their type and their count
+ */
 static PcdDataLayout getPcdDataLayoutFromPointcloudPoint(const PointCloudPointAccessInterface& pointcloudPointAccessInterface);
 
 /**
@@ -43,8 +45,7 @@ static PcdDataLayout getPcdDataLayoutFromPointcloudPoint(const PointCloudPointAc
 static std::string sanitizeAttributeNamePcd(const std::string& str);
 
 /// @brief adapter class to obtain a PcdPointCloudPoint from any PointCloudPointAccessInterface
-class PcdPointCloudPointBasicAdapter : public PcdPointCloudPoint
-{
+class PcdPointCloudPointBasicAdapter : public PcdPointCloudPoint {
 protected:
     PointCloudPointAccessInterface* pointCloudPointAccessInterface = nullptr;
     const std::vector<std::string> originalAttributeNames;
@@ -1012,8 +1013,7 @@ PcdPointCloudPointBasicAdapter::PcdPointCloudPointBasicAdapter(PointCloudPointAc
     const PcdDataLayout& attributeInformations) :
     originalAttributeNames(std::get<1>(attributeInformations)),
     PcdPointCloudPoint{nullptr, std::get<0>(attributeInformations), std::get<2>(attributeInformations), std::get<3>(attributeInformations),
-        std::get<4>(attributeInformations), PcdDataStorageType::ascii}, pointCloudPointAccessInterface(pointCloudPointAccessInterface)
-{
+        std::get<4>(attributeInformations), PcdDataStorageType::ascii}, pointCloudPointAccessInterface(pointCloudPointAccessInterface) {
     adaptInternalState(); // set the internal state for the first time
 }
 
