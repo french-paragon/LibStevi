@@ -163,6 +163,7 @@ set(LIB_SRC
         io/pcd_pointcloud_io.cpp
         io/las_pointcloud_io.h
         io/las_pointcloud_io.cpp
+        io/attributeMap_pointcloud_io.h
         io/fstreamCustomBuffer.h
         io/bit_manipulations.h
         sparseMatching/cornerDetectors.h
