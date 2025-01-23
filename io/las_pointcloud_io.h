@@ -146,6 +146,8 @@ private:
     static constexpr size_t headerBlockByteSize = 375;
     static_assert(headerBlockByteSize == numberOfPointsByReturn_offset + numberOfPointsByReturn_size, "Header block size should be 375 bytes");
 public:
+    // constructor
+    LasPublicHeaderBlock();
     // read the header of the LAS file
     static std::optional<LasPublicHeaderBlock> readPublicHeader(std::istream& reader);
     // write the header of the LAS file
@@ -349,7 +351,18 @@ private:
 public:
     inline auto* getRecordDataBuffer() const { return dataBuffer; }
     inline auto getRecordByteSize() const { return recordByteSize; }
+    virtual size_t getFormat() const = 0; // return the las format
     bool write(std::ostream& writer) const;
+
+    /**
+     * @brief Obtain an adapter to a LasPointCloudPoint from any PointCloudPointAccessInterface. The adapted interface
+     * can be the given interface if the object is already a LasPointCloudPoint or a wrapper otherwise.
+     * If the given interface is null, a nullptr is returned.
+     * 
+     * @param pointCloudPointAccessInterface the interface to adapt
+     * @return a shared_ptr to the adapted interface
+     */
+    static std::shared_ptr<LasPointCloudPoint> createAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface);
 };
 
 /**

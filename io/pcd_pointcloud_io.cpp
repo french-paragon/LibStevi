@@ -643,8 +643,7 @@ bool PcdPointCloudHeader::getNextHeaderLine(std::istream& reader, std::string& l
 }
 
 bool PcdPointCloudHeader::writeHeader(std::ostream &writer, const PcdPointCloudHeader &header, std::streampos &headerWidthPos,
-                    std::streampos &headerHeightPos, std::streampos &headerPointsPos)
-{
+                    std::streampos &headerHeightPos, std::streampos &headerPointsPos) {
     if (!writer.good()) return false;
 
     // convert the bigest size_t to a string and get its length

@@ -235,6 +235,8 @@ public:
     std::vector<std::string> attributeList() const override;
 
     bool gotoNext() override;
+
+    size_t getFormat() const override { return recordFormatNumber; }
 private:
     /**
      * @brief helper functions to get the attribute by id.
@@ -658,6 +660,8 @@ public:
 
     std::vector<std::string> attributeList() const override;
     
+    size_t getFormat() const override { return format; }
+
     bool gotoNext() override;
 
     /**
@@ -885,7 +889,21 @@ std::tuple<std::vector<std::string>, std::vector<uint8_t>, std::vector<size_t>, 
     return {extraBytesNames, extraBytesTypes, extraBytesSizes, extraBytesOffsets};
 }
 
-std::optional<LasPublicHeaderBlock> LasPublicHeaderBlock::readPublicHeader(std::istream &reader) {
+LasPublicHeaderBlock::LasPublicHeaderBlock() {
+    fileSignature = {'L','A','S','F'};
+    versionMajor = 1;
+    versionMinor = 4;
+    systemIdentifier = {"OTHER"};
+    generatingSoftware = {"LibStevi"};
+    headerSize = 375;
+    offsetToPointData = headerSize;
+    pointDataRecordFormat = 6;
+    pointDataRecordLength = LasPointCloudPoint_Format<6>::minimumRecordByteSize;
+    startOfFirstExtendedVariableLengthRecord = offsetToPointData;
+}
+
+std::optional<LasPublicHeaderBlock> LasPublicHeaderBlock::readPublicHeader(std::istream &reader)
+{
     LasPublicHeaderBlock header;
     reader.read(header.fileSignature.data(), fileSignature_size);
     reader.read(reinterpret_cast<char*>(&header.fileSourceID), fileSourceID_size);
@@ -928,7 +946,6 @@ std::optional<LasPublicHeaderBlock> LasPublicHeaderBlock::readPublicHeader(std::
     if (reader.fail()) return std::nullopt;
 
     return header;
-
 }
 
 bool LasPublicHeaderBlock::writePublicHeader(std::ostream &writer, const LasPublicHeaderBlock &header) {
@@ -1170,6 +1187,20 @@ bool LasPointCloudPoint::write(std::ostream &writer) const {
     return writer.good();
 }
 
+std::shared_ptr<LasPointCloudPoint> LasPointCloudPoint::createAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface) {
+    // test if nullptr. If so, return nullptr
+    if (pointCloudPointAccessInterface == nullptr) {return nullptr;}
+
+    // try to cast the point cloud to a las point cloud
+    auto lasPoint = dynamic_cast<LasPointCloudPoint*>(pointCloudPointAccessInterface);
+    if (lasPoint != nullptr) {
+        // return a shared pointer with no ownership
+        return std::shared_ptr<LasPointCloudPoint>{std::shared_ptr<LasPointCloudPoint>{}, lasPoint};
+    }
+    // create adapter
+    return std::make_shared<LasPointCloudPointBasicAdapter>(pointCloudPointAccessInterface);
+}
+
 std::optional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesystem::path &lasFilePath) {
     // open the file
     auto reader = std::make_unique<ifstreamCustomBuffer<lasFileReaderBufferSize>>();
@@ -1221,13 +1252,8 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
         return false;
     }
     
-    // try to cast the point cloud to a las point cloud
-    // auto lasPointCloud = dynamic_cast<LasPointCloudPoint*>(pointCloud.pointAccess.get());
-    // if (!lasPointCloud) {
-    //     return false; // point cloud is not a las point cloud
-    //     //TODO: use adapters
-    // }
-    auto lasPointCloud = std::make_unique<LasPointCloudPointBasicAdapter>(pointCloud.pointAccess.get());
+    auto lasPointAccessAdapter = LasPointCloudPoint::createAdapter(pointCloud.pointAccess.get());
+    if (!lasPointAccessAdapter) return false;
 
     // try to cast the header to a las header
     auto lasHeader = dynamic_cast<LasPointCloudHeader*>(pointCloud.headerAccess.get());
@@ -1238,16 +1264,35 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
         // return false; // header is not a las header
         //TODO: create header + check that it matches the data of the pointcloud
     }
-
+    
     // write the public header + the VLRs
+    auto beginPos = writer.tellp();
     lasHeader->writePublicHeader(writer);
+    
+    auto vlrPos = writer.tellp();
     lasHeader->writeVLRs(writer);
 
+    auto pointPos = writer.tellp();
+    size_t nbPoints = 0;
     // write the point cloud
     do {
-        lasPointCloud->write(writer);
+        lasPointAccessAdapter->write(writer);
         if (writer.fail()) return false;
-    } while (lasPointCloud->gotoNext());
+        nbPoints++;
+    } while (lasPointAccessAdapter->gotoNext());
+
+
+    auto evlrPos = writer.tellp();
+    
+    // update the public header and rewrite it
+    lasHeader->publicHeaderBlock.pointDataRecordFormat = lasPointAccessAdapter->getFormat();
+    lasHeader->publicHeaderBlock.offsetToPointData = vlrPos - beginPos;
+    lasHeader->publicHeaderBlock.pointDataRecordLength = lasPointAccessAdapter->getRecordByteSize();
+    lasHeader->publicHeaderBlock.startOfFirstExtendedVariableLengthRecord = evlrPos - beginPos;
+    // rewrite the public header:
+    writer.seekp(beginPos);
+    lasHeader->writePublicHeader(writer);
+    writer.seekp(evlrPos);
 
     // write the evlrs
     return lasHeader->writeEVLRs(writer);
