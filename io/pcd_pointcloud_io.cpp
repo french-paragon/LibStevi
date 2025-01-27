@@ -824,15 +824,24 @@ PcdDataLayout getPcdDataLayoutFromPointcloudPoint(PointCloudPointAccessInterface
                         } else if constexpr (std::is_same_v<V_t, std::byte>) {
                             type.push_back('U'); // byte as uint8_t
                         } else {
-                            static_assert(false, "All types in the variant must be handled");
+                            static_assert(std::is_floating_point_v<V_t> or
+                                    std::is_unsigned_v<V_t> or
+                                    std::is_signed_v<V_t> or
+                                    std::is_same_v<V_t, std::byte>, "All types in the variant must be handled");
                         }
                     } else if constexpr (std::is_same_v<V_t, std::string>) {
                         // PCD cannot store strings...We ignore it
                     } else {
-                        static_assert(false, "All types in the variant must be handled");
+                        static_assert(std::is_same_v<V_t, std::string> or
+                                std::is_floating_point_v<V_t> or
+                                std::is_integral_v<V_t> or
+                                std::is_same_v<V_t, std::byte>, "All types in the variant must be handled");
                     }
                 } else {
-                    static_assert(false, "All types in the variant must be handled");
+                    static_assert(is_vector_v<T> or
+                            std::is_same_v<T, std::string> or
+                            std::is_floating_point_v<T> or
+                            std::is_integral_v<T>, "All types in the variant must be handled");
                 }
             }, attr);
         }
@@ -1305,7 +1314,10 @@ bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointClo
                 }
             }
         } else {
-            static_assert(false, "Unsupported type");
+            static_assert(is_vector_v<T> or
+                    std::is_integral_v<T> or
+                    std::is_same_v<T, std::string> or
+                    std::is_floating_point_v<T>, "Unsupported type");
         }
     };
 
