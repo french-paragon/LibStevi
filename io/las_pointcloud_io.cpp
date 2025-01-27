@@ -56,6 +56,7 @@ static std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::
 
 struct LasDataLayout {
     size_t format;
+    size_t minimumNumberOfAttributes; // the minimum number of attributes for this format
     size_t recordByteSize;
     std::vector<std::string> attributeNames;
     std::vector<uint8_t> fieldType;
@@ -237,7 +238,11 @@ public:
     bool gotoNext() override;
 
     size_t getFormat() const override { return recordFormatNumber; }
+    size_t getMinimumNumberOfAttributes() const override { return D::nbAttributes; }
+
+    LasExtraAttributesInfos getExtraAttributesInfos() const override;
 private:
+
     /**
      * @brief helper functions to get the attribute by id.
      * 
@@ -637,6 +642,7 @@ class LasPointCloudPointBasicAdapter : public LasPointCloudPoint {
 protected:
     PointCloudPointAccessInterface* pointCloudPointAccessInterface = nullptr;
     const size_t format;
+    const size_t minimumNumberOfAttributes;
     const size_t recordByteSize;
     const std::vector<std::string> attributeNames;
     const std::vector<uint8_t> fieldType;
@@ -662,6 +668,10 @@ public:
     
     size_t getFormat() const override { return format; }
 
+    size_t getMinimumNumberOfAttributes() const override { return minimumNumberOfAttributes; }
+
+    LasExtraAttributesInfos getExtraAttributesInfos() const override;
+
     bool gotoNext() override;
 
     /**
@@ -677,7 +687,7 @@ public:
     /** @brief From any pointcloud point, get the sanitized attributes names, the original names of the attributes,
      * their byte size, their type and their count
      * @param pointcloudPointAccessInterface The pointcloud point access interface
-     * @return A tuple containing the sanitized attributes names, original attributes names, their byte size, their type and their count
+     * @return A struct containing the sanitized attributes names, original attributes names, their byte size, their type and their count
      */
     static LasDataLayout getLasDataLayoutFromPointcloudPoint(const PointCloudPointAccessInterface& pointcloudPointAccessInterface);
 protected:
@@ -733,16 +743,14 @@ std::vector<std::string> LasPointCloudHeader::attributeList() const {
     // TODO: add support for VLRs and EVLRs
     return publicHeaderBlock.publicHeaderAttributeList();
 }
-std::tuple<std::vector<std::string>, std::vector<uint8_t>, std::vector<size_t>, std::vector<size_t>>
-    LasPointCloudHeader::getPointwiseExtraAttributesInfos(bool ignoreUndocumentedExtraBytes) const
-{
+LasExtraAttributesInfos LasPointCloudHeader::getPointwiseExtraAttributesInfos(bool ignoreUndocumentedExtraBytes) const {
     // generate the list of extra bytes descriptors
-    auto extraBytesDescriptors = generateExtraBytesDescriptors(variableLengthRecords, extendedVariableLengthRecords);
+    auto extraBytesDescriptors = extraBytesDescriptorsFromVlrs(variableLengthRecords, extendedVariableLengthRecords);
     // generate the list of extra bytes names, data types, sizes and offsets
     return generateExtraBytesInfo(extraBytesDescriptors, ignoreUndocumentedExtraBytes);
 }
-std::unique_ptr<LasPointCloudHeader> LasPointCloudHeader::readHeader(std::istream &reader)
-{
+
+std::unique_ptr<LasPointCloudHeader> LasPointCloudHeader::readHeader(std::istream &reader) {
     auto header = std::make_unique<LasPointCloudHeader>();
     auto publicHeader = LasPublicHeaderBlock::readPublicHeader(reader);
     if (!publicHeader) return nullptr;
@@ -786,7 +794,7 @@ bool LasPointCloudHeader::writeEVLRs(std::ostream &writer) const {
     return writer.good();
 }
 
-std::vector<LasExtraBytesDescriptor> LasPointCloudHeader::generateExtraBytesDescriptors(
+std::vector<LasExtraBytesDescriptor> LasPointCloudHeader::extraBytesDescriptorsFromVlrs(
     const std::vector<LasVariableLengthRecord> &variableLengthRecords,
     const std::vector<LasExtendedVariableLengthRecord> &extendedVariableLengthRecords) {
 
@@ -819,13 +827,14 @@ std::vector<LasExtraBytesDescriptor> LasPointCloudHeader::generateExtraBytesDesc
             extraBytesDescriptors.push_back(LasExtraBytesDescriptor{vlrData + i * 192});
         }
     }
+
     return extraBytesDescriptors;
 }
 
-std::tuple<std::vector<std::string>, std::vector<uint8_t>, std::vector<size_t>, std::vector<size_t>>
-    LasPointCloudHeader::generateExtraBytesInfo(const std::vector<LasExtraBytesDescriptor> &extraBytesDescriptors,
-    bool ignoreUndocumentedExtraBytes)
-{
+LasExtraAttributesInfos LasPointCloudHeader::generateExtraBytesInfo(
+    const std::vector<LasExtraBytesDescriptor> &extraBytesDescriptors,
+    bool ignoreUndocumentedExtraBytes) {
+
     std::vector<std::string> extraBytesNames;
     std::vector<uint8_t> extraBytesTypes;
     std::vector<size_t> extraBytesSizes;
@@ -840,9 +849,6 @@ std::tuple<std::vector<std::string>, std::vector<uint8_t>, std::vector<size_t>, 
             break;
         } else if (descriptor.data_type == 0) { // undocumented data types
             size = descriptor.options;
-            if (ignoreUndocumentedExtraBytes) {
-                continue;
-            }
         } else {
             switch (descriptor.data_type) {
                 case 1: // uint8_t
@@ -879,14 +885,54 @@ std::tuple<std::vector<std::string>, std::vector<uint8_t>, std::vector<size_t>, 
                     size = 1;
             }
         }
-        auto endName = std::find(descriptor.name.begin(), descriptor.name.end(), '\0'); // find the end of the attribute name
-        extraBytesNames.push_back(std::string{descriptor.name.begin(), endName});
-        extraBytesTypes.push_back(descriptor.data_type);
-        extraBytesSizes.push_back(size);
-        extraBytesOffsets.push_back(currentOffset);
+
+        if (descriptor.data_type != 0 || !ignoreUndocumentedExtraBytes) {
+            auto endName = std::find(descriptor.name.begin(), descriptor.name.end(), '\0'); // find the end of the attribute name
+            extraBytesNames.push_back(std::string{descriptor.name.begin(), endName});
+            extraBytesTypes.push_back(descriptor.data_type);
+            extraBytesSizes.push_back(size);
+            extraBytesOffsets.push_back(currentOffset);
+        }
+
         currentOffset += size;
     }
+
     return {extraBytesNames, extraBytesTypes, extraBytesSizes, extraBytesOffsets};
+}
+
+std::vector<std::byte> LasPointCloudHeader::generateExtraBytesVlrData(const LasExtraAttributesInfos &extraAttributesInfos){
+    // make sure the vector size is valid
+    auto nbExtraAttributes = extraAttributesInfos.name.size();
+    if (   nbExtraAttributes != extraAttributesInfos.type.size() 
+        || nbExtraAttributes!= extraAttributesInfos.size.size()
+        || nbExtraAttributes!= extraAttributesInfos.offset.size()) {
+        
+        return {};
+    }
+
+    std::vector<std::byte> data;
+    data.reserve(nbExtraAttributes * 192);
+
+    size_t prevOffset{};
+    size_t prevSize{};
+
+    for (size_t i = 0; i < nbExtraAttributes; i++) {
+        size_t expectedOffset = prevOffset + prevSize;
+        if (expectedOffset != extraAttributesInfos.offset[i]) {
+            if (expectedOffset > extraAttributesInfos.offset[i]) return {};
+            // empty extra byte descriptor to fill the gap
+            auto descriptorData = LasExtraBytesDescriptor{0, "", extraAttributesInfos.offset[i] - expectedOffset}.toBytes();
+            data.insert(data.end(), descriptorData.begin(), descriptorData.end());
+        }
+        // write the extra byte descriptor
+        auto descriptorData = LasExtraBytesDescriptor{extraAttributesInfos.type[i], extraAttributesInfos.name[i],
+            extraAttributesInfos.size[i]}.toBytes();
+        data.insert(data.end(), descriptorData.begin(), descriptorData.end());
+        prevOffset = extraAttributesInfos.offset[i];
+        prevSize = extraAttributesInfos.size[i];
+    }
+
+    return data;
 }
 
 LasPublicHeaderBlock::LasPublicHeaderBlock() {
@@ -1128,6 +1174,16 @@ bool LasPointCloudPoint_Base<Derived>::gotoNext() {
 }
 
 template <class D>
+LasExtraAttributesInfos LasPointCloudPoint_Base<D>::getExtraAttributesInfos() const {
+    LasExtraAttributesInfos infos;
+    infos.name = extraAttributesNames;
+    infos.type = extraAttributesTypes;
+    infos.size = extraAttributesSizes;
+    infos.offset = extraAttributesOffsets;
+    return infos;
+}
+
+template <class D>
 void LasPointCloudPoint_Base<D>::verifyAndCorrectParameters() {
     // test the size of the extra attributes
     bool isSizeValid =
@@ -1263,6 +1319,13 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
         lasHeader = newHeader.get();
         // return false; // header is not a las header
         //TODO: create header + check that it matches the data of the pointcloud
+        // add the extra byte data
+        auto minimumNumberOfAttributes = lasPointAccessAdapter->getMinimumNumberOfAttributes();
+        auto extraAttributesInfos = lasPointAccessAdapter->getExtraAttributesInfos();
+        auto extraBytesVlrData = LasPointCloudHeader::generateExtraBytesVlrData(extraAttributesInfos);
+        LasVariableLengthRecord extraBytesVlr{"LASF_Spec", 4, extraBytesVlrData};
+        lasHeader->variableLengthRecords.push_back(extraBytesVlr);
+        lasHeader->publicHeaderBlock.numberOfVariableLengthRecords++;
     }
     
     // write the public header + the VLRs
@@ -1286,9 +1349,10 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
     
     // update the public header and rewrite it
     lasHeader->publicHeaderBlock.pointDataRecordFormat = lasPointAccessAdapter->getFormat();
-    lasHeader->publicHeaderBlock.offsetToPointData = vlrPos - beginPos;
+    lasHeader->publicHeaderBlock.offsetToPointData = pointPos - beginPos;
     lasHeader->publicHeaderBlock.pointDataRecordLength = lasPointAccessAdapter->getRecordByteSize();
     lasHeader->publicHeaderBlock.startOfFirstExtendedVariableLengthRecord = evlrPos - beginPos;
+
     // rewrite the public header:
     writer.seekp(beginPos);
     lasHeader->writePublicHeader(writer);
@@ -1343,7 +1407,7 @@ std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint(std::unique_ptr<std
         extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets, dataBuffer);
 }
 
-LasExtraBytesDescriptor::LasExtraBytesDescriptor(uint8_t data_type, const std::string & name,
+LasExtraBytesDescriptor::LasExtraBytesDescriptor(uint8_t data_type, const std::string & name, size_t size,
     const std::optional<std::string>& description,
     const std::optional<std::variant<uint64_t, int64_t, double>>& no_data,
     const std::optional<std::variant<uint64_t, int64_t, double>>& min,
@@ -1359,13 +1423,13 @@ LasExtraBytesDescriptor::LasExtraBytesDescriptor(uint8_t data_type, const std::s
 
     std::byte options{0b0000000};
 
-    size_t name_nbChars = std::min(name.size(), this->name.size());
+    size_t name_nbChars = std::min(name.length(), this->name.size());
     for (size_t i = 0; i < name_nbChars; i++) {
         this->name[i] = name[i];
     }
 
     if (description.has_value()) {
-        size_t description_nbChars = std::min(description->size(), this->description.size());
+        size_t description_nbChars = std::min(description->length(), this->description.size());
         for (size_t i = 0; i < description_nbChars; i++) {
             this->description[i] = description->at(i);
         }
@@ -1424,6 +1488,11 @@ LasExtraBytesDescriptor::LasExtraBytesDescriptor(uint8_t data_type, const std::s
     }
 
     this->options = bit_cast<uint8_t>(options);
+
+    // if data type is 0, we have a sequence of bytes and the size is contained in the options
+    if (data_type == 0) {
+        this->options = static_cast<uint8_t>(size);
+    }
 }
 
 LasExtraBytesDescriptor::LasExtraBytesDescriptor(const std::array<uint8_t, 2> &reserved, uint8_t data_type,
@@ -1509,7 +1578,24 @@ std::vector<std::string> LasPointCloudPointBasicAdapter::attributeList() const {
     return attributeNames;
 }
 
-bool LasPointCloudPointBasicAdapter::gotoNext() {
+LasExtraAttributesInfos LasPointCloudPointBasicAdapter::getExtraAttributesInfos() const {
+    LasExtraAttributesInfos infos;
+   
+    auto minNbAttr = getMinimumNumberOfAttributes();
+    infos.name = std::vector<std::string>(attributeNames.begin() + minNbAttr, attributeNames.end());
+    infos.type = std::vector<uint8_t>(fieldType.begin() + minNbAttr, fieldType.end());
+    infos.size = std::vector<size_t>(fieldByteSize.begin() + minNbAttr, fieldByteSize.end()); 
+    infos.offset = std::vector<size_t>(fieldOffset.size() - minNbAttr);
+
+    for (size_t i = minNbAttr; i < fieldOffset.size(); i++) {
+        infos.offset[i-minNbAttr] = fieldOffset[i] - fieldOffset[minNbAttr];
+    }
+
+    return infos;
+}
+
+bool LasPointCloudPointBasicAdapter::gotoNext()
+{
     return pointCloudPointAccessInterface->gotoNext() && adaptInternalState();
 }
 
@@ -1592,6 +1678,7 @@ LasDataLayout LasPointCloudPointBasicAdapter::getLasDataLayoutFromPointcloudPoin
 LasPointCloudPointBasicAdapter::LasPointCloudPointBasicAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface,
     const LasDataLayout &attributeInformations) :
         pointCloudPointAccessInterface{pointCloudPointAccessInterface}, format{attributeInformations.format},
+        minimumNumberOfAttributes{attributeInformations.minimumNumberOfAttributes},
         recordByteSize{attributeInformations.recordByteSize}, attributeNames{attributeInformations.attributeNames},
         fieldType{attributeInformations.fieldType}, fieldByteSize{attributeInformations.fieldByteSize},
         fieldOffset{attributeInformations.fieldOffset}, usePriorDataOffset{attributeInformations.usePriorDataOffset},
@@ -1794,7 +1881,7 @@ LasDataLayout LasPointCloudPointBasicAdapter::getLasDataLayoutFromPointcloudPoin
         dataLayout.recordByteSize = LasPointCloudPoint_Format<Format>::minimumRecordByteSize;
         
         size_t nbAttributes = LasPointCloudPoint_Format<Format>::nbAttributes;
-
+        dataLayout.minimumNumberOfAttributes = nbAttributes;
 
         for (size_t i = 0; i < nbAttributes; ++i) {
             dataLayout.attributeNames.push_back(std::string{LasPointCloudPoint_Format<Format>::attributeNames[i]});
