@@ -208,7 +208,11 @@ endif (TIFF_FOUND)
 
 if(OpenEXR_FOUND)
     message("Using native openEXR library")
-    target_link_libraries(${STEREOVISION_LIB} PUBLIC OpenEXR::IlmImf)
+    if (TARGET OpenEXR::IlmImf)
+        target_link_libraries(${STEREOVISION_LIB} PUBLIC OpenEXR::IlmImf)
+    else()
+        target_link_libraries(${STEREOVISION_LIB} PUBLIC OpenEXR::OpenEXR)
+    endif()
     target_compile_definitions(stevi PRIVATE STEVI_IO_USE_OPENEXR)
 endif(OpenEXR_FOUND)
 
