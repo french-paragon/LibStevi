@@ -112,7 +112,7 @@ Multidim::Array<T, nDim> nearestInPaintingBatched(Multidim::Array<T, nDim> const
     }
 
     Multidim::IndexConverter<mDim> idxConverter(area2Fill.shape());
-    Multidim::IndexConverter<mDim> batchIdxConverter(batchShape);
+    Multidim::IndexConverter<nBatchDims> batchIdxConverter(batchShape);
     Multidim::ExcludedDimsSaticIndexConverter<nDim,nBatchDims> axisIdxCompressors(batchDims);
 
     for (int i = 0; i < mDim; i++) {
@@ -143,7 +143,7 @@ Multidim::Array<T, nDim> nearestInPaintingBatched(Multidim::Array<T, nDim> const
         return Multidim::Array<T, nDim>(); //impossible to inpaint when no fixed points are present
     }
 
-    using PartitionTree = Geometry::GenericBSP<std::array<int,nDim>, nDim, Geometry::BSPObjectWrapper<std::array<int,nDim>, int>>;
+    using PartitionTree = Geometry::GenericBSP<std::array<int,mDim>, mDim, Geometry::BSPObjectWrapper<std::array<int,mDim>, int>>;
 
     PartitionTree tree(std::move(nonInpaintedPoints));
 
@@ -151,10 +151,10 @@ Multidim::Array<T, nDim> nearestInPaintingBatched(Multidim::Array<T, nDim> const
 
     for (int i = 0; i < nIdxs ; i++) {
         auto idx = idxConverter.getIndexFromPseudoFlatId(i);
-        auto imgIdx = axisIdxCompressors.getCorrespondingUncompressedAxis(idx);
+        auto imgIdx = axisIdxCompressors.getUncompressedIndex(idx);
 
         std::array<int,mDim> nearest = tree.closest(idx);
-        auto imgNearest = axisIdxCompressors.getCorrespondingUncompressedAxis(nearest);
+        auto imgNearest = axisIdxCompressors.getUncompressedIndex(nearest);
 
         for (int j = 0; j < nBatch; j++) {
             auto batchPos = batchIdxConverter.getIndexFromPseudoFlatId(j);
