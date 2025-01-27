@@ -428,7 +428,7 @@ void TestPointCloudIO::testLasExtraBytes() {
     double scale_3 = 3;
     double offset_3 = 5;
 
-    StereoVision::IO::LasExtraBytesDescriptor extraBytes3{data_type_3, name_3, description_3, no_data_3, min_3, max_3, scale_3, offset_3};
+    StereoVision::IO::LasExtraBytesDescriptor extraBytes3{data_type_3, name_3, 0, description_3, no_data_3, min_3, max_3, scale_3, offset_3};
     // convert to raw bytes
     auto rawBytes3 = extraBytes3.toBytes();
     // expected extra byte 

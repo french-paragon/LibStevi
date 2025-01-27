@@ -14,6 +14,15 @@ template <bool extended> class LasGenericVariableLengthRecord;
 using LasVariableLengthRecord = LasGenericVariableLengthRecord<false>;
 using LasExtendedVariableLengthRecord = LasGenericVariableLengthRecord<true>;
 
+// the name of the extra attributes, the data type, the size and the offset. The offset is in bytes and 0 corresponds
+// to the first byte AFTER the minimum record size of the record.
+struct LasExtraAttributesInfos {
+    std::vector<std::string> name;
+    std::vector<uint8_t> type;
+    std::vector<size_t> size;
+    std::vector<size_t> offset;
+};
+
 class LasPublicHeaderBlock {
 public:
     inline static const std::vector<std::string> publicHeaderAttributes =
@@ -189,6 +198,12 @@ private:
     std::vector<std::byte> data;
 
 public:
+    // default constructor
+    LasGenericVariableLengthRecord() = default;
+    
+    // constructor with user ID,record ID and data
+    LasGenericVariableLengthRecord(const std::string& userId, uint16_t recordId, const std::vector<std::byte>& data);
+    
     // getters
     uint16_t getReserved() const;
     std::string getUserId() const;
@@ -247,6 +262,7 @@ struct LasExtraBytesDescriptor {
      * 
      * @param data_type The data type as defined in the LAS specification
      * @param name The name of the attribute. The maximum length is 32 characters, otherwise it will be truncated
+     * @param size The size of the attribute in bytes if the data type is unknown (i.e. 0). If not, it is ignored.
      * @param description The description of the attribute
      * @param no_data A value that should be used when the attribute is not present. If the data_type is a unsigned
      * integer, the underlying type is considered to be uint64_t. If the data_type is a signed integer, the underlying
@@ -257,7 +273,7 @@ struct LasExtraBytesDescriptor {
      * @param scale The scale factor
      * @param offset The offset
      */
-    LasExtraBytesDescriptor(uint8_t data_type, const std::string& name,
+    LasExtraBytesDescriptor(uint8_t data_type, const std::string& name, size_t size = 0,
         const std::optional<std::string>& description = std::nullopt,
         const std::optional<std::variant<uint64_t, int64_t, double>>& no_data = std::nullopt,
         const std::optional<std::variant<uint64_t, int64_t, double>>& min = std::nullopt,
@@ -301,28 +317,29 @@ public:
      * @brief Get the pointwise extra attributes names, data types, sizes and offsets
      * 
      * @param ignoreUndocumentedExtraBytes If true, the undocumented extra bytes (unknown sequence of bytes) will be ignored
-     * @return A tuple containing the names, data types, sizes and offsets
+     * @return A struct containing the names, data types, sizes and offsets
      */
-    std::tuple<std::vector<std::string>, std::vector<uint8_t>, std::vector<size_t>, std::vector<size_t>>
-        getPointwiseExtraAttributesInfos(bool ignoreUndocumentedExtraBytes = true) const;
+    LasExtraAttributesInfos getPointwiseExtraAttributesInfos(bool ignoreUndocumentedExtraBytes = true) const;
 
     // read the header
     static std::unique_ptr<LasPointCloudHeader> readHeader(std::istream& reader);
 
     // write
+    // TODO: make static ? NO: write method for each of them + virtual write method
     bool writePublicHeader(std::ostream& writer) const {return LasPublicHeaderBlock::writePublicHeader(writer, publicHeaderBlock); }
     bool writeVLRs(std::ostream& writer) const;
     bool writeEVLRs(std::ostream& writer) const;
 
-private:
     // generate a list of extra bytes descriptors from the VLRs and EVLRs
-    static std::vector<LasExtraBytesDescriptor> generateExtraBytesDescriptors(const std::vector<LasVariableLengthRecord>& variableLengthRecords,
+    static std::vector<LasExtraBytesDescriptor> extraBytesDescriptorsFromVlrs(const std::vector<LasVariableLengthRecord>& variableLengthRecords,
         const std::vector<LasExtendedVariableLengthRecord>& extendedVariableLengthRecords);
 
     // from the extra bytes descriptors, generate a list of names, a list of data types (as defined in LAS extra bytes descriptor) a list of sizes, and a list of offsets in bytes
-    static std::tuple<std::vector<std::string>, std::vector<uint8_t>, std::vector<size_t>, std::vector<size_t>>
-        generateExtraBytesInfo(const std::vector<LasExtraBytesDescriptor>& extraBytesDescriptors,
+    static LasExtraAttributesInfos generateExtraBytesInfo(const std::vector<LasExtraBytesDescriptor>& extraBytesDescriptors,
             bool ignoreUndocumentedExtraBytes = true);
+
+    // from the extra bytes infos (names, data types, sizes and offsets), generate the vlr data for the extra bytes vlr/evlr
+    static std::vector<std::byte> generateExtraBytesVlrData(const LasExtraAttributesInfos& extraAttributesInfos);
 };
 
 class LasPointCloudPoint : public PointCloudPointAccessInterface {
@@ -350,8 +367,15 @@ private:
     std::vector<char> dataBufferContainer;
 public:
     inline auto* getRecordDataBuffer() const { return dataBuffer; }
+
     inline auto getRecordByteSize() const { return recordByteSize; }
+
     virtual size_t getFormat() const = 0; // return the las format
+
+    virtual size_t getMinimumNumberOfAttributes() const = 0;
+
+    virtual LasExtraAttributesInfos getExtraAttributesInfos() const = 0;
+
     bool write(std::ostream& writer) const;
 
     /**
@@ -420,7 +444,27 @@ bool writePointCloudLas(const std::filesystem::path& lasFilePath, FullPointCloud
 /*************** Implementation ***************/
 
 template <bool isExtended>
-inline uint16_t LasGenericVariableLengthRecord<isExtended>::getReserved() const {
+inline LasGenericVariableLengthRecord<isExtended>::LasGenericVariableLengthRecord(const std::string &userId,
+    uint16_t recordId, const std::vector<std::byte> &data) {
+    
+    this->data = data;
+    std::array<char, userId_size> userIdArray{};
+    std::copy_n(userId.begin(), std::min(userId.length(), userId_size), userIdArray.begin());
+    std::memcpy(vlrHeaderData.data() + userId_offset, userIdArray.data(), userId_size);
+    std::memcpy(vlrHeaderData.data() + recordId_offset, &recordId, recordId_size);
+
+    if constexpr (isExtended) {
+        uint64_t dataSize = static_cast<uint64_t>(data.size());
+        std::memcpy(vlrHeaderData.data() + recordLengthAfterHeader_offset, &dataSize, recordLengthAfterHeader_size);
+    } else {
+        uint16_t dataSize = static_cast<uint16_t>(data.size());
+        std::memcpy(vlrHeaderData.data() + recordLengthAfterHeader_offset, &dataSize, recordLengthAfterHeader_size);
+    }
+}
+
+template <bool isExtended>
+inline uint16_t LasGenericVariableLengthRecord<isExtended>::getReserved() const
+{
     return fromBytes<uint16_t>(vlrHeaderData.data() + reserved_offset);
 }
 
@@ -460,7 +504,6 @@ inline std::optional<LasGenericVariableLengthRecord<isExtended>> LasGenericVaria
     vlr.data.resize(vlr.getRecordLengthAfterHeader());
     reader.read(reinterpret_cast<char*>(vlr.data.data()), vlr.getRecordLengthAfterHeader());
     if (reader.fail()) return std::nullopt;
-
     return vlr;
 }
 
