@@ -84,12 +84,9 @@ int main(int argc, char const *argv[]) {
     std::cout << "file opened" << std::endl;
     auto& fullAccess2 = *fullAccessOpt2;
 
-    auto cloudpointOriginal = std::move(fullAccess2.pointAccess);
+    auto fullAccessMap = std::move(mapPointCloudAttributes(std::move(*fullAccessOpt2), attributeMap, onlyKeepAttributesInMap));
     
-    auto cloudPointMap = std::make_unique<StereoVision::IO::PointCloudPointAttributeMapper>(std::move(cloudpointOriginal), attributeMap, onlyKeepAttributesInMap);
-    fullAccess2.pointAccess = std::move(cloudPointMap);
-
-    auto& cloudpoint2 = fullAccess2.pointAccess;
+    auto& cloudpoint2 = fullAccessMap.pointAccess;
 
     for (auto& att : cloudpoint2->attributeList()) {
         std::cout << att << ": " << StereoVision::IO::castedPointCloudAttribute<std::string>(cloudpoint2->getAttributeByName(att.c_str()).value_or(std::string{})) << '\n';

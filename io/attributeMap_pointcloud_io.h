@@ -158,6 +158,50 @@ std::optional<PointCloudGenericAttribute> AttributeMapperImplementation<AccessIn
     return std::nullopt;
 }
 
+/**
+ * @brief Map the attributes of a point cloud to other attributes
+ * 
+ * @param accessInterface The point cloud access interface
+ * @param attributeMapPoints Maps the original attribute names to a new attribute names for points
+ * @param onlyKeepAttributesInMapPoints If true, only keep attributes in the map and the attributes not in the map will be
+ *  ignored. Otherwise, the attributes not in the map but present in the original point cloud will be kept.
+ * @param attributeMapHeader Maps the original attribute names to a new attribute names for header
+ * @param onlyKeepAttributesInMapHeader If true, only keep attributes in the map and the attributes not in the map will be
+ *  ignored. Otherwise, the attributes not in the map but present in the original point cloud will be kept.
+ * @return FullPointCloudInterface The full point cloud interface with the mapped attributes
+ */
+ FullPointCloudAccessInterface mapPointCloudAttributes(
+    FullPointCloudAccessInterface&& fullAccessInterface_, std::map<std::string, std::string> attributeMapPoints,
+    bool onlyKeepAttributesInMapPoints = false, std::map<std::string, std::string> attributeMapHeader = {},
+    bool onlyKeepAttributesInMapHeader = false) {
+
+    auto points = std::move(fullAccessInterface_.pointAccess);
+    auto header = std::move(fullAccessInterface_.headerAccess);
+
+    FullPointCloudAccessInterface fullAccessInterface;
+
+    // map the points
+    std::unique_ptr<PointCloudPointAccessInterface> pointMapper;
+    std::unique_ptr<PointCloudHeaderInterface> headerMapper;
+
+    if (!attributeMapPoints.empty() || onlyKeepAttributesInMapPoints) {
+        pointMapper = std::make_unique<PointCloudPointAttributeMapper>(std::move(points), attributeMapPoints, onlyKeepAttributesInMapPoints);
+    } else {
+        pointMapper = std::move(points);
+    }
+
+    if (!attributeMapHeader.empty() || onlyKeepAttributesInMapHeader) {
+        headerMapper = std::make_unique<PointCloudHeaderAttributeMapper>(std::move(header), attributeMapHeader, onlyKeepAttributesInMapHeader);
+    } else {
+        headerMapper = std::move(header);
+    }
+    
+    fullAccessInterface.pointAccess = std::move(pointMapper);
+    fullAccessInterface.headerAccess = std::move(headerMapper);
+
+    return std::move(fullAccessInterface);
+}
+
 } // StereoVision
 } // IO
 
