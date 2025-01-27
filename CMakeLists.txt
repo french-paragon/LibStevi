@@ -162,10 +162,7 @@ set(LIB_SRC
         io/pointcloud_io.cpp
         io/sdc_pointcloud_io.h
         io/sdc_pointcloud_io.cpp
-<<<<<<< HEAD
 		io/read_flo.h
-=======
->>>>>>> 2983cddadf208a424e4b5c1bb8c7f06324bbb29d
         io/pcd_pointcloud_io.h
         io/pcd_pointcloud_io.cpp
         io/las_pointcloud_io.h
