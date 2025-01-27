@@ -86,7 +86,7 @@ int main(int argc, char const *argv[]) {
 
     auto cloudpointOriginal = std::move(fullAccess2.pointAccess);
     
-    auto cloudPointMap = std::make_unique<StereoVision::IO::PointCloudPointAttributeMapper>(cloudpointOriginal.get(), attributeMap, onlyKeepAttributesInMap);
+    auto cloudPointMap = std::make_unique<StereoVision::IO::PointCloudPointAttributeMapper>(std::move(cloudpointOriginal), attributeMap, onlyKeepAttributesInMap);
     fullAccess2.pointAccess = std::move(cloudPointMap);
 
     auto& cloudpoint2 = fullAccess2.pointAccess;

@@ -10,7 +10,7 @@ namespace IO {
 template<class AccessInterfaceType>
 class AttributeMapperImplementation {
 private:
-    AccessInterfaceType* accessInterface = nullptr;
+    std::unique_ptr<AccessInterfaceType> accessInterface = nullptr;
     std::vector<std::string> attributeNames;
     std::vector<std::string> originalAttributeNames;
 public:
@@ -23,12 +23,12 @@ public:
      *  ignored. Otherwise, the attributes not in the map but present in the original point cloud will be kept.
      */
     AttributeMapperImplementation(
-        AccessInterfaceType* accessInterface, std::map<std::string, std::string> attributeMap,
+        std::unique_ptr<AccessInterfaceType> accessInterface, std::map<std::string, std::string> attributeMap,
         bool onlyKeepAttributesInMap = false);
 
     std::vector<std::string> attributeList() const { return attributeNames; }
 
-    AccessInterfaceType* getAccessInterface() const { return accessInterface; }
+   AccessInterfaceType& getAccessInterface() const { return *accessInterface; }
 
     std::optional<PointCloudGenericAttribute> getAttributeById(int id) const;
 
@@ -49,16 +49,16 @@ public:
      *  ignored. Otherwise, the attributes not in the map but present in the original point cloud will be kept.
      */
     PointCloudPointAttributeMapper(
-        PointCloudPointAccessInterface* pointCloudPointAccessInterface, std::map<std::string, std::string> attributeMap,
+        std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterface, std::map<std::string, std::string> attributeMap,
         bool onlyKeepAttributesInMap = false) :
-            mapperImplementation(pointCloudPointAccessInterface, attributeMap, onlyKeepAttributesInMap) {}
+            mapperImplementation(std::move(pointCloudPointAccessInterface), attributeMap, onlyKeepAttributesInMap) {}
 
     PtGeometry<PointCloudGenericAttribute> getPointPosition() const override {
-        return mapperImplementation.getAccessInterface()->getPointPosition();
+        return mapperImplementation.getAccessInterface().getPointPosition();
     }
 
     std::optional<PtColor<PointCloudGenericAttribute>> getPointColor() const override {
-        return mapperImplementation.getAccessInterface()->getPointColor();
+        return mapperImplementation.getAccessInterface().getPointColor();
     }
 
     std::optional<PointCloudGenericAttribute> getAttributeById(int id) const override {
@@ -74,7 +74,7 @@ public:
     }
 
     bool gotoNext() override {
-        return mapperImplementation.getAccessInterface()->gotoNext();
+        return mapperImplementation.getAccessInterface().gotoNext();
     }
 };
 
@@ -91,9 +91,9 @@ public:
      *  ignored. Otherwise, the attributes not in the map but present in the original point cloud will be kept.
      */
     PointCloudHeaderAttributeMapper(
-        PointCloudHeaderInterface* pointCloudHeaderInterface, std::map<std::string, std::string> attributeMap,
+        std::unique_ptr<PointCloudHeaderInterface> pointCloudHeaderInterface, std::map<std::string, std::string> attributeMap,
         bool onlyKeepAttributesInMap = false) :
-            mapperImplementation(pointCloudHeaderInterface, attributeMap, onlyKeepAttributesInMap) {}
+            mapperImplementation(std::move(pointCloudHeaderInterface), attributeMap, onlyKeepAttributesInMap) {}
 
     std::optional<PointCloudGenericAttribute> getAttributeById(int id) const override {
         return mapperImplementation.getAttributeById(id);
@@ -110,10 +110,10 @@ public:
 
 template <class AccessInterfaceType>
 AttributeMapperImplementation<AccessInterfaceType>::AttributeMapperImplementation(
-    AccessInterfaceType *accessInterface, std::map<std::string, std::string> attributeMap,
+    std::unique_ptr<AccessInterfaceType> accessInterface_, std::map<std::string, std::string> attributeMap,
     bool onlyKeepAttributesInMap) {
 
-    this->accessInterface = accessInterface;
+    accessInterface = std::move(accessInterface_);
     if (accessInterface != nullptr) {
         auto FullOriginalAttributeNames = accessInterface->attributeList();
         for (auto &attributeName : FullOriginalAttributeNames) {
