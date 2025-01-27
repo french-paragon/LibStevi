@@ -89,6 +89,28 @@ struct is_vector : std::false_type {};
 template <typename T, typename Alloc>
 struct is_vector<std::vector<T, Alloc>> : std::true_type {};
 
+// template to get the type within a collection
+template <typename T>
+struct innerCollectionType {
+    using Type = T;
+};
+
+template <typename T, typename Alloc>
+struct innerCollectionType<std::vector<T, Alloc>> {
+    using Type = T;
+};
+
+// template to make sure the type is a collection
+template <typename T>
+struct outterCollectionType {
+    using Type = std::vector<T>;
+};
+
+template <typename T, typename Alloc>
+struct outterCollectionType<std::vector<T, Alloc>> {
+    using Type = std::vector<T, Alloc>;
+};
+
 template <typename T>
 inline constexpr bool is_vector_v = is_vector<T>::value;
 
@@ -144,12 +166,19 @@ T_ castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
                     strs << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte);
                 }
             } else {
-                static_assert(false, "Unsupported vector type");
+                static_assert(std::is_same_v<value_type, std::string> or
+                        std::is_floating_point_v<value_type> or
+                        std::is_integral_v<value_type> or
+                        std::is_same_v<value_type, std::byte>, "Unsupported vector type");
             }
         } else if constexpr (std::is_same_v<U, std::byte>) {
             strs << "0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(attr);
         } else {
-            static_assert(false, "Unsupported type");
+            static_assert(!std::is_same_v<U, std::string> or
+                    std::is_floating_point_v<U> or
+                    std::is_integral_v<U> or
+                    is_vector_v<U> or
+                    std::is_same_v<U, std::byte>, "Unsupported type");
         }
         return strs.str();
     };
@@ -158,7 +187,7 @@ T_ castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
         return std::visit(toString, val);
     } else {
         // redundant assertion in case we add other types
-        static_assert(std::is_integral_v<T> || std::is_floating_point_v<T> || isVectorReturnType,
+        static_assert(std::is_same_v<T, std::string> or (std::is_integral_v<T> || std::is_floating_point_v<T> || isVectorReturnType),
             "Target type should be an integral, a floating point number or a vector at this stage");
 
         T ret = std::visit([&] (auto&& arg) {
@@ -174,10 +203,10 @@ T_ castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
                     return static_cast<T>(arg);
                 }
             } else if constexpr (isSimpleHeldType && isVectorReturnType) { //* simple type => vector conversion
-                using returnVectorValue_t = typename T::value_type;
+                using returnVectorValue_t = typename innerCollectionType<T>::Type;
                 if constexpr (std::is_same_v<std::string, variantHeld_t>) {
                     // try to interpret it as a vector
-                    T vec;
+                    typename outterCollectionType<T>::Type vec;
                     std::stringstream ss(arg);
                     std::string token;
                     while (ss >> token) {
@@ -204,25 +233,25 @@ T_ castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
                     return T{};
                 }
             } else if constexpr (isVectorHeldType && isVectorReturnType) { //* vector => vector conversion
-                using returnVectorValue_t = typename T::value_type;
+                using returnVectorValue_t = typename innerCollectionType<T>::Type;
                 using variantVectorValue_t = std::remove_cv_t<std::remove_reference_t<typename variantHeld_t::value_type>>;
                 
                  if constexpr(std::is_convertible_v<variantVectorValue_t, returnVectorValue_t>) {
-                    T vec;
+                    typename outterCollectionType<T>::Type vec;
                     vec.reserve(arg.size());
                     for(auto&& e: arg) {
                         vec.push_back(static_cast<returnVectorValue_t>(e));
                     }
                     return vec;
                 } else if constexpr (std::is_same_v<returnVectorValue_t, std::string>) {
-                    T vec;
+                    typename outterCollectionType<T>::Type vec;
                     vec.reserve(arg.size());
                     for(auto&& e: arg) {
                         vec.push_back(toString(e));
                     }
                     return vec;
                 } else if constexpr (std::is_same_v<std::string, variantVectorValue_t>) {
-                    T vec;
+                    typename outterCollectionType<T>::Type vec;
                     vec.reserve(arg.size());
                     for (auto&& e : arg) {
                         double tmp = std::stod(e);
@@ -233,7 +262,7 @@ T_ castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
                                      and sizeof(variantVectorValue_t) == sizeof(returnVectorValue_t)
                                      and (std::is_integral_v<variantVectorValue_t> or std::is_integral_v<returnVectorValue_t>)) {
                     // reinterpret the bytes
-                    T vec;
+                    typename outterCollectionType<T>::Type vec;
                     vec.resize(arg.size());
                     for(auto i = 0; i < arg.size(); i++) {
                         std::memcpy(&vec[i], &arg[i], sizeof(returnVectorValue_t));
@@ -260,7 +289,10 @@ T_ castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
                 }
             } else {
                 // this should not happen
-                static_assert(false, "Not all possible types are accepted by the visitor.");
+                static_assert(!(isSimpleHeldType && isSimpleReturnType) or
+                        !(isSimpleHeldType && isVectorReturnType) or
+                        !(isVectorHeldType && isVectorReturnType) or
+                        !(isVectorHeldType && isSimpleReturnType), "Not all possible types are accepted by the visitor.");
             }
             return T{};
         }, val);

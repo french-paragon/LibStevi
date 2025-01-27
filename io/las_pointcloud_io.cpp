@@ -1,6 +1,7 @@
 #include <cstring>
 #include <array>
 #include <iostream>
+#include <cstddef>
 #include "las_pointcloud_io.h"
 #include "bit_manipulations.h"
 #include "fstreamCustomBuffer.h"
