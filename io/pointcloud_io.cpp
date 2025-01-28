@@ -26,21 +26,18 @@ namespace IO {
 
 FullPointCloudAccessInterface::FullPointCloudAccessInterface(PointCloudHeaderInterface* header, PointCloudPointAccessInterface* points) :
     headerAccess(header),
-    pointAccess(points)
-{
+    pointAccess(points) {
 
 }
 
 FullPointCloudAccessInterface::FullPointCloudAccessInterface(FullPointCloudAccessInterface && other) :
     headerAccess(std::move(other.headerAccess)),
-    pointAccess(std::move(other.pointAccess))
-{
+    pointAccess(std::move(other.pointAccess)) {
     other.headerAccess = nullptr;
     other.pointAccess = nullptr;
 }
 
-std::optional<FullPointCloudAccessInterface> openPointCloud(const std::filesystem::path &filePath)
-{
+std::optional<FullPointCloudAccessInterface> openPointCloud(const std::filesystem::path &filePath) {
     // get the file extension of the file
     auto fileExtension = filePath.extension();
     if (fileExtension == ".sdc" || fileExtension == ".SDC") {
