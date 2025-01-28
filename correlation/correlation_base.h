@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <MultidimArrays/MultidimArrays.h>
 
 #include <cmath>
+#include <cstdint>
 #include <limits>
 
 namespace StereoVision {

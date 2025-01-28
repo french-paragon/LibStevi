@@ -34,7 +34,7 @@ static std::istream &operator>>(std::istream &is, PcdDataStorageType &data);
  * @param pointcloudPointAccessInterface The pointcloud point access interface
  * @return A tuple containing the sanitized attributes names, original attributes names, their byte size, their type and their count
  */
-static PcdDataLayout getPcdDataLayoutFromPointcloudPoint(const PointCloudPointAccessInterface& pointcloudPointAccessInterface);
+static PcdDataLayout getPcdDataLayoutFromPointcloudPoint(PointCloudPointAccessInterface* pointcloudPointAccessInterface);
 
 /**
  * @brief sanitize a string to be a valid pcd attribute name. Only alphanumeric characters and underscores are allowed.
@@ -47,10 +47,20 @@ static std::string sanitizeAttributeNamePcd(const std::string& str);
 /// @brief adapter class to obtain a PcdPointCloudPoint from any PointCloudPointAccessInterface
 class PcdPointCloudPointBasicAdapter : public PcdPointCloudPoint {
 protected:
+    std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterfaceUniquePtr = nullptr;
     PointCloudPointAccessInterface* pointCloudPointAccessInterface = nullptr;
+
     const std::vector<std::string> originalAttributeNames;
 public:
-    PcdPointCloudPointBasicAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface);
+    /**
+     * @brief Adapter class to obtain a PcdPointCloudPoint from any PointCloudPointAccessInterface
+     *
+     * @param pointCloudPointAccessInterfaceUniquePtr a unique pointer to a PointCloudPointAccessInterface object.
+     * @param pointCloudPointAccessInterface a pointer to a PointCloudPointAccessInterface object. If
+     * pointCloudPointAccessInterfaceUniquePtr is not nullptr, this should point to the same object.
+     */
+    PcdPointCloudPointBasicAdapter(std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterfaceUniquePtr,
+        PointCloudPointAccessInterface* pointCloudPointAccessInterface );
 
     PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;
 
@@ -65,7 +75,8 @@ public:
     bool gotoNext() override;
 
 protected:
-    PcdPointCloudPointBasicAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface,
+    PcdPointCloudPointBasicAdapter(std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterfaceUniquePtr,
+        PointCloudPointAccessInterface* pointCloudPointAccessInterface,
         const PcdDataLayout& attributeInformations);
 
     /**
@@ -77,27 +88,36 @@ protected:
 };
 
 /// @brief adapter class to obtain a PcdPointCloudPoint from a SdcPointCloudPoint
-class PcdPointCloudPointFromSdcAdapter : public PcdPointCloudPoint
-{
+class PcdPointCloudPointFromSdcAdapter : public PcdPointCloudPoint {
 protected:
-    SdcPointCloudPoint* sdcPointCloudPoint = nullptr;
+    std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointInterface = nullptr;
+    SdcPointCloudPoint* castedSdcPointCloudPoint = nullptr;
 public:
-    PcdPointCloudPointFromSdcAdapter(SdcPointCloudPoint* sdcPointCloudPoint);
+    /**
+     * @brief Construct a new Pcd Point Cloud Point From a PointCloudPointAccessInterface object that must be a SdcPointCloudPoint.
+     * 
+     * @param pointCloudPointInterface a unique pointer to a PointCloudPointAccessInterface object that must be a SdcPointCloudPoint
+     * @param sdcPointCloudPoint a pointer to the SdcPointCloudPoint. If sdcPointCloudPointUniquePtr is not nullptr,
+     * this pointer should point to the same object. If sdcPointCloudPointUniquePtr is nullptr, it may still point to
+     * a valid SdcPointCloudPoint. This can be useful when we don't want the pass the ownership of the SdcPointCloudPoint
+     * to the adapter.
+     */
+    PcdPointCloudPointFromSdcAdapter(std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointInterface,
+        SdcPointCloudPoint* castedSdcPointCloudPoint);
 
     bool gotoNext() override;
 
 protected:
-    PcdPointCloudPointFromSdcAdapter(SdcPointCloudPoint* sdcPointCloudPoint,
-        const PcdDataLayout& attributeInformations);
+    PcdPointCloudPointFromSdcAdapter(std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointInterface,
+        SdcPointCloudPoint* castedSdcPointCloudPoint, const PcdDataLayout& attributeInformations);
 };
 
 /// @brief adapter class to obtain a PcdPointCloudHeader from any PointCloudHeaderInterface
-class PcdPointCloudHeaderBasicAdapter : public PcdPointCloudHeader
-{
+class PcdPointCloudHeaderBasicAdapter : public PcdPointCloudHeader {
 protected:
-    PointCloudHeaderInterface* pointCloudHeaderInterface = nullptr;
+    std::unique_ptr<PointCloudHeaderInterface> pointCloudHeaderInterface = nullptr;
 public:
-    PcdPointCloudHeaderBasicAdapter(PointCloudHeaderInterface* pointCloudHeaderInterface);
+    PcdPointCloudHeaderBasicAdapter(std::unique_ptr<PointCloudHeaderInterface> pointCloudHeaderInterface);
 
 private:
     /**
@@ -379,27 +399,32 @@ bool PcdPointCloudPoint::gotoNextBinaryCompressed()
     return false;
 }
 
-std::shared_ptr<PcdPointCloudPoint> PcdPointCloudPoint::createAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface) {
+std::unique_ptr<PointCloudPointAccessInterface> PcdPointCloudPoint::createAdapter(
+    std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterface) {
+
     // test if nullptr. If so, return nullptr
     if (pointCloudPointAccessInterface == nullptr) {return nullptr;}
-    
+
     // we test if the interface is already a PcdPointCloudPoint with a dynamic cast
-    PcdPointCloudPoint* pcdPoint = dynamic_cast<PcdPointCloudPoint*>(pointCloudPointAccessInterface);
+    PcdPointCloudPoint* pcdPoint = dynamic_cast<PcdPointCloudPoint*>(pointCloudPointAccessInterface.get());
     if (pcdPoint != nullptr) {
-        // if it is already a PcdPointCloudPointAdapter, we return a shared pointer with no ownership
-        return std::shared_ptr<PcdPointCloudPoint>{std::shared_ptr<PcdPointCloudPoint>{}, pcdPoint};
+        // if it is already a PcdPointCloudPointAdapter, we return it
+        return std::move(pointCloudPointAccessInterface);
     }
+
     // cast to SdcPointCloudPoint
-    SdcPointCloudPoint* sdcPoint = dynamic_cast<SdcPointCloudPoint*>(pointCloudPointAccessInterface);
+    SdcPointCloudPoint* sdcPoint = dynamic_cast<SdcPointCloudPoint*>(pointCloudPointAccessInterface.get());
     if (sdcPoint != nullptr) {
         // create a new PcdPointCloudPointAdapter
-        return std::make_shared<PcdPointCloudPointFromSdcAdapter>(sdcPoint);
+        return std::make_unique<PcdPointCloudPointFromSdcAdapter>(std::move(pointCloudPointAccessInterface), sdcPoint);
     }
+
     // create a new PcdPointCloudPointBasicAdapter
-    return std::make_shared<PcdPointCloudPointBasicAdapter>(pointCloudPointAccessInterface);
+    auto pointCloudPtr = pointCloudPointAccessInterface.get();
+    return std::make_unique<PcdPointCloudPointBasicAdapter>(std::move(pointCloudPointAccessInterface), pointCloudPtr);
 }
 
-PcdPointCloudHeader::PcdPointCloudHeader(){}
+PcdPointCloudHeader::PcdPointCloudHeader(){ }
 
 /**
  * @brief Constructs a PcdPointCloudHeader object with the specified parameters for the PCD file format (see the PCL documentation for more information).
@@ -688,24 +713,23 @@ bool PcdPointCloudHeader::writeHeader(std::ostream &writer, const PcdPointCloudH
     return true;
 }
 
-std::shared_ptr<PcdPointCloudHeader> PcdPointCloudHeader::createAdapter(PointCloudHeaderInterface *pointCloudHeaderInterface)
-{
+std::unique_ptr<PointCloudHeaderInterface> PcdPointCloudHeader::createAdapter(std::unique_ptr<PointCloudHeaderInterface> pointCloudHeaderInterface) {
+    
     // test if nullptr. If so, return nullptr
     if (pointCloudHeaderInterface == nullptr) {return nullptr;}
-    
+
     // we test if the interface is already a PcdPointCloudHeader with a dynamic cast
-    PcdPointCloudHeader* pcdPoint = dynamic_cast<PcdPointCloudHeader*>(pointCloudHeaderInterface);
-    if (pcdPoint != nullptr) {
+    PcdPointCloudHeader* pcdHeader = dynamic_cast<PcdPointCloudHeader*>(pointCloudHeaderInterface.get());
+    if (pcdHeader != nullptr) {
         // if it is already a PcdPointCloudHeaderAdapter, we return a shared pointer with no ownership
-        return std::shared_ptr<PcdPointCloudHeader>{std::shared_ptr<PcdPointCloudHeader>{}, pcdPoint};
+        return std::move(pointCloudHeaderInterface);
     } else {
         // create a new PcdPointCloudHeaderAdapter
-        return std::make_shared<PcdPointCloudHeaderBasicAdapter>(pointCloudHeaderInterface);
+        return std::make_unique<PcdPointCloudHeaderBasicAdapter>(std::move(pointCloudHeaderInterface));
     }
 }
 
-std::vector<std::string> PcdPointCloudHeader::attributeList() const
-{
+std::vector<std::string> PcdPointCloudHeader::attributeList() const {
     return attributeNames;
 }
 
@@ -747,18 +771,21 @@ static std::istream &operator>>(std::istream &is, PcdDataStorageType &data)
     return is;
 }
 
-PcdDataLayout getPcdDataLayoutFromPointcloudPoint(const PointCloudPointAccessInterface &pointcloudPointAccessInterface) {
+PcdDataLayout getPcdDataLayoutFromPointcloudPoint(PointCloudPointAccessInterface* pointcloudPointAccessInterface) {
+
+    if (pointcloudPointAccessInterface == nullptr) {return PcdDataLayout{};}
+
     // try to guess header parameters from the point cloud directly
     auto originalAttributeNames = std::vector<std::string>{};
     auto sanitizedAttributeNames = std::vector<std::string>{};
     auto size = std::vector<size_t>{};
     auto type = std::vector<uint8_t>{};
     auto count = std::vector<size_t>{};
-
+    
     size_t nbAttributes = 0;
-    for (auto&& attributeName : pointcloudPointAccessInterface.attributeList()) {
+    for (auto&& attributeName : pointcloudPointAccessInterface->attributeList()) {
         // try to find the attribute name in the header
-        auto attrOpt = pointcloudPointAccessInterface.getAttributeByName(attributeName.c_str()); 
+        auto attrOpt = pointcloudPointAccessInterface->getAttributeByName(attributeName.c_str()); 
 
         if (attrOpt) {
             const auto attr = attrOpt.value();
@@ -930,8 +957,14 @@ bool writePointCloudPcd(std::ostream &writer, FullPointCloudAccessInterface &poi
     size_t headerPoints = 0;
     PcdDataStorageType headerData = PcdDataStorageType::ascii;
 
-    auto pcdHeaderAccessAdapter = PcdPointCloudHeader::createAdapter(pointCloud.headerAccess.get());
-    if (pcdHeaderAccessAdapter) {
+    auto tempHeader = PcdPointCloudHeader::createAdapter(std::move(pointCloud.headerAccess));
+
+    pointCloud.headerAccess = std::move(tempHeader);
+
+    // safe to static cast because we know that the point cloud is a pcd point cloud
+    auto pcdHeaderAccessAdapter = static_cast<PcdPointCloudHeader*>(pointCloud.headerAccess.get());
+
+    if (pcdHeaderAccessAdapter != nullptr) {
         headerVersion = pcdHeaderAccessAdapter->version;
         headerWidth = pcdHeaderAccessAdapter->width;
         headerHeight = pcdHeaderAccessAdapter->height;
@@ -941,8 +974,11 @@ bool writePointCloudPcd(std::ostream &writer, FullPointCloudAccessInterface &poi
     }
 
     // get the pointcloud point adapter
-    auto pcdPointAccessAdapter = PcdPointCloudPoint::createAdapter(pointCloud.pointAccess.get());
-    if (!(pcdPointAccessAdapter)) {return false;}
+    pointCloud.pointAccess = PcdPointCloudPoint::createAdapter(std::move(pointCloud.pointAccess));
+
+    // safe to static cast
+    auto pcdPointAccessAdapter = static_cast<PcdPointCloudPoint*>(pointCloud.pointAccess.get());
+    if (pcdPointAccessAdapter == nullptr) {return false;}
 
     auto usedDataStorageType = headerData;
     // set the data storage type
@@ -963,7 +999,6 @@ bool writePointCloudPcd(std::ostream &writer, FullPointCloudAccessInterface &poi
     if (!PcdPointCloudHeader::writeHeader(writer, newHeader, headerWidthPos, headerHeightPos, headerPointsPos)) {
         return false;
     }
-
 
     size_t nbPoints = 0;
     // write the points
@@ -1018,16 +1053,27 @@ bool writePointCloudPcd(std::ostream &writer, FullPointCloudAccessInterface &poi
     return true;
 }
 
-PcdPointCloudPointBasicAdapter::PcdPointCloudPointBasicAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface,
+PcdPointCloudPointBasicAdapter::PcdPointCloudPointBasicAdapter(
+    std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterfaceUniquePtr,
+    PointCloudPointAccessInterface* pointCloudPointAccessInterface,
     const PcdDataLayout& attributeInformations) :
-    originalAttributeNames(std::get<1>(attributeInformations)),
-    PcdPointCloudPoint{nullptr, std::get<0>(attributeInformations), std::get<2>(attributeInformations), std::get<3>(attributeInformations),
-        std::get<4>(attributeInformations), PcdDataStorageType::ascii}, pointCloudPointAccessInterface(pointCloudPointAccessInterface) {
+        originalAttributeNames{std::get<1>(attributeInformations)},
+        PcdPointCloudPoint{nullptr, std::get<0>(attributeInformations),
+            std::get<2>(attributeInformations), std::get<3>(attributeInformations),
+            std::get<4>(attributeInformations), PcdDataStorageType::ascii},
+        pointCloudPointAccessInterfaceUniquePtr{std::move(pointCloudPointAccessInterfaceUniquePtr)},
+        pointCloudPointAccessInterface{pointCloudPointAccessInterface} {
+    
     adaptInternalState(); // set the internal state for the first time
 }
 
-PcdPointCloudPointBasicAdapter::PcdPointCloudPointBasicAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface):
-    PcdPointCloudPointBasicAdapter(pointCloudPointAccessInterface, getPcdDataLayoutFromPointcloudPoint(*pointCloudPointAccessInterface)) {}
+PcdPointCloudPointBasicAdapter::PcdPointCloudPointBasicAdapter(
+    std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterfaceUniquePtr,
+    PointCloudPointAccessInterface* pointCloudPointAccessInterface) :
+        PcdPointCloudPointBasicAdapter(std::move(pointCloudPointAccessInterfaceUniquePtr),
+        pointCloudPointAccessInterface,
+        getPcdDataLayoutFromPointcloudPoint(pointCloudPointAccessInterface)) {
+}
 
 PtGeometry<PointCloudGenericAttribute> PcdPointCloudPointBasicAdapter::getPointPosition() const {
     return pointCloudPointAccessInterface->getPointPosition();
@@ -1127,10 +1173,10 @@ bool PcdPointCloudPointBasicAdapter::adaptInternalState() {
     return true;
 }
 
-PcdPointCloudHeaderBasicAdapter::PcdPointCloudHeaderBasicAdapter(PointCloudHeaderInterface *pointCloudHeaderInterface) :
-    PcdPointCloudHeader{}
-{
-    this->pointCloudHeaderInterface = pointCloudHeaderInterface;
+PcdPointCloudHeaderBasicAdapter::PcdPointCloudHeaderBasicAdapter(
+    std::unique_ptr<PointCloudHeaderInterface> pointCloudHeaderInterface) :
+    PcdPointCloudHeader{} {
+    this->pointCloudHeaderInterface = std::move(pointCloudHeaderInterface);
 
     // try to adapt the header
     adaptInternalState();
@@ -1295,21 +1341,24 @@ bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointClo
     return writer.good();
 }
 
-PcdPointCloudPointFromSdcAdapter::PcdPointCloudPointFromSdcAdapter(SdcPointCloudPoint *sdcPointCloudPoint):
-    PcdPointCloudPointFromSdcAdapter(sdcPointCloudPoint, getPcdDataLayoutFromPointcloudPoint(*sdcPointCloudPoint)) {}
+PcdPointCloudPointFromSdcAdapter::PcdPointCloudPointFromSdcAdapter(
+    std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointInterface, SdcPointCloudPoint* castedSdcPointCloudPoint):
+    PcdPointCloudPointFromSdcAdapter(std::move(pointCloudPointInterface), castedSdcPointCloudPoint,
+    getPcdDataLayoutFromPointcloudPoint(castedSdcPointCloudPoint)) {}
 
-bool PcdPointCloudPointFromSdcAdapter::gotoNext()
-{
-   return sdcPointCloudPoint->gotoNext();
+
+bool PcdPointCloudPointFromSdcAdapter::gotoNext() {
+   return castedSdcPointCloudPoint->gotoNext();
 }
 
-PcdPointCloudPointFromSdcAdapter::PcdPointCloudPointFromSdcAdapter(SdcPointCloudPoint *sdcPointCloudPoint, 
-    const PcdDataLayout& attributeInformations) :
+PcdPointCloudPointFromSdcAdapter::PcdPointCloudPointFromSdcAdapter(
+    std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointInterface,
+        SdcPointCloudPoint* castedSdcPointCloudPoint, const PcdDataLayout& attributeInformations) :
+        castedSdcPointCloudPoint{castedSdcPointCloudPoint},
         PcdPointCloudPoint{nullptr, std::get<0>(attributeInformations), std::get<2>(attributeInformations),
             std::get<3>(attributeInformations), std::get<4>(attributeInformations), PcdDataStorageType::ascii,
-            sdcPointCloudPoint->getRecordDataBuffer()},
-        sdcPointCloudPoint(sdcPointCloudPoint)
-{
+            castedSdcPointCloudPoint->getRecordDataBuffer()},
+            pointCloudPointInterface{std::move(pointCloudPointInterface)} {
     
 }
 
