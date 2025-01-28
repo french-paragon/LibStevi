@@ -641,7 +641,9 @@ public:
 
 class LasPointCloudPointBasicAdapter : public LasPointCloudPoint {
 protected:
+    std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterfaceUniquePtr = nullptr;
     PointCloudPointAccessInterface* pointCloudPointAccessInterface = nullptr;
+    
     const size_t format;
     const size_t minimumNumberOfAttributes;
     const size_t recordByteSize;
@@ -655,7 +657,16 @@ protected:
     const std::vector<size_t> bitfieldOffset;
 
 public:
-    LasPointCloudPointBasicAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface);
+    /**
+     * @brief adapt a point cloud point access interface to the LasPointCloudPoint interface.
+     * 
+     * @param pointCloudPointAccessInterfaceUniquePtr A unique pointer to the interface.
+     * @param pointCloudPointAccessInterface  A pointer to the interface. If pointCloudPointAccessInterfaceUniquePtr
+     * is not null, it should point to the same object.
+     */
+    LasPointCloudPointBasicAdapter(
+        std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterfaceUniquePtr,
+        PointCloudPointAccessInterface* pointCloudPointAccessInterface);
 
     PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;
 
@@ -690,10 +701,12 @@ public:
      * @param pointcloudPointAccessInterface The pointcloud point access interface
      * @return A struct containing the sanitized attributes names, original attributes names, their byte size, their type and their count
      */
-    static LasDataLayout getLasDataLayoutFromPointcloudPoint(const PointCloudPointAccessInterface& pointcloudPointAccessInterface);
+    static LasDataLayout getLasDataLayoutFromPointcloudPoint(PointCloudPointAccessInterface* pointcloudPointAccessInterface);
 protected:
 
-    LasPointCloudPointBasicAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface,
+    LasPointCloudPointBasicAdapter(
+        std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterfaceUniquePtr,
+        PointCloudPointAccessInterface* pointCloudPointAccessInterface,
         const LasDataLayout& attributeInformations);
 
     /**
@@ -1244,18 +1257,20 @@ bool LasPointCloudPoint::write(std::ostream &writer) const {
     return writer.good();
 }
 
-std::shared_ptr<LasPointCloudPoint> LasPointCloudPoint::createAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface) {
+std::unique_ptr<PointCloudPointAccessInterface> LasPointCloudPoint::createAdapter(
+    std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterface) {
     // test if nullptr. If so, return nullptr
     if (pointCloudPointAccessInterface == nullptr) {return nullptr;}
 
     // try to cast the point cloud to a las point cloud
-    auto lasPoint = dynamic_cast<LasPointCloudPoint*>(pointCloudPointAccessInterface);
+    auto lasPoint = dynamic_cast<LasPointCloudPoint*>(pointCloudPointAccessInterface.get());
     if (lasPoint != nullptr) {
-        // return a shared pointer with no ownership
-        return std::shared_ptr<LasPointCloudPoint>{std::shared_ptr<LasPointCloudPoint>{}, lasPoint};
+        // return same object
+        return std::move(pointCloudPointAccessInterface);
     }
     // create adapter
-    return std::make_shared<LasPointCloudPointBasicAdapter>(pointCloudPointAccessInterface);
+    auto pointPtr = pointCloudPointAccessInterface.get();
+    return std::make_unique<LasPointCloudPointBasicAdapter>(std::move(pointCloudPointAccessInterface), pointPtr);
 }
 
 std::optional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesystem::path &lasFilePath) {
@@ -1309,8 +1324,10 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
         return false;
     }
     
-    auto lasPointAccessAdapter = LasPointCloudPoint::createAdapter(pointCloud.pointAccess.get());
-    if (!lasPointAccessAdapter) return false;
+    pointCloud.pointAccess = LasPointCloudPoint::createAdapter(std::move(pointCloud.pointAccess));
+    // safe cast
+    auto lasPointAccessAdapter = static_cast<LasPointCloudPoint*>(pointCloud.pointAccess.get());
+    if (lasPointAccessAdapter == nullptr) return false;
 
     // try to cast the header to a las header
     auto lasHeader = dynamic_cast<LasPointCloudHeader*>(pointCloud.headerAccess.get());
@@ -1550,8 +1567,12 @@ std::vector<std::byte> LasExtraBytesDescriptor::toBytes() const {
     return bytes;
 }
 
-LasPointCloudPointBasicAdapter::LasPointCloudPointBasicAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface) :
-        LasPointCloudPointBasicAdapter(pointCloudPointAccessInterface, getLasDataLayoutFromPointcloudPoint(*pointCloudPointAccessInterface))
+LasPointCloudPointBasicAdapter::LasPointCloudPointBasicAdapter(
+    std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterfaceUniquePtr,
+    PointCloudPointAccessInterface* pointCloudPointAccessInterface) :
+        LasPointCloudPointBasicAdapter{std::move(pointCloudPointAccessInterfaceUniquePtr),
+            pointCloudPointAccessInterface,
+            getLasDataLayoutFromPointcloudPoint(pointCloudPointAccessInterface)}
 { }
 
 PtGeometry<PointCloudGenericAttribute> LasPointCloudPointBasicAdapter::getPointPosition() const {
@@ -1670,14 +1691,22 @@ size_t LasPointCloudPointBasicAdapter::getSuitableFormat(const PointCloudPointAc
     return format;
 }
 
-LasDataLayout LasPointCloudPointBasicAdapter::getLasDataLayoutFromPointcloudPoint(const PointCloudPointAccessInterface& pointcloudPointAccessInterface) {
-    auto format = getSuitableFormat(pointcloudPointAccessInterface);
-    return getLasDataLayoutFromPointcloudPoint_helper(pointcloudPointAccessInterface, format);
+LasDataLayout LasPointCloudPointBasicAdapter::getLasDataLayoutFromPointcloudPoint(
+    PointCloudPointAccessInterface* pointcloudPointAccessInterface) {
+    
+    if (pointcloudPointAccessInterface == nullptr) {
+        return {};
+    }
+    auto format = getSuitableFormat(*pointcloudPointAccessInterface);
+    return getLasDataLayoutFromPointcloudPoint_helper(*pointcloudPointAccessInterface, format);
 }
 
 
-LasPointCloudPointBasicAdapter::LasPointCloudPointBasicAdapter(PointCloudPointAccessInterface *pointCloudPointAccessInterface,
+LasPointCloudPointBasicAdapter::LasPointCloudPointBasicAdapter(
+    std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterfaceUniquePtr,
+    PointCloudPointAccessInterface* pointCloudPointAccessInterface,
     const LasDataLayout &attributeInformations) :
+        pointCloudPointAccessInterfaceUniquePtr{std::move(pointCloudPointAccessInterfaceUniquePtr)},
         pointCloudPointAccessInterface{pointCloudPointAccessInterface}, format{attributeInformations.format},
         minimumNumberOfAttributes{attributeInformations.minimumNumberOfAttributes},
         recordByteSize{attributeInformations.recordByteSize}, attributeNames{attributeInformations.attributeNames},
@@ -1685,6 +1714,7 @@ LasPointCloudPointBasicAdapter::LasPointCloudPointBasicAdapter(PointCloudPointAc
         fieldOffset{attributeInformations.fieldOffset}, usePriorDataOffset{attributeInformations.usePriorDataOffset},
         isBitfield{attributeInformations.isBitfield}, bitfieldSize{attributeInformations.bitfieldSize},
         bitfieldOffset{attributeInformations.bitfieldOffset}, LasPointCloudPoint{attributeInformations.recordByteSize} {
+
     adaptInternalState();
 }
 
