@@ -114,9 +114,10 @@ public:
      * If the given interface is null, a nullptr is returned.
      * 
      * @param pointCloudPointAccessInterface the interface to adapt
-     * @return a shared_ptr to the adapted interface
+     * @return a pointer to the adapted interface that can be safe casted to a PcdPointCloudPoint
      */
-    static std::shared_ptr<PcdPointCloudPoint> createAdapter(PointCloudPointAccessInterface* pointCloudPointAccessInterface);
+    static std::unique_ptr<PointCloudPointAccessInterface> createAdapter(
+            std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterface);
 
 private:
     bool gotoNextAscii();
@@ -181,9 +182,9 @@ public:
      * If the given interface is null, a nullptr is returned.
      * 
      * @param pointCloudHeaderInterface the interface to adapt
-     * @return a shared_ptr to the adapted interface
+     * @return a pointer to the adapted interface that can be safely cast to a PcdPointCloudHeader
      */
-    static std::shared_ptr<PcdPointCloudHeader> createAdapter(PointCloudHeaderInterface* pointCloudHeaderInterface);
+    static std::unique_ptr<PointCloudHeaderInterface> createAdapter(std::unique_ptr<PointCloudHeaderInterface> pointCloudHeaderInterface);
 };
 
 /**
