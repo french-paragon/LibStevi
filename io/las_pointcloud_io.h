@@ -164,7 +164,7 @@ public:
     // get an attribute by its id
     std::optional<PointCloudGenericAttribute> getPublicHeaderAttributeById(int id) const;
     // get the list of attributes
-    std::vector<std::string> publicHeaderAttributeList() const { return publicHeaderAttributes; }
+    inline std::vector<std::string> const& publicHeaderAttributeList() const { return publicHeaderAttributes; }
     
     // getters
     
