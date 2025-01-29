@@ -70,7 +70,7 @@ int main(int argc, char const *argv[]) {
     auto pointColor = cloudpoint->castedPointColor<double>();
     if (pointColor.has_value())
     {
-        std::cout << "point color: " << pointColor->r << ' ' << pointColor->g << ' ' << pointColor->b << '\n';
+        std::cout << "point color: " << pointColor->r << ' ' << pointColor->g << ' ' << pointColor->b << ' ' << pointColor->a << '\n';
     }
 
     std::cout << "--------------first point after map -----------------\n";
@@ -96,7 +96,7 @@ int main(int argc, char const *argv[]) {
     std::cout << "point geometry: " << pointGeo.x << ' ' << pointGeo.y << ' ' << pointGeo.z << '\n';
     pointColor = cloudpoint2->castedPointColor<double>();
     if (pointColor.has_value()) {
-        std::cout << "point color: " << pointColor->r << ' ' << pointColor->g << ' ' << pointColor->b << '\n';
+        std::cout << "point color: " << pointColor->r << ' ' << pointColor->g << ' ' << pointColor->b << ' ' << pointColor->a << '\n';
     }
 
     return 0;

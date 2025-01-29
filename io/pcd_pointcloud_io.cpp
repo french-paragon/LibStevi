@@ -131,8 +131,8 @@ private:
 PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::istream> reader,
     const std::vector<std::string>& attributeNames, const std::vector<size_t>& fieldByteSize,
     const std::vector<uint8_t>& fieldType, const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType) :
-    PcdPointCloudPoint(std::move(reader), attributeNames, fieldByteSize, fieldType, fieldCount, dataStorageType, nullptr)
-{
+    PcdPointCloudPoint(std::move(reader), attributeNames, fieldByteSize, fieldType, fieldCount, dataStorageType, nullptr) {
+
     dataBufferContainer.resize(recordByteSize);
     dataBuffer = dataBufferContainer.data();
 }
@@ -141,10 +141,10 @@ PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::istream> reader,
     const std::vector<std::string>& attributeNames, const std::vector<size_t>& fieldByteSize,
     const std::vector<uint8_t>& fieldType, const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType,
     char* dataBuffer) :
-    attributeNames{attributeNames}, fieldByteSize{fieldByteSize},
-    fieldOffset(fieldByteSize.size()), fieldType{fieldType}, fieldCount{fieldCount},
-    dataStorageType{dataStorageType}, reader{std::move(reader)}, dataBuffer{dataBuffer}
-{
+        attributeNames{attributeNames}, fieldByteSize{fieldByteSize},
+        fieldOffset(fieldByteSize.size()), fieldType{fieldType}, fieldCount{fieldCount},
+        dataStorageType{dataStorageType}, reader{std::move(reader)}, dataBuffer{dataBuffer} {
+    
     // compute the offsets
     const auto* fieldCountPtr = fieldCount.data();
     const auto* fieldByteSizePtr = fieldByteSize.data();
@@ -159,41 +159,95 @@ PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::istream> reader,
         recordByteSize = fieldOffset.back() + fieldCount.back() * fieldByteSize.back();
     }
 
+    auto AttributeNamesLowercase = attributeNames;
+    // to lower
+    for (auto& name : AttributeNamesLowercase) {
+        std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
+    }
+
+    bool containsRed = false;
+    bool containsGreen = false;
+    bool containsBlue = false;
+    bool containsAlpha = false;
+
     // find the index of the rgba field
     auto it = std::find(attributeNames.begin(), attributeNames.end(), "rgba");
+     if (it == attributeNames.end()) {
+         it = std::find(attributeNames.begin(), attributeNames.end(), "rgb");
+     }
     if (it != attributeNames.end()) {
         rgbaIndex = std::distance(attributeNames.begin(), it);
+        containsColorSingleField = true;
         containsColor = true;
-    } else {
-        it = std::find(attributeNames.begin(), attributeNames.end(), "rgb");
-        if (it != attributeNames.end()) {
-            rgbaIndex = std::distance(attributeNames.begin(), it);
-            containsColor = true;
+    // with 3-4 color fields:
+    } else if (!containsColor) {
+        for (int i = 0; i < attributeNames.size(); i++) {
+            auto name = attributeNames[i];
+            if (name == "r") {
+                rIndex = i;
+                containsRed = true;
+            } else if (name == "g") {
+                gIndex = i;
+                containsGreen = true;
+            } else if (name == "b") {
+                bIndex = i;
+                containsBlue = true;
+            } else if (name == "a") {
+                aIndex = i;
+                containsAlpha = true;
+            }
+        }
+        containsColor = containsRed && containsGreen && containsBlue;
+        containsColorSingleField = false;
+        this->containsAlpha = containsAlpha;
+    }
+
+    // "red", "green", "blue", "alpha"
+    if (!containsColor) {
+        for (int i = 0; i < AttributeNamesLowercase.size(); i++) {
+            auto name = AttributeNamesLowercase[i];
+            if (name == "red") {
+                rIndex = i;
+                containsRed = true;
+            } else if (name == "green") {
+                gIndex = i;
+                containsGreen = true;
+            } else if (name == "blue") {
+                bIndex = i;
+                containsBlue = true;
+            } else if (name == "alpha") {
+                aIndex = i;
+                containsAlpha = true;
+            }
+        }
+        containsColor = containsRed && containsGreen && containsBlue;
+        containsColorSingleField = false;
+        this->containsAlpha = containsAlpha;
+    }
+
+    // find the index of the position fields
+    bool containsX = false;
+    bool containsY = false;
+    bool containsZ = false;
+    
+    for (int i = 0; i < AttributeNamesLowercase.size(); i++) {
+        auto name = AttributeNamesLowercase[i];
+        if (name == "x") {
+            containsX = true;
+            xIndex = i;
+        } else if (name == "y") {
+            containsY = true;
+            yIndex = i;
+        } else if (name == "z") {
+            containsZ = true;
+            zIndex = i;
         }
     }
-    // find the index of the x field
-    it = std::find(attributeNames.begin(), attributeNames.end(), "x");
-    if (it != attributeNames.end()) {
-        xIndex = std::distance(attributeNames.begin(), it);
-        containsPosition = true;
-    }
-    // find the index of the y field
-    it = std::find(attributeNames.begin(), attributeNames.end(), "y");
-    if (it != attributeNames.end()) {
-        yIndex = std::distance(attributeNames.begin(), it);
-        containsPosition = true;
-    }
-    // find the index of the z field
-    it = std::find(attributeNames.begin(), attributeNames.end(), "z");
-    if (it != attributeNames.end()) {
-        zIndex = std::distance(attributeNames.begin(), it);
-        containsPosition = true;
-    }
+    containsPosition = containsX && containsY && containsZ;
 }
 
-PtGeometry<PointCloudGenericAttribute> PcdPointCloudPoint::getPointPosition() const
-{
-    const auto nan = std::nan("");
+PtGeometry<PointCloudGenericAttribute> PcdPointCloudPoint::getPointPosition() const {
+    static const auto nan = std::nan("");
     if (!containsPosition) {
         return PtGeometry<PointCloudGenericAttribute>{nan, nan, nan};
     } else {
@@ -201,26 +255,34 @@ PtGeometry<PointCloudGenericAttribute> PcdPointCloudPoint::getPointPosition() co
     }
 }
 
-std::optional<PtColor<PointCloudGenericAttribute>> PcdPointCloudPoint::getPointColor() const
-{
-    if (!containsColor) {
-        return std::nullopt;
+std::optional<PtColor<PointCloudGenericAttribute>> PcdPointCloudPoint::getPointColor() const {
+    if (!containsColor) return std::nullopt;
+    
+    if (containsColorSingleField) {
+        auto rgba_opt = getAttributeById(rgbaIndex);
+        if (!rgba_opt.has_value()) {
+            return std::nullopt;
+        }
+        const float rgba_float = std::get<float>(rgba_opt.value());
+        const uint32_t rgba = bit_cast<uint32_t>(rgba_float);
+        const uint8_t a = (rgba >> 24)  & 0x000000FF;
+        const uint8_t r = (rgba >> 16)  & 0x000000FF;
+        const uint8_t g = (rgba >> 8)   & 0x000000FF;
+        const uint8_t b =  rgba         & 0x000000FF;
+        return PtColor<PointCloudGenericAttribute>{r, g, b, a};
+    } else {
+        return PtColor<PointCloudGenericAttribute>
+            {
+                getAttributeById(rIndex).value_or(0),
+                getAttributeById(gIndex).value_or(0),
+                getAttributeById(bIndex).value_or(0),
+                // TODO: value or empty struct
+                containsAlpha ? getAttributeById(aIndex).value_or(0) : 0
+            };
     }
-    auto rgba_opt = getAttributeById(rgbaIndex);
-    if (!rgba_opt.has_value()) {
-        return std::nullopt;
-    }
-    const float rgba_float = std::get<float>(rgba_opt.value());
-    const uint32_t rgba = bit_cast<uint32_t>(rgba_float);
-    const uint8_t a = (rgba >> 24)  & 0x000000FF;
-    const uint8_t r = (rgba >> 16)  & 0x000000FF;
-    const uint8_t g = (rgba >> 8)   & 0x000000FF;
-    const uint8_t b =  rgba         & 0x000000FF;
-    return PtColor<PointCloudGenericAttribute>{r, g, b, a};
 }
 
-std::optional<PointCloudGenericAttribute> PcdPointCloudPoint::getAttributeById(int id) const
-{
+std::optional<PointCloudGenericAttribute> PcdPointCloudPoint::getAttributeById(int id) const {
     static_assert(sizeof(float) == 4); // check if float is 4 bytes, should be true on most systems
     static_assert(sizeof(double) == 8); // check if double is 8 bytes
 
@@ -276,8 +338,7 @@ std::optional<PointCloudGenericAttribute> PcdPointCloudPoint::getAttributeById(i
     return std::nullopt;
 }
 
-std::optional<PointCloudGenericAttribute> PcdPointCloudPoint::getAttributeByName(const char *attributeName) const
-{
+std::optional<PointCloudGenericAttribute> PcdPointCloudPoint::getAttributeByName(const char *attributeName) const {
     auto it = std::find(attributeNames.begin(), attributeNames.end(), attributeName);
     if (it != attributeNames.end()) {
         return getAttributeById(std::distance(attributeNames.begin(), it));
@@ -285,8 +346,7 @@ std::optional<PointCloudGenericAttribute> PcdPointCloudPoint::getAttributeByName
     return std::nullopt; // Attribute not found
 }
 
-std::vector<std::string> PcdPointCloudPoint::attributeList() const
-{
+std::vector<std::string> PcdPointCloudPoint::attributeList() const {
     return attributeNames;
 }
 
@@ -386,16 +446,14 @@ bool PcdPointCloudPoint::gotoNextAscii() {
     return true;
 }
 
-bool PcdPointCloudPoint::gotoNextBinary()
-{
+bool PcdPointCloudPoint::gotoNextBinary() {
     // we just read the next record
     reader->read(dataBuffer, recordByteSize);
     if (!reader->good()) return false;
     return true;
 }
 
-bool PcdPointCloudPoint::gotoNextBinaryCompressed()
-{
+bool PcdPointCloudPoint::gotoNextBinaryCompressed() {
     return false;
 }
 
@@ -1100,7 +1158,7 @@ std::vector<std::string> PcdPointCloudPointBasicAdapter::attributeList() const {
 }
 
 bool PcdPointCloudPointBasicAdapter::gotoNext() {
-    return pointCloudPointAccessInterface->gotoNext() && adaptInternalState();
+    return pointCloudPointAccessInterface->gotoNext() ? adaptInternalState() : false;
 }
 
 bool PcdPointCloudPointBasicAdapter::adaptInternalState() {
@@ -1323,7 +1381,6 @@ bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointClo
         }
     };
 
-    // Precompute size to avoid multiple size() calls
     size_t fieldCount = point.fieldCount.size();
     
     // Write each field

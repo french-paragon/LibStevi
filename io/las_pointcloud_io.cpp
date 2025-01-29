@@ -643,7 +643,7 @@ class LasPointCloudPointBasicAdapter : public LasPointCloudPoint {
 protected:
     std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterfaceUniquePtr = nullptr;
     PointCloudPointAccessInterface* pointCloudPointAccessInterface = nullptr;
-    
+
     const size_t format;
     const size_t minimumNumberOfAttributes;
     const size_t recordByteSize;
@@ -1618,7 +1618,7 @@ LasExtraAttributesInfos LasPointCloudPointBasicAdapter::getExtraAttributesInfos(
 
 bool LasPointCloudPointBasicAdapter::gotoNext()
 {
-    return pointCloudPointAccessInterface->gotoNext() && adaptInternalState();
+    return pointCloudPointAccessInterface->gotoNext() ? adaptInternalState() : false;
 }
 
 size_t LasPointCloudPointBasicAdapter::getSuitableFormat(const PointCloudPointAccessInterface &pointCloudPointAccessInterface,
@@ -1719,8 +1719,7 @@ LasPointCloudPointBasicAdapter::LasPointCloudPointBasicAdapter(
 }
 
 PointCloudGenericAttribute LasPointCloudPointBasicAdapter::castAttributeToLasType(
-    const PointCloudGenericAttribute &attribute, uint8_t lasType, std::optional<size_t> numberUndocumentedBytes)
-{
+    const PointCloudGenericAttribute &attribute, uint8_t lasType, std::optional<size_t> numberUndocumentedBytes) {
     switch (lasType) {
         case 1: // uint8_t
             return castedPointCloudAttribute<uint8_t>(attribute);
