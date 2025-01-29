@@ -54,8 +54,14 @@ template<>
 struct PtColor<void>{
 };
 
+struct EmptyParam {
+
+};
+
 using PointCloudGenericAttribute =
 std::variant<
+    //empty
+    EmptyParam,
     // basic types
     int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, float, double, std::string,
     // list types
@@ -121,6 +127,10 @@ T_ castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
     constexpr bool isVectorReturnType = is_vector_v<T>;
 
     static_assert(isSimpleReturnType or isVectorReturnType, "Target type must be a supported type!");
+
+    if (std::holds_alternative<EmptyParam>(val)) {
+        return T();
+    }
 
     if (std::holds_alternative<T>(val)) {
         return std::get<T>(val);

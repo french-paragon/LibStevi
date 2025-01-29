@@ -899,7 +899,8 @@ PcdDataLayout getPcdDataLayoutFromPointcloudPoint(PointCloudPointAccessInterface
                     static_assert(is_vector_v<T> or
                             std::is_same_v<T, std::string> or
                             std::is_floating_point_v<T> or
-                            std::is_integral_v<T>, "All types in the variant must be handled");
+                            std::is_integral_v<T> or
+                            std::is_same_v<T, EmptyParam>, "All types in the variant must be handled");
                 }
             }, attr);
         }
@@ -1375,7 +1376,8 @@ bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointClo
             static_assert(is_vector_v<T> or
                     std::is_integral_v<T> or
                     std::is_same_v<T, std::string> or
-                    std::is_floating_point_v<T>, "Unsupported type");
+                    std::is_floating_point_v<T> or
+                    std::is_same_v<T, EmptyParam>, "Unsupported type");
         }
     };
 
