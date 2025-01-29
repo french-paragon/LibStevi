@@ -277,7 +277,7 @@ std::optional<PtColor<PointCloudGenericAttribute>> PcdPointCloudPoint::getPointC
                 getAttributeById(gIndex).value_or(0),
                 getAttributeById(bIndex).value_or(0),
                 // TODO: value or empty struct
-                containsAlpha ? getAttributeById(aIndex).value_or(0) : 0
+                containsAlpha ? getAttributeById(aIndex).value_or(0) : EmptyParam{}
             };
     }
 }

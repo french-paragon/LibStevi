@@ -1146,7 +1146,7 @@ inline std::optional<PtColor<PointCloudGenericAttribute>> LasPointCloudPoint_Bas
             fromBytes<returnType<D::r_id>>(getRecordDataBuffer() + offset<D::r_id>),
             fromBytes<returnType<D::g_id>>(getRecordDataBuffer() + offset<D::g_id>),
             fromBytes<returnType<D::b_id>>(getRecordDataBuffer() + offset<D::b_id>),
-            std::numeric_limits<returnType<D::r_id>>::max() // no alpha channel
+            EmptyParam{} // no alpha channel
             };
     } else {
         return std::nullopt;

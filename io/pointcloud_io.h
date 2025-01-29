@@ -31,6 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <algorithm>
 #include <type_traits>
 #include <filesystem>
+#include "../utils/types_manipulations.h"
 
 namespace StereoVision {
 namespace IO {
@@ -393,7 +394,12 @@ public:
         ret.r = castedPointCloudAttribute<Color_T>(raw.r);
         ret.g = castedPointCloudAttribute<Color_T>(raw.g);
         ret.b = castedPointCloudAttribute<Color_T>(raw.b);
-        ret.a = castedPointCloudAttribute<Color_T>(raw.a);
+        // if empty, use default black level
+        if (std::holds_alternative<EmptyParam>(raw.a)) {
+            ret.a = TypesManipulations::defaultWhiteLevel<Color_T>();
+        } else {
+            ret.a = castedPointCloudAttribute<Color_T>(raw.a);
+        }
 
         return ret;
     }
