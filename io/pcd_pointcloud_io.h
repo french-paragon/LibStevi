@@ -29,9 +29,18 @@ protected:
     PcdDataStorageType dataStorageType;
 
     bool containsColor = false; // true if the point cloud has color
+    bool containsColorSingleField = false; // the colors are stored in one field rgb or rgba
+    bool containsAlpha = false; // true if the point cloud has alpha (or if the color is rgba/rgb since we cannot distinguish)
     bool containsPosition = false; // true if the point cloud has position
-    // indices for the points position and color
-    int rgbaIndex;
+    // indices for the color
+    int rgbaIndex; // only if containsColor is true and containsColorSingleField is true
+    // if containsColor is true and containsColorSingleField is false:
+    int rIndex;
+    int gIndex;
+    int bIndex;
+    int aIndex;
+
+    // indices for the points position if containsPosition is true
     int xIndex;
     int yIndex;
     int zIndex;

@@ -63,7 +63,7 @@ int main(int argc, char const *argv[]) {
         auto pointColor = cloudpoint->castedPointColor<double>();
         if (pointColor.has_value())
         {
-            std::cout << "point color: " << pointColor->r << ' ' << pointColor->g << ' ' << pointColor->b << '\n';
+            std::cout << "point color: " << pointColor->r << ' ' << pointColor->g << ' ' << pointColor->b << ' ' << pointColor->a << '\n';
         }
         if (!cloudpoint->gotoNext()) break;
     }
