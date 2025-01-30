@@ -3,6 +3,7 @@
  add_subdirectory(io_pcd)
  add_subdirectory(io_las)
  add_subdirectory(io_map)
+ add_subdirectory(io_remove_attributes)
  add_subdirectory(intrisic_image_decomposition)
  add_subdirectory(normal_map_estimation)
  add_subdirectory(checkboard_detection)
