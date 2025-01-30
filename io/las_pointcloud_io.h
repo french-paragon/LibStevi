@@ -376,7 +376,8 @@ public:
 
     virtual LasExtraAttributesInfos getExtraAttributesInfos() const = 0;
 
-    bool write(std::ostream& writer) const;
+    // TODO: make pure virtual
+    virtual bool write(std::ostream& writer) const;
 
     /**
      * @brief Obtain an adapter to a LasPointCloudPoint from any PointCloudPointAccessInterface. The adapted interface
@@ -388,6 +389,9 @@ public:
      */
     static std::unique_ptr<PointCloudPointAccessInterface> createAdapter(
         std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterface);
+
+    static bool formatContainsColor(size_t format) {return format == 2 || format == 3 || format == 5 || format == 7 ||
+                                                           format == 8 || format == 10;}
 };
 
 /**
