@@ -169,7 +169,9 @@ set(LIB_SRC
         io/pcd_pointcloud_io.cpp
         io/las_pointcloud_io.h
         io/las_pointcloud_io.cpp
-        io/attributeMap_pointcloud_io.h
+        io/attributeMapper.h
+        io/attributeRemover.h
+        io/attributeRemover.cpp
         io/fstreamCustomBuffer.h
         io/bit_manipulations.h
         sparseMatching/cornerDetectors.h
