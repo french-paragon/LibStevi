@@ -36,24 +36,30 @@ static constexpr size_t computeOffset() {
 
 /**
  * @brief Factory function that generate a LasPointCloudPoint object given a istream, the recordByteSize, the record format number (0-11) and the dataBuffer.
- * The data will be in an invalid state until gotoNext is called.
  * @param reader the istream
  * @param recordByteSize the size of the point record
- * @param format the record format number
- * @param dataBuffer the data buffer
+ * @param recordFormatNumber the format number
+ * @param extraAttributesNames the names of the extra attributes
+ * @param extraAttributesTypes the types of the extra attributes
+ * @param extraAttributesSizes the sizes of the extra attributes
+ * @param extraAttributesOffsets the offsets of the extra attributes
+ * @param hideColorAndGeometricAttributes if true, the color and geometric attributes will be hidden to the user
+ * @param dataBuffer the data buffer to use to read the point to
+ * 
  * @return std::unique_ptr<LasPointCloudPoint>
  * extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets
  */
 static std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint(std::unique_ptr<std::istream> reader,
     size_t recordByteSize, size_t recordFormatNumber, const std::vector<std::string>& extraAttributesNames = {},
     const std::vector<uint8_t>& extraAttributesTypes = {}, const std::vector<size_t>& extraAttributesSizes = {},
-    const std::vector<size_t>& extraAttributesOffsets = {},char* dataBuffer = nullptr);
+    const std::vector<size_t>& extraAttributesOffsets = {}, bool hideColorAndGeometricAttributes = false,
+    char* dataBuffer = nullptr);
 
 template <size_t N = size_t{0}>
 static std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::unique_ptr<std::istream> reader,
     size_t recordByteSize, size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
     const std::vector<uint8_t> &extraAttributesTypes, const std::vector<size_t> &extraAttributesSizes,
-    const std::vector<size_t> &extraAttributesOffsets, char* dataBuffer);
+    const std::vector<size_t> &extraAttributesOffsets, bool hideColorAndGeometricAttributes, char* dataBuffer);
 
 struct LasDataLayout {
     size_t format;
@@ -137,12 +143,18 @@ protected:
     std::vector<uint8_t> extraAttributesTypes;
     std::vector<size_t> extraAttributesSizes;
     std::vector<size_t> extraAttributesOffsets;
-public:
 
+    // attribute names exposed to the user. For example, we might hide the color and geometric attributes.
+    std::vector<std::string> exposedAttributeNames;
+    // the full list of attribute names including the one hidden to the user
+    std::vector<std::string> attributeNamesFullListInternal;
+    std::vector<size_t> exposedIdToInternalId; // map the exposed id of an attribute to its internal id
+
+public:
     LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize,
         const std::vector<std::string> &extraAttributesNames, const std::vector<uint8_t> &extraAttributesTypes,
         const std::vector<size_t> &extraAttributesSizes, const std::vector<size_t> &extraAttributesOffsets,
-        char* dataBuffer) :
+        bool hideColorAndGeometricAttributes, char* dataBuffer) :
             reader{std::move(reader)},
             extraAttributesNames{extraAttributesNames},
             extraAttributesTypes{extraAttributesTypes},
@@ -151,13 +163,13 @@ public:
             LasPointCloudPoint(recordByteSize, dataBuffer) {
 
         //do some checks on the extra parameters and correct them is needed
-        verifyAndCorrectParameters();
+        verifyAndCorrectParameters(hideColorAndGeometricAttributes);
     }
 
     LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize,
         const std::vector<std::string> &extraAttributesNames, const std::vector<uint8_t> &extraAttributesTypes,
         const std::vector<size_t> &extraAttributesSizes,
-        const std::vector<size_t> &extraAttributesOffsets) :
+        const std::vector<size_t> &extraAttributesOffsets, bool hideColorAndGeometricAttributes) :
             reader{std::move(reader)},
             extraAttributesNames{extraAttributesNames},
             extraAttributesTypes{extraAttributesTypes},
@@ -166,7 +178,7 @@ public:
             LasPointCloudPoint(recordByteSize) {
         
         //do some checks on the extra parameters and correct them is needed
-        verifyAndCorrectParameters();
+        verifyAndCorrectParameters(hideColorAndGeometricAttributes);
     }
 
     template <size_t N = 0>
@@ -183,54 +195,7 @@ public:
 
     std::optional<PtColor<PointCloudGenericAttribute>> getPointColor() const override;
 
-    std::optional<PointCloudGenericAttribute> getAttributeById(int id) const override {
-        
-        if (id < 0) {
-            return std::nullopt;
-        } else if (id < D::nbAttributes) { // default attribute
-            return getAttributeById_helper(id);   
-        } else if (id < D::nbAttributes + extraAttributesNames.size()) { // extra attribute
-            const size_t extra_id = id - D::nbAttributes;
-            // test the type
-            switch (extraAttributesTypes[extra_id]) {
-                case 1: // uint8_t
-                    return fromBytes<uint8_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
-                    break;
-                case 2: // int8_t
-                    return fromBytes<int8_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
-                    break;
-                case 3: // uint16_t
-                    return fromBytes<uint16_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
-                    break;
-                case 4: // int16_t
-                    return fromBytes<int16_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
-                    break;
-                case 5: // uint32_t
-                    return fromBytes<uint32_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
-                    break;
-                case 6: // int32_t
-                    return fromBytes<int32_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
-                    break;
-                case 7: // uint64_t
-                    return fromBytes<uint64_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
-                    break;
-                case 8: // int64_t
-                    return fromBytes<int64_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
-                    break;
-                case 9: // float
-                    return fromBytes<float>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
-                    break;
-                case 10: // double
-                    return fromBytes<double>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
-                    break;
-                default:
-                    // vector of bytes
-                    return vectorFromBytes<std::byte>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id], extraAttributesSizes[extra_id]);
-            }
-        } else {
-            return std::nullopt;
-        }
-    }
+    std::optional<PointCloudGenericAttribute> getAttributeById(int id) const override;
 
     std::optional<PointCloudGenericAttribute> getAttributeByName(const char* attributeName) const override;
 
@@ -239,9 +204,12 @@ public:
     bool gotoNext() override;
 
     size_t getFormat() const override { return recordFormatNumber; }
+
     size_t getMinimumNumberOfAttributes() const override { return D::nbAttributes; }
 
     LasExtraAttributesInfos getExtraAttributesInfos() const override;
+
+    bool write(std::ostream& writer) const override;
 private:
 
     /**
@@ -252,43 +220,16 @@ private:
      * If N != id, recursively call the function with N+1.
      */
     template<size_t N = size_t{0}>
-    std::optional<PointCloudGenericAttribute> getAttributeById_helper(int id) const {
-        if constexpr (N >= D::nbAttributes) {
-            return std::nullopt;
-        } else {
-            if (N == id) {
-                // depending on the type, we can have different behavior
-                if constexpr (std::is_same_v<returnType<N>, std::string>) {
-                    const auto begin = getRecordDataBuffer() + offset<N>;
-                    const auto end = std::find(begin, begin + size<N>, '\0');
-                    return std::string{begin, end}; // return the string
-                } else if constexpr (is_vector_v<returnType<N>>) { // if the type is a vector
-                    // value type of the vector
-                    using value_type = typename std::remove_cv_t<returnType<N>>::value_type;
-                    // make sure that count*sizeof(value_type) = size
-                    static_assert(sizeof(value_type) * count<N> == size<N>, "The size of the vector is not correct");
-                    return vectorFromBytes<value_type>(getRecordDataBuffer() + offset<N>, count<N>);
-                } else { // just a basic type
-                    // test the size
-                    static_assert(sizeof(returnType<N>) == size<N>, "The size of the attribute is not correct");
-                    // test if the type is a bitfield
-                    if constexpr (isBitfield<N>) {
-                        static_assert(sizeof(typeof(bitfieldSize<N>)) >= sizeof(returnType<N>), "The size of the bitfield is too large");
-                        auto data = fromBytes<returnType<N>>(getRecordDataBuffer() + offset<N>);
-                        // shift and mask
-                        data = data >> bitfieldOffset<N> & ((1 << bitfieldSize<N>) - 1);
-                        return data;
-                    } else {
-                        return fromBytes<returnType<N>>(getRecordDataBuffer() + offset<N>);;
-                    }
-                }
-            } else {
-                return getAttributeById_helper<N+1>(id);
-            }
-        }
-    }
+    std::optional<PointCloudGenericAttribute> getAttributeById_helper(size_t id) const;
 
-    void verifyAndCorrectParameters();
+    /**
+     * @brief do some checks on the parameters and correct them if needed. It can also hide the color and geometric
+     * attributes (x, y, z, red, green, blue)
+     * 
+     * @param hideColorAndGeometricAttributes If true, does not expose the attributes x, y, z, red, green, blue
+     */
+
+    void verifyAndCorrectParameters(bool hideColorAndGeometricAttributes);
     
 };
 
@@ -656,6 +597,19 @@ protected:
     const std::vector<size_t> bitfieldSize;
     const std::vector<size_t> bitfieldOffset;
 
+    size_t xIndex;
+    size_t yIndex;
+    size_t zIndex;
+
+    bool containsColor;
+
+    size_t redIndex;
+    size_t greenIndex;
+    size_t blueIndex;
+
+    // stored position and color
+    PtGeometry<PointCloudGenericAttribute> pointPosition;
+    std::optional<PtColor<PointCloudGenericAttribute>> pointColor;
 public:
     /**
      * @brief adapt a point cloud point access interface to the LasPointCloudPoint interface.
@@ -1154,31 +1108,68 @@ inline std::optional<PtColor<PointCloudGenericAttribute>> LasPointCloudPoint_Bas
 }
 
 template <class D>
+std::optional<PointCloudGenericAttribute> LasPointCloudPoint_Base<D>::getAttributeById(int exposedId) const {
+    
+    if (exposedId < 0 || exposedId >= exposedIdToInternalId.size()) return std::nullopt;
+    size_t id = exposedIdToInternalId[exposedId];
+    
+    if (id < D::nbAttributes) { // default attribute
+        return getAttributeById_helper(id);   
+    } else if (id < D::nbAttributes + extraAttributesNames.size()) { // extra attribute
+        const size_t extra_id = id - D::nbAttributes;
+        // test the type
+        switch (extraAttributesTypes[extra_id]) {
+            case 1: // uint8_t
+                return fromBytes<uint8_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                break;
+            case 2: // int8_t
+                return fromBytes<int8_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                break;
+            case 3: // uint16_t
+                return fromBytes<uint16_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                break;
+            case 4: // int16_t
+                return fromBytes<int16_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                break;
+            case 5: // uint32_t
+                return fromBytes<uint32_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                break;
+            case 6: // int32_t
+                return fromBytes<int32_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                break;
+            case 7: // uint64_t
+                return fromBytes<uint64_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                break;
+            case 8: // int64_t
+                return fromBytes<int64_t>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                break;
+            case 9: // float
+                return fromBytes<float>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                break;
+            case 10: // double
+                return fromBytes<double>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id]);
+                break;
+            default:
+                // vector of bytes
+                return vectorFromBytes<std::byte>(getRecordDataBuffer() + minimumRecordByteSize + extraAttributesOffsets[extra_id], extraAttributesSizes[extra_id]);
+        }
+    } else {
+        return std::nullopt;
+    }
+}
+
+template <class D>
 std::optional<PointCloudGenericAttribute> LasPointCloudPoint_Base<D>::getAttributeByName(const char *attributeName) const {
-    constexpr auto begin = D::attributeNames.begin();
-    constexpr auto end = begin + D::nbAttributes;
-
     // search in default attributes
-    auto it = std::find(begin, end, attributeName);
-    if (it != end) {
-        return getAttributeById(std::distance(begin, it));
-    }
-
-    // search in extra attributes
-    auto it2 = std::find(extraAttributesNames.begin(), extraAttributesNames.end(), std::string{attributeName});
-    if (it2 != extraAttributesNames.end()) {
-        return getAttributeById(std::distance(extraAttributesNames.begin(), it2) + D::nbAttributes);
-    }
-
+    auto it = std::find(exposedAttributeNames.begin(), exposedAttributeNames.end(), attributeName);
+    if (it != exposedAttributeNames.end()) return getAttributeById(std::distance(exposedAttributeNames.begin(), it));
     // not found
     return std::nullopt; // Attribute not found
 }
 
 template <class D>
 std::vector<std::string> LasPointCloudPoint_Base<D>::attributeList() const {
-    auto v = std::vector<std::string>(D::attributeNames.begin(), D::attributeNames.begin() + D::nbAttributes);
-    std::copy(extraAttributesNames.begin(), extraAttributesNames.end(), std::back_inserter(v));
-    return v;
+    return exposedAttributeNames;
 }
 
 template <class Derived>
@@ -1198,7 +1189,13 @@ LasExtraAttributesInfos LasPointCloudPoint_Base<D>::getExtraAttributesInfos() co
 }
 
 template <class D>
-void LasPointCloudPoint_Base<D>::verifyAndCorrectParameters() {
+bool LasPointCloudPoint_Base<D>::write(std::ostream &writer) const {
+    writer.write(dataBuffer, recordByteSize);
+    return writer.good();
+}
+
+template <class D>
+void LasPointCloudPoint_Base<D>::verifyAndCorrectParameters(bool hideColorAndGeometricAttributes) {
     // test the size of the extra attributes
     bool isSizeValid =
         extraAttributesNames.size() == extraAttributesTypes.size() &&
@@ -1239,6 +1236,25 @@ void LasPointCloudPoint_Base<D>::verifyAndCorrectParameters() {
             extraAttributesTypes.erase(extraAttributesTypes.begin() + i);
             extraAttributesSizes.erase(extraAttributesSizes.begin() + i);
             extraAttributesOffsets.erase(extraAttributesOffsets.begin() + i);
+        }
+    }
+
+    // compute the full list of attributes
+    attributeNamesFullListInternal = std::vector<std::string>(
+        D::attributeNames.begin(), D::attributeNames.begin() + D::nbAttributes);
+    std::copy(extraAttributesNames.begin(), extraAttributesNames.end(),
+        std::back_inserter(attributeNamesFullListInternal));
+
+    std::vector<std::string> attributesToHide = {};
+
+    if (hideColorAndGeometricAttributes) {
+        attributesToHide = {"x", "y", "z", "red", "green", "blue"};
+    }
+    for (size_t i = 0; i < attributeNamesFullListInternal.size(); i++) {
+        // only add the attribute if it is not in the list of attributes to hide
+        if (std::find(attributesToHide.begin(), attributesToHide.end(), attributeNamesFullListInternal[i]) == attributesToHide.end()) {
+            exposedIdToInternalId.push_back(i);   
+            exposedAttributeNames.push_back(attributeNamesFullListInternal[i]);
         }
     }
 }
@@ -1301,19 +1317,17 @@ std::optional<FullPointCloudAccessInterface> openPointCloudLas(std::unique_ptr<s
     // create a point cloud
     auto pointCloud = createLasPointCloudPoint(std::move(reader), header->publicHeaderBlock.getPointDataRecordLength(),
         header->publicHeaderBlock.getPointDataRecordFormat(), extraAttributesNames, extraAttributesTypes,
-        extraAttributesSizes, extraAttributesOffsets, nullptr);
+        extraAttributesSizes, extraAttributesOffsets, true, nullptr);
 
     if (pointCloud == nullptr) {
         return std::nullopt;
     }
 
-    // return the point cloud
-    if (pointCloud->gotoNext()) {
-            FullPointCloudAccessInterface fullPointInterface;
-            fullPointInterface.headerAccess = std::move(header);
-            fullPointInterface.pointAccess = std::move(pointCloud);
-            return fullPointInterface;
-    }
+    // return the point cloud full access interface
+    FullPointCloudAccessInterface fullPointInterface;
+    fullPointInterface.headerAccess = std::move(header);
+    fullPointInterface.pointAccess = std::move(pointCloud);
+    return fullPointInterface;
 
     return std::nullopt;
 }
@@ -1399,30 +1413,45 @@ template <size_t N>
 std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::unique_ptr<std::istream> reader,
     size_t recordByteSize, size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
     const std::vector<uint8_t> &extraAttributesTypes, const std::vector<size_t> &extraAttributesSizes,
-    const std::vector<size_t> &extraAttributesOffsets, char *dataBuffer) {
+    const std::vector<size_t> &extraAttributesOffsets, bool hideColorAndGeometricAttributes, char *dataBuffer) {
     if constexpr (N > 10) {
         return nullptr;
     } else if (N == recordFormatNumber) {
         if (dataBuffer == nullptr) {
             return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize, extraAttributesNames,
-                extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets);
+                extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets, hideColorAndGeometricAttributes);
         } else  {
             return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize,
-                extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets, dataBuffer);
+                extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets,
+                hideColorAndGeometricAttributes, dataBuffer);
         }
     } else {
         return createLasPointCloudPoint_helper<N+1>(std::move(reader), recordByteSize, recordFormatNumber,
-            extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets, dataBuffer);
+            extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets,
+            hideColorAndGeometricAttributes, dataBuffer);
     }
 }
 
 std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint(std::unique_ptr<std::istream> reader, size_t recordByteSize,
     size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
     const std::vector<uint8_t> &extraAttributesTypes, const std::vector<size_t> &extraAttributesSizes,
-    const std::vector<size_t> &extraAttributesOffsets, char *dataBuffer) {
+    const std::vector<size_t> &extraAttributesOffsets, bool hideColorAndGeometricAttributes, char *dataBuffer) {
 
-    return createLasPointCloudPoint_helper(std::move(reader), recordByteSize, recordFormatNumber, 
-        extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets, dataBuffer);
+    auto lasPointCloudPoint = createLasPointCloudPoint_helper(std::move(reader), recordByteSize, recordFormatNumber, 
+        extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets,
+        hideColorAndGeometricAttributes, dataBuffer);
+
+    // try to go to first point
+    if (lasPointCloudPoint != nullptr) {
+        if (!lasPointCloudPoint->gotoNext()) {
+            return nullptr;
+        }
+    } else {
+        return nullptr;
+    }
+
+    return std::move(lasPointCloudPoint);
+
 }
 
 LasExtraBytesDescriptor::LasExtraBytesDescriptor(uint8_t data_type, const std::string & name, size_t size,
@@ -1576,17 +1605,42 @@ LasPointCloudPointBasicAdapter::LasPointCloudPointBasicAdapter(
 { }
 
 PtGeometry<PointCloudGenericAttribute> LasPointCloudPointBasicAdapter::getPointPosition() const {
-    return pointCloudPointAccessInterface->getPointPosition();
+    return pointPosition;
 }
 
 std::optional<PtColor<PointCloudGenericAttribute>> LasPointCloudPointBasicAdapter::getPointColor() const {
-    return pointCloudPointAccessInterface->getPointColor();
+    return pointColor;
 }
 
 std::optional<PointCloudGenericAttribute> LasPointCloudPointBasicAdapter::getAttributeById(int id) const {
     if (id < 0 || id >= attributeNames.size()) return std::nullopt;
-    auto attOpt = pointCloudPointAccessInterface->getAttributeByName(attributeNames[id].c_str());
-    return castAttributeToLasType(attOpt.value_or(0), fieldType[id], fieldByteSize[id]);
+
+    PointCloudGenericAttribute attValue;
+    
+    // special case for points and color
+    if (id == xIndex) {
+        attValue = pointPosition.x;
+    } else if (id == yIndex) {
+        attValue = pointPosition.y;
+    } else if (id == zIndex) {
+        attValue = pointPosition.z;
+    } else if (id == redIndex && containsColor) {
+        if (pointColor.has_value()) {
+            attValue = (*pointColor).r;
+        }
+    } else if (id == greenIndex && containsColor) {
+        if (pointColor.has_value()) {
+            attValue = (*pointColor).g;
+        }
+    } else if (id == blueIndex && containsColor) {
+        if (pointColor.has_value()) {
+            attValue = (*pointColor).b;
+        }
+    } else { // default case
+        attValue = pointCloudPointAccessInterface->getAttributeByName(attributeNames[id].c_str()).value_or(0);
+    }
+
+    return castAttributeToLasType(attValue, fieldType[id], fieldByteSize[id]);
 }
 
 std::optional<PointCloudGenericAttribute> LasPointCloudPointBasicAdapter::getAttributeByName(
@@ -1630,7 +1684,7 @@ size_t LasPointCloudPointBasicAdapter::getSuitableFormat(const PointCloudPointAc
     defaultFormatValue = defaultFormatValue <= 10 ? defaultFormatValue : 6;
 
     bool isLegacyFormat = pointCloudPointAccessInterface.getAttributeByName("scanAngleRank").has_value();
-    bool containsColor = pointCloudPointAccessInterface.getAttributeByName("red").has_value();
+    bool containsColor = pointCloudPointAccessInterface.getPointColor().has_value();
     bool containsGPS = pointCloudPointAccessInterface.getAttributeByName("gpsTime").has_value();
     bool containsWavePacket = pointCloudPointAccessInterface.getAttributeByName("wavePacketDescriptorIndex").has_value();
     bool containsNIR = pointCloudPointAccessInterface.getAttributeByName("NIR").has_value();
@@ -1715,6 +1769,26 @@ LasPointCloudPointBasicAdapter::LasPointCloudPointBasicAdapter(
         isBitfield{attributeInformations.isBitfield}, bitfieldSize{attributeInformations.bitfieldSize},
         bitfieldOffset{attributeInformations.bitfieldOffset}, LasPointCloudPoint{attributeInformations.recordByteSize} {
 
+    // default value is out of range
+    xIndex = yIndex = zIndex = redIndex = greenIndex = blueIndex = attributeNames.size();
+    containsColor = formatContainsColor(format);
+    // find the indices for the corresponding elements
+    for (size_t i = 0; i < attributeNames.size(); ++i) {
+        if (attributeNames[i] == "x") {
+            xIndex = i;
+        } else if (attributeNames[i] == "y") {
+            yIndex = i;
+        } else if (attributeNames[i] == "z") {
+            zIndex = i;
+        } else if (attributeNames[i] == "red") {
+            redIndex = i;
+        } else if (attributeNames[i] == "green") {
+            greenIndex = i;
+        } else if (attributeNames[i] == "blue") {
+            blueIndex = i;
+        }
+    }
+
     adaptInternalState();
 }
 
@@ -1765,6 +1839,10 @@ bool LasPointCloudPointBasicAdapter::adaptInternalState() {
     static_assert(sizeof(float) == 4 && sizeof(double) == 8);
 
     if (pointCloudPointAccessInterface == nullptr) return false;
+
+    // get position and color
+    pointPosition = pointCloudPointAccessInterface->getPointPosition();
+    pointColor = pointCloudPointAccessInterface->getPointColor();
 
     for (size_t fieldIt = 0; fieldIt < fieldByteSize.size(); fieldIt++) {
         auto size = fieldByteSize[fieldIt];
@@ -2004,6 +2082,45 @@ size_t LasPointCloudPoint_Base<D>::getFieldOffset(size_t id) {
         return offset<N>;
     } else {
         return getFieldOffset<N+1>(id);
+    }
+}
+
+template <class D>
+template <size_t N>
+std::optional<PointCloudGenericAttribute> LasPointCloudPoint_Base<D>::getAttributeById_helper(size_t id) const {
+    if constexpr (N >= D::nbAttributes) {
+        return std::nullopt;
+    } else {
+        if (N == id) {
+            // depending on the type, we can have different behavior
+            if constexpr (std::is_same_v<returnType<N>, std::string>) {
+                const auto begin = getRecordDataBuffer() + offset<N>;
+                const auto end = std::find(begin, begin + size<N>, '\0');
+                return std::string{begin, end}; // return the string
+            } else if constexpr (is_vector_v<returnType<N>>) { // if the type is a vector
+                // value type of the vector
+                using value_type = typename std::remove_cv_t<returnType<N>>::value_type;
+                // make sure that count*sizeof(value_type) = size
+                static_assert(sizeof(value_type) * count<N> == size<N>, "The size of the vector is not correct");
+                return vectorFromBytes<value_type>(getRecordDataBuffer() + offset<N>, count<N>);
+            } else { // just a basic type
+                // test the size
+                static_assert(sizeof(returnType<N>) == size<N>, "The size of the attribute is not correct");
+                // test if the type is a bitfield
+                if constexpr (isBitfield<N>) {
+                    static_assert(sizeof(typeof(bitfieldSize<N>)) >= sizeof(returnType<N>),
+                    "The size of the bitfield is too large");
+                    auto data = fromBytes<returnType<N>>(getRecordDataBuffer() + offset<N>);
+                    // shift and mask
+                    data = data >> bitfieldOffset<N> & ((1 << bitfieldSize<N>) - 1);
+                    return data;
+                } else {
+                    return fromBytes<returnType<N>>(getRecordDataBuffer() + offset<N>);;
+                }
+            }
+        } else {
+            return getAttributeById_helper<N+1>(id);
+        }
     }
 }
 
