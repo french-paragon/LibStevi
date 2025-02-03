@@ -18,7 +18,7 @@ public:
     // version informations
     const uint16_t majorVersion;
     const uint16_t minorVersion;
-private:
+
     // ************ attribute ids ************
     static constexpr auto time_id = 0;
     static constexpr auto range_id = 1;
@@ -113,18 +113,22 @@ private:
         rgindex_attName, channeldesc_attName, classid_attName, rho_attName, reflectance_attName};
 
     // ***************************************        
-    
+
+    static constexpr auto dataBufferMaxSize = fieldOffset.back() + fieldByteSize.back();
+    std::array<char, dataBufferMaxSize> dataBuffer;
+    char* dataBufferPtr = dataBuffer.data();
+
     // number of attributes, it depends on the version 
     const size_t nbAttributes;
 
+private:
     // reader "head"
     const std::unique_ptr<std::istream> reader;
 
     const size_t recordByteSize; // number of bytes in a sdc point record
 
-    static constexpr auto dataBufferMaxSize = fieldOffset.back() + fieldByteSize.back();
-    std::array<char, dataBufferMaxSize> dataBuffer;
-    char* dataBufferPtr = dataBuffer.data();
+    std::vector<std::string> exposedAttributeNames;
+    std::vector<size_t> exposedIdToInternalId;
 
 public:
     SdcPointCloudPoint(std::unique_ptr<std::istream> reader, uint16_t majorVersion, uint16_t minorVersion);

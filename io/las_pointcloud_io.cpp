@@ -208,8 +208,6 @@ public:
     size_t getMinimumNumberOfAttributes() const override { return D::nbAttributes; }
 
     LasExtraAttributesInfos getExtraAttributesInfos() const override;
-
-    bool write(std::ostream& writer) const override;
 private:
 
     /**
@@ -1186,12 +1184,6 @@ LasExtraAttributesInfos LasPointCloudPoint_Base<D>::getExtraAttributesInfos() co
     infos.size = extraAttributesSizes;
     infos.offset = extraAttributesOffsets;
     return infos;
-}
-
-template <class D>
-bool LasPointCloudPoint_Base<D>::write(std::ostream &writer) const {
-    writer.write(dataBuffer, recordByteSize);
-    return writer.good();
 }
 
 template <class D>

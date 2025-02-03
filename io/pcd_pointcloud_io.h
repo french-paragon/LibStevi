@@ -17,9 +17,8 @@ enum class PcdDataStorageType
     binary_compressed
 };
 
-/// @brief basic class for a point in a pcd file
-class PcdPointCloudPoint : public PointCloudPointAccessInterface
-{
+/// @brief interface for a point in a pcd file
+class PcdPointCloudPoint : public PointCloudPointAccessInterface {
 protected:
     const std::vector<std::string> attributeNames; // names of the fields
     const std::vector<size_t> fieldByteSize;
@@ -50,9 +49,70 @@ protected:
     
 private:
     std::vector<char> dataBufferContainer;
+public:
+    /***
+     * @brief Pcd point cloud point constructor
+     * @param attributeNames The names of the fields in the point cloud
+     * @param fieldByteSize The byte size of the fields in the point cloud
+     * @param fieldType The type of the fields in the point cloud
+     * @param fieldCount The number of fields in the point cloud
+     * @param dataStorageType The storage type of the point cloud
+     */
+    PcdPointCloudPoint(const std::vector<std::string>& attributeNames,
+        const std::vector<size_t>& fieldByteSize, const std::vector<uint8_t>& fieldType,
+        const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType);
 
+    /***
+     * @brief Pcd point cloud point constructor with a given data buffer
+     * @param attributeNames The names of the fields in the point cloud
+     * @param fieldByteSize The byte size of the fields in the point cloud
+     * @param fieldType The type of the fields in the point cloud
+     * @param fieldCount The number of fields in the point cloud
+     * @param dataStorageType The storage type of the point cloud
+     * @param dataBuffer The data buffer. The buffer is not owned by the point cloud and must be able to contain
+     * at least recordByteSize bytes.
+     */
+    PcdPointCloudPoint(const std::vector<std::string>& attributeNames,
+        const std::vector<size_t>& fieldByteSize, const std::vector<uint8_t>& fieldType,
+        const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType, char* dataBuffer);
+
+    // getters
+    inline auto getFieldByteSize() const { return fieldByteSize; }
+    inline auto getFieldType() const { return fieldType; }
+    inline auto getFieldCount() const { return fieldCount; }
+    inline auto getRecordByteSize() const { return recordByteSize; }
+    inline auto* getRecordDataBuffer() const { return dataBuffer; }
+
+    static bool writePoint(std::ostream& writer, const PcdPointCloudPoint& point, PcdDataStorageType dataStorageType);
+    static bool writePointAscii(std::ostream& writer, const PcdPointCloudPoint& point);
+    static bool writePointBinary(std::ostream& writer, const PcdPointCloudPoint& point);
+
+    /**
+     * @brief Obtain an adapter to a PcdPointCloudPoint from any PointCloudPointAccessInterface. The adapted interface
+     * can be the given interface if the object is already a PcdPointCloudPoint or a wrapper otherwise.
+     * If the given interface is null, a nullptr is returned.
+     * 
+     * @param pointCloudPointAccessInterface the interface to adapt
+     * @return a pointer to the adapted interface that can be safe casted to a PcdPointCloudPoint
+     */
+    static std::unique_ptr<PointCloudPointAccessInterface> createAdapter(
+            std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterface);
+
+    
+    static std::optional<PointCloudGenericAttribute> getAttributeFromBuffer(size_t size, uint8_t type, size_t offset,
+        size_t count, char* buffer);
+
+    inline const std::vector<std::string>& getAttributeNamesInternal() const { return attributeNames; }
+};
+
+// class to read a pcd point cloud point from a pcd file
+class PcdPointCloudPointReader : public PcdPointCloudPoint {    
+private:
     // reader
     const std::unique_ptr<std::istream> reader;
+
+    std::vector<std::string> exposedAttributeNames;
+    std::vector<size_t> exposedIdToInternalId;
 
 public:
     /***
@@ -63,25 +123,12 @@ public:
      * @param fieldType The type of the fields in the point cloud
      * @param fieldCount The number of fields in the point cloud
      * @param dataStorageType The storage type of the point cloud
+     * @param hideColorAndGeometricAttributes If true, do not expose the the user the attributes related to
+     * the color and position
      */
-    PcdPointCloudPoint(std::unique_ptr<std::istream> reader, const std::vector<std::string>& attributeNames,
+    PcdPointCloudPointReader(std::unique_ptr<std::istream> reader, const std::vector<std::string>& attributeNames,
         const std::vector<size_t>& fieldByteSize, const std::vector<uint8_t>& fieldType,
-        const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType);
-
-    /***
-     * @brief Pcd point cloud point constructor with a given data buffer
-     * @param reader The reader to use to read the point cloud
-     * @param attributeNames The names of the fields in the point cloud
-     * @param fieldByteSize The byte size of the fields in the point cloud
-     * @param fieldType The type of the fields in the point cloud
-     * @param fieldCount The number of fields in the point cloud
-     * @param dataStorageType The storage type of the point cloud
-     * @param dataBuffer The data buffer. The buffer is not owned by the point cloud and must be able to contain
-     * at least recordByteSize bytes.
-     */
-    PcdPointCloudPoint(std::unique_ptr<std::istream> reader, const std::vector<std::string>& attributeNames,
-        const std::vector<size_t>& fieldByteSize, const std::vector<uint8_t>& fieldType,
-        const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType, char* dataBuffer);
+        const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType, bool hideColorAndGeometricAttributes);
     
     PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;
 
@@ -104,39 +151,17 @@ public:
         }
         return false;
     }
-    
-    // getters
-
-    inline auto getFieldByteSize() const { return fieldByteSize; }
-    inline auto getFieldType() const { return fieldType; }
-    inline auto getFieldCount() const { return fieldCount; }
-    inline auto getRecordByteSize() const { return recordByteSize; }
-    inline auto* getRecordDataBuffer() const { return dataBuffer; }
-
-    static bool writePoint(std::ostream& writer, const PcdPointCloudPoint& point, PcdDataStorageType dataStorageType);
-    static bool writePointAscii(std::ostream& writer, const PcdPointCloudPoint& point);
-    static bool writePointBinary(std::ostream& writer, const PcdPointCloudPoint& point);
-
-    /**
-     * @brief Obtain an adapter to a PcdPointCloudPoint from any PointCloudPointAccessInterface. The adapted interface
-     * can be the given interface if the object is already a PcdPointCloudPoint or a wrapper otherwise.
-     * If the given interface is null, a nullptr is returned.
-     * 
-     * @param pointCloudPointAccessInterface the interface to adapt
-     * @return a pointer to the adapted interface that can be safe casted to a PcdPointCloudPoint
-     */
-    static std::unique_ptr<PointCloudPointAccessInterface> createAdapter(
-            std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterface);
 
 private:
     bool gotoNextAscii();
     bool gotoNextBinary();
     bool gotoNextBinaryCompressed();
+
+    std::optional<PointCloudGenericAttribute> getAttributeByIdInternal(size_t id) const;
 };
 
 /// @brief basic class for a header in a pcd file
-class PcdPointCloudHeader : public PointCloudHeaderInterface
-{
+class PcdPointCloudHeader : public PointCloudHeaderInterface {
 public:
     double version = 0.7;
     std::vector<std::string> fields = {};
