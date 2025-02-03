@@ -13,6 +13,7 @@
 #include "sdc_pointcloud_io.h"
 #include "fstreamCustomBuffer.h"
 #include "bit_manipulations.h"
+#include <unordered_set>
 
 namespace StereoVision {
 namespace IO {
@@ -51,6 +52,10 @@ protected:
     PointCloudPointAccessInterface* pointCloudPointAccessInterface = nullptr;
 
     const std::vector<std::string> originalAttributeNames;
+
+    // stored position and color
+    PtGeometry<PointCloudGenericAttribute> pointPosition;
+    std::optional<PtColor<PointCloudGenericAttribute>> pointColor;
 public:
     /**
      * @brief Adapter class to obtain a PcdPointCloudPoint from any PointCloudPointAccessInterface
@@ -107,9 +112,21 @@ public:
 
     bool gotoNext() override;
 
+    PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;
+
+    std::optional<PtColor<PointCloudGenericAttribute>> getPointColor() const override;
+
+    std::optional<PointCloudGenericAttribute> getAttributeById(int id) const override;
+
+    std::optional<PointCloudGenericAttribute> getAttributeByName(const char* attributeName) const override;
+
+    std::vector<std::string> attributeList() const override;
+
 protected:
     PcdPointCloudPointFromSdcAdapter(std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointInterface,
         SdcPointCloudPoint* castedSdcPointCloudPoint, const PcdDataLayout& attributeInformations);
+
+    static PcdDataLayout getPcdDataLayoutFromSdcPointcloudPoint(SdcPointCloudPoint* sdcPointCloudPoint);
 };
 
 /// @brief adapter class to obtain a PcdPointCloudHeader from any PointCloudHeaderInterface
@@ -128,23 +145,23 @@ private:
     bool adaptInternalState();
 };
 
-PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::istream> reader,
-    const std::vector<std::string>& attributeNames, const std::vector<size_t>& fieldByteSize,
-    const std::vector<uint8_t>& fieldType, const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType) :
-    PcdPointCloudPoint(std::move(reader), attributeNames, fieldByteSize, fieldType, fieldCount, dataStorageType, nullptr) {
+
+PcdPointCloudPoint::PcdPointCloudPoint(const std::vector<std::string>& attributeNames,
+    const std::vector<size_t>& fieldByteSize, const std::vector<uint8_t>& fieldType,
+    const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType) :
+    PcdPointCloudPoint(attributeNames, fieldByteSize, fieldType, fieldCount, dataStorageType, nullptr) {
 
     dataBufferContainer.resize(recordByteSize);
     dataBuffer = dataBufferContainer.data();
 }
 
-PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::istream> reader,
-    const std::vector<std::string>& attributeNames, const std::vector<size_t>& fieldByteSize,
+PcdPointCloudPoint::PcdPointCloudPoint(const std::vector<std::string>& attributeNames, const std::vector<size_t>& fieldByteSize,
     const std::vector<uint8_t>& fieldType, const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType,
     char* dataBuffer) :
         attributeNames{attributeNames}, fieldByteSize{fieldByteSize},
         fieldOffset(fieldByteSize.size()), fieldType{fieldType}, fieldCount{fieldCount},
-        dataStorageType{dataStorageType}, reader{std::move(reader)}, dataBuffer{dataBuffer} {
-    
+        dataStorageType{dataStorageType}, dataBuffer{dataBuffer} {
+
     // compute the offsets
     const auto* fieldCountPtr = fieldCount.data();
     const auto* fieldByteSizePtr = fieldByteSize.data();
@@ -158,6 +175,8 @@ PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::istream> reader,
     if (!(fieldOffset.empty() || fieldCount.empty() || fieldByteSize.empty())) {
         recordByteSize = fieldOffset.back() + fieldCount.back() * fieldByteSize.back();
     }
+    //  default value is out of range
+    xIndex = yIndex = zIndex = rIndex = gIndex = bIndex = rgbaIndex = attributeNames.size();
 
     auto AttributeNamesLowercase = attributeNames;
     // to lower
@@ -246,20 +265,61 @@ PcdPointCloudPoint::PcdPointCloudPoint(std::unique_ptr<std::istream> reader,
     containsPosition = containsX && containsY && containsZ;
 }
 
-PtGeometry<PointCloudGenericAttribute> PcdPointCloudPoint::getPointPosition() const {
-    static const auto nan = std::nan("");
-    if (!containsPosition) {
-        return PtGeometry<PointCloudGenericAttribute>{nan, nan, nan};
-    } else {
-        return PtGeometry<PointCloudGenericAttribute>{getAttributeById(xIndex).value_or(nan), getAttributeById(yIndex).value_or(nan), getAttributeById(zIndex).value_or(nan)};
+PcdPointCloudPointReader::PcdPointCloudPointReader(std::unique_ptr<std::istream> reader,
+    const std::vector<std::string>& attributeNames, const std::vector<size_t>& fieldByteSize,
+    const std::vector<uint8_t>& fieldType, const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType,
+    bool hideColorAndGeometricAttributes) :
+        reader{std::move(reader)},
+        PcdPointCloudPoint(attributeNames, fieldByteSize, fieldType, fieldCount, dataStorageType) {
+
+    // do not expose the position and the color to the user
+    std::vector<size_t> attributesToHideIds = {};
+
+    if (hideColorAndGeometricAttributes) {
+        if (containsColor) {
+            if (containsColorSingleField) {
+                attributesToHideIds.push_back(rgbaIndex);
+            } else {
+                attributesToHideIds.push_back(rIndex);
+                attributesToHideIds.push_back(gIndex);
+                attributesToHideIds.push_back(bIndex);
+                if (containsAlpha) {
+                    attributesToHideIds.push_back(aIndex);
+                }
+            }
+        }
+
+        if (containsPosition) {
+            attributesToHideIds.push_back(xIndex);
+            attributesToHideIds.push_back(yIndex);
+            attributesToHideIds.push_back(zIndex);
+        }
     }
+    
+    for (size_t i = 0; i < attributeNames.size(); i++) {
+        // only add the attribute if it is not in the list of attributes to hide
+        if (std::find(attributesToHideIds.begin(), attributesToHideIds.end(), i) == attributesToHideIds.end()) {
+            exposedIdToInternalId.push_back(i);
+            exposedAttributeNames.push_back(attributeNames[i]);
+        }
+    }
+    
 }
 
-std::optional<PtColor<PointCloudGenericAttribute>> PcdPointCloudPoint::getPointColor() const {
+PtGeometry<PointCloudGenericAttribute> PcdPointCloudPointReader::getPointPosition() const {
+    static const auto nan = std::nan("");
+    if (!containsPosition) return PtGeometry<PointCloudGenericAttribute>{nan, nan, nan};
+
+    return PtGeometry<PointCloudGenericAttribute>{getAttributeByIdInternal(xIndex).value_or(nan),
+                                                  getAttributeByIdInternal(yIndex).value_or(nan),
+                                                  getAttributeByIdInternal(zIndex).value_or(nan)};
+}
+
+std::optional<PtColor<PointCloudGenericAttribute>> PcdPointCloudPointReader::getPointColor() const {
     if (!containsColor) return std::nullopt;
     
     if (containsColorSingleField) {
-        auto rgba_opt = getAttributeById(rgbaIndex);
+        auto rgba_opt = getAttributeByIdInternal(rgbaIndex);
         if (!rgba_opt.has_value()) {
             return std::nullopt;
         }
@@ -273,16 +333,15 @@ std::optional<PtColor<PointCloudGenericAttribute>> PcdPointCloudPoint::getPointC
     } else {
         return PtColor<PointCloudGenericAttribute>
             {
-                getAttributeById(rIndex).value_or(0),
-                getAttributeById(gIndex).value_or(0),
-                getAttributeById(bIndex).value_or(0),
-                // TODO: value or empty struct
-                containsAlpha ? getAttributeById(aIndex).value_or(0) : EmptyParam{}
+                getAttributeByIdInternal(rIndex).value_or(0),
+                getAttributeByIdInternal(gIndex).value_or(0),
+                getAttributeByIdInternal(bIndex).value_or(0),
+                containsAlpha ? getAttributeByIdInternal(aIndex).value_or(0) : EmptyParam{}
             };
     }
 }
 
-std::optional<PointCloudGenericAttribute> PcdPointCloudPoint::getAttributeById(int id) const {
+std::optional<PointCloudGenericAttribute> PcdPointCloudPointReader::getAttributeByIdInternal(size_t id) const {
     static_assert(sizeof(float) == 4); // check if float is 4 bytes, should be true on most systems
     static_assert(sizeof(double) == 8); // check if double is 8 bytes
 
@@ -295,62 +354,30 @@ std::optional<PointCloudGenericAttribute> PcdPointCloudPoint::getAttributeById(i
     if (id < 0 || id >= fieldByteSize.size() || size + offset > recordByteSize) {
         return std::nullopt;
     }
-    const auto* const position = dataBuffer + fieldOffset[id];
-    
-    // lambda function that return a vector of type T or T if count == 1
-    auto returnVectorOrSingleValue = [](const auto* dataPtr, auto count) -> PointCloudGenericAttribute {
-        if (count == 1) return {*dataPtr};
-        return std::vector(dataPtr, dataPtr + count);
-    };
-    if (count == 1) { // simple value
-        // test the type and size
-        if (type == 'F') {
-            if (size == 4) return fromBytes<float>(position);
-            if (size == 8) return fromBytes<double>(position);
-        } else if (type == 'I') {
-            if (size == 1) return fromBytes<int8_t>(position);
-            if (size == 2) return fromBytes<int16_t>(position);
-            if (size == 4) return fromBytes<int32_t>(position);
-            if (size == 8) return fromBytes<int64_t>(position);
-        } else if (type == 'U') {
-            if (size == 1) return fromBytes<uint8_t>(position);
-            if (size == 2) return fromBytes<uint16_t>(position);
-            if (size == 4) return fromBytes<uint32_t>(position);
-            if (size == 8) return fromBytes<uint64_t>(position);
-        }
-    } else { // vector
-        // test the type and size
-        if (type == 'F') {
-            if (size == 4) return vectorFromBytes<float>(position, count);
-            if (size == 8) return vectorFromBytes<double>(position, count);
-        } else if (type == 'I') {
-            if (size == 1) return vectorFromBytes<int8_t>(position, count);
-            if (size == 2) return vectorFromBytes<int16_t>(position, count);
-            if (size == 4) return vectorFromBytes<int32_t>(position, count);
-            if (size == 8) return vectorFromBytes<int64_t>(position, count);
-        } else if (type == 'U') {
-            if (size == 1) return vectorFromBytes<uint8_t>(position, count);
-            if (size == 2) return vectorFromBytes<uint16_t>(position, count);
-            if (size == 4) return vectorFromBytes<uint32_t>(position, count);
-            if (size == 8) return vectorFromBytes<uint64_t>(position, count);
-        }
-    }
-    return std::nullopt;
+ 
+    return getAttributeFromBuffer(size, type, offset, count, getRecordDataBuffer());
 }
 
-std::optional<PointCloudGenericAttribute> PcdPointCloudPoint::getAttributeByName(const char *attributeName) const {
-    auto it = std::find(attributeNames.begin(), attributeNames.end(), attributeName);
-    if (it != attributeNames.end()) {
-        return getAttributeById(std::distance(attributeNames.begin(), it));
+std::optional<PointCloudGenericAttribute> PcdPointCloudPointReader::getAttributeById(int exposedId) const {
+    if (exposedId < 0 || exposedId >= exposedAttributeNames.size()) return std::nullopt;
+
+    auto internalId = exposedIdToInternalId[exposedId];
+    return getAttributeByIdInternal(internalId);
+}
+
+std::optional<PointCloudGenericAttribute> PcdPointCloudPointReader::getAttributeByName(const char *attributeName) const {
+    auto it = std::find(exposedAttributeNames.begin(), exposedAttributeNames.end(), attributeName);
+    if (it != exposedAttributeNames.end()) {
+        return getAttributeById(std::distance(exposedAttributeNames.begin(), it));
     }
     return std::nullopt; // Attribute not found
 }
 
-std::vector<std::string> PcdPointCloudPoint::attributeList() const {
-    return attributeNames;
+std::vector<std::string> PcdPointCloudPointReader::attributeList() const {
+    return exposedAttributeNames;
 }
 
-bool PcdPointCloudPoint::gotoNextAscii() {
+bool PcdPointCloudPointReader::gotoNextAscii() {
     static_assert(sizeof(float) == 4 && sizeof(double) == 8);
 
     // If the reader is at the end of the file or in a bad state, return false
@@ -446,14 +473,14 @@ bool PcdPointCloudPoint::gotoNextAscii() {
     return true;
 }
 
-bool PcdPointCloudPoint::gotoNextBinary() {
+bool PcdPointCloudPointReader::gotoNextBinary() {
     // we just read the next record
     reader->read(dataBuffer, recordByteSize);
     if (!reader->good()) return false;
     return true;
 }
 
-bool PcdPointCloudPoint::gotoNextBinaryCompressed() {
+bool PcdPointCloudPointReader::gotoNextBinaryCompressed() {
     return false;
 }
 
@@ -482,6 +509,47 @@ std::unique_ptr<PointCloudPointAccessInterface> PcdPointCloudPoint::createAdapte
     return std::make_unique<PcdPointCloudPointBasicAdapter>(std::move(pointCloudPointAccessInterface), pointCloudPtr);
 }
 
+std::optional<PointCloudGenericAttribute> PcdPointCloudPoint::getAttributeFromBuffer(size_t size, uint8_t type,
+    size_t offset, size_t count, char *buffer) {
+
+    const auto* const position = buffer + offset;
+    
+    if (count == 1) { // simple value
+        // test the type and size
+        if (type == 'F') {
+            if (size == 4) return fromBytes<float>(position);
+            if (size == 8) return fromBytes<double>(position);
+        } else if (type == 'I') {
+            if (size == 1) return fromBytes<int8_t>(position);
+            if (size == 2) return fromBytes<int16_t>(position);
+            if (size == 4) return fromBytes<int32_t>(position);
+            if (size == 8) return fromBytes<int64_t>(position);
+        } else if (type == 'U') {
+            if (size == 1) return fromBytes<uint8_t>(position);
+            if (size == 2) return fromBytes<uint16_t>(position);
+            if (size == 4) return fromBytes<uint32_t>(position);
+            if (size == 8) return fromBytes<uint64_t>(position);
+        }
+    } else { // vector
+        // test the type and size
+        if (type == 'F') {
+            if (size == 4) return vectorFromBytes<float>(position, count);
+            if (size == 8) return vectorFromBytes<double>(position, count);
+        } else if (type == 'I') {
+            if (size == 1) return vectorFromBytes<int8_t>(position, count);
+            if (size == 2) return vectorFromBytes<int16_t>(position, count);
+            if (size == 4) return vectorFromBytes<int32_t>(position, count);
+            if (size == 8) return vectorFromBytes<int64_t>(position, count);
+        } else if (type == 'U') {
+            if (size == 1) return vectorFromBytes<uint8_t>(position, count);
+            if (size == 2) return vectorFromBytes<uint16_t>(position, count);
+            if (size == 4) return vectorFromBytes<uint32_t>(position, count);
+            if (size == 8) return vectorFromBytes<uint64_t>(position, count);
+        }
+    }
+    return std::nullopt;
+}
+
 PcdPointCloudHeader::PcdPointCloudHeader(){ }
 
 /**
@@ -506,8 +574,7 @@ PcdPointCloudHeader::PcdPointCloudHeader(const double version, const std::vector
         viewpoint{viewpoint}, points{points}, data{data}
 { }
 
-std::optional<PointCloudGenericAttribute> PcdPointCloudHeader::getAttributeById(int id) const
-{
+std::optional<PointCloudGenericAttribute> PcdPointCloudHeader::getAttributeById(int id) const {
     switch (id) {
         case 0:
             return PointCloudGenericAttribute{version};
@@ -839,14 +906,66 @@ PcdDataLayout getPcdDataLayoutFromPointcloudPoint(PointCloudPointAccessInterface
     auto size = std::vector<size_t>{};
     auto type = std::vector<uint8_t>{};
     auto count = std::vector<size_t>{};
+
+    auto attributeNames = pointcloudPointAccessInterface->attributeList();
+    auto pointPosition = pointcloudPointAccessInterface->getPointPosition();
+    // add position attributes if not present
+    if (std::find(attributeNames.begin(), attributeNames.end(), "x") == attributeNames.end())
+        attributeNames.push_back("x");
+    if (std::find(attributeNames.begin(), attributeNames.end(), "y") == attributeNames.end())
+        attributeNames.push_back("y");
+    if (std::find(attributeNames.begin(), attributeNames.end(), "z") == attributeNames.end())
+        attributeNames.push_back("z");
+
+    bool isColor = false;
+    bool isAlpha = false;
+    // if the point cloud has color, add r, g, b, (a) attributes
+    auto pointColorOpt = pointcloudPointAccessInterface->getPointColor();
+    auto pointColor = pointColorOpt.value_or(PtColor<PointCloudGenericAttribute>());
+    if (pointColorOpt) {
+        if (std::find(attributeNames.begin(), attributeNames.end(), "r") == attributeNames.end())
+            attributeNames.push_back("r");
+        if (std::find(attributeNames.begin(), attributeNames.end(), "g") == attributeNames.end())
+            attributeNames.push_back("g");
+        if (std::find(attributeNames.begin(), attributeNames.end(), "b") == attributeNames.end())
+            attributeNames.push_back("b");
+        if (!std::holds_alternative<EmptyParam>(pointColor.a)) {
+            if (std::find(attributeNames.begin(), attributeNames.end(), "a") == attributeNames.end())
+                attributeNames.push_back("a");
+
+            isAlpha = true;
+        }
+        isColor = true;
+    }
+
+        
     
     size_t nbAttributes = 0;
-    for (auto&& attributeName : pointcloudPointAccessInterface->attributeList()) {
+    for (auto&& attributeName : attributeNames) {
         // try to find the attribute name in the header
-        auto attrOpt = pointcloudPointAccessInterface->getAttributeByName(attributeName.c_str()); 
+        std::optional<PointCloudGenericAttribute> attrOpt = std::nullopt;
+
+        // special case for color and position
+        if (attributeName == "x") {
+            attrOpt = pointPosition.x;
+        } else if (attributeName == "y") {
+            attrOpt = pointPosition.y;
+        } else if (attributeName == "z") {
+            attrOpt = pointPosition.z;
+        } else if (isColor && attributeName == "r") {
+            attrOpt = pointColor.r;
+        } else if (isColor && attributeName == "g") {
+            attrOpt = pointColor.g;
+        } else if (isColor && attributeName == "b") {
+            attrOpt = pointColor.b;
+        } else if (isColor && isAlpha && attributeName == "a") {
+            attrOpt = pointColor.a;
+        } else {
+            attrOpt = pointcloudPointAccessInterface->getAttributeByName(attributeName.c_str());
+        }
 
         if (attrOpt) {
-            const auto attr = attrOpt.value();
+            auto attr = attrOpt.value();
             // visit the variant to get the size, type, count and data
             std::visit([&](auto&& arg) {
                 using T = std::decay_t<decltype(arg)>;
@@ -969,8 +1088,8 @@ std::optional<FullPointCloudAccessInterface> openPointCloudPcd(std::unique_ptr<s
     }
 
     // create a point cloud
-    auto pointCloud = std::make_unique<PcdPointCloudPoint>(std::move(reader), header->fields, header->size, header->type,
-                                                           header->count, header->data);
+    auto pointCloud = std::make_unique<PcdPointCloudPointReader>(std::move(reader), header->fields, header->size, header->type,
+                                                           header->count, header->data, true);
 
     // return the point cloud
     if (pointCloud->gotoNext()) {
@@ -1013,7 +1132,7 @@ bool writePointCloudPcd(std::ostream &writer, FullPointCloudAccessInterface &poi
     size_t headerHeight = 0;
     std::vector<double> headerViewpoint = {0, 0, 0, 1, 0, 0, 0};
     size_t headerPoints = 0;
-    PcdDataStorageType headerData = PcdDataStorageType::ascii;
+    PcdDataStorageType headerData = PcdDataStorageType::binary;
 
     auto tempHeader = PcdPointCloudHeader::createAdapter(std::move(pointCloud.headerAccess));
 
@@ -1033,7 +1152,6 @@ bool writePointCloudPcd(std::ostream &writer, FullPointCloudAccessInterface &poi
 
     // get the pointcloud point adapter
     pointCloud.pointAccess = PcdPointCloudPoint::createAdapter(std::move(pointCloud.pointAccess));
-
     // safe to static cast
     auto pcdPointAccessAdapter = static_cast<PcdPointCloudPoint*>(pointCloud.pointAccess.get());
     if (pcdPointAccessAdapter == nullptr) {return false;}
@@ -1048,7 +1166,7 @@ bool writePointCloudPcd(std::ostream &writer, FullPointCloudAccessInterface &poi
     // we use the informations guessed from the point cloud point.
     // the only information that we keep from the header is the data storage type (if not set by the user), the number of points,
     // the width and the height (even though they may be wrong and will be corrected later after writing the points).
-    PcdPointCloudHeader newHeader{headerVersion, pcdPointAccessAdapter->attributeList(),
+    PcdPointCloudHeader newHeader{headerVersion, pcdPointAccessAdapter->getAttributeNamesInternal(),
         pcdPointAccessAdapter->getFieldByteSize(), pcdPointAccessAdapter->getFieldType(),
         pcdPointAccessAdapter->getFieldCount(), headerWidth, headerHeight,
         headerViewpoint, headerPoints, usedDataStorageType};
@@ -1116,7 +1234,7 @@ PcdPointCloudPointBasicAdapter::PcdPointCloudPointBasicAdapter(
     PointCloudPointAccessInterface* pointCloudPointAccessInterface,
     const PcdDataLayout& attributeInformations) :
         originalAttributeNames{std::get<1>(attributeInformations)},
-        PcdPointCloudPoint{nullptr, std::get<0>(attributeInformations),
+        PcdPointCloudPoint{std::get<0>(attributeInformations),
             std::get<2>(attributeInformations), std::get<3>(attributeInformations),
             std::get<4>(attributeInformations), PcdDataStorageType::ascii},
         pointCloudPointAccessInterfaceUniquePtr{std::move(pointCloudPointAccessInterfaceUniquePtr)},
@@ -1134,23 +1252,44 @@ PcdPointCloudPointBasicAdapter::PcdPointCloudPointBasicAdapter(
 }
 
 PtGeometry<PointCloudGenericAttribute> PcdPointCloudPointBasicAdapter::getPointPosition() const {
-    return pointCloudPointAccessInterface->getPointPosition();
+    return pointPosition;
 }
 
 std::optional<PtColor<PointCloudGenericAttribute>> PcdPointCloudPointBasicAdapter::getPointColor() const {
-    return pointCloudPointAccessInterface->getPointColor();
+    return pointColor;
 }
 
 std::optional<PointCloudGenericAttribute> PcdPointCloudPointBasicAdapter::getAttributeById(int id) const {
     if (id < 0 || id >= originalAttributeNames.size()) return std::nullopt;
-    return pointCloudPointAccessInterface->getAttributeByName(originalAttributeNames[id].c_str());
+
+    PointCloudGenericAttribute attValue;
+    // special case for points and color
+    if (id == xIndex) {
+        attValue = pointPosition.x;
+    } else if (id == yIndex) {
+        attValue = pointPosition.y;
+    } else if (id == zIndex) {
+        attValue = pointPosition.z;
+    } else if (pointColor.has_value() && id == rIndex) {
+        attValue = (*pointColor).r;
+    } else if (pointColor.has_value() && id == gIndex) {
+        attValue = (*pointColor).g;
+    } else if (pointColor.has_value() && id == bIndex) {
+        attValue = (*pointColor).b;
+    } else if (pointColor.has_value() && containsAlpha && id == aIndex) {
+        attValue = (*pointColor).a;
+    } else { // default case
+        attValue = pointCloudPointAccessInterface->getAttributeByName(attributeNames[id].c_str()).value_or(0);
+    }
+
+    return attValue;
 }
 
 std::optional<PointCloudGenericAttribute> PcdPointCloudPointBasicAdapter::getAttributeByName(const char *attributeName) const {
     // find the attribute in the list of sanitized attribute names
     auto it = std::find(originalAttributeNames.begin(), originalAttributeNames.end(), attributeName);
     if (it == originalAttributeNames.end()) return std::nullopt;
-    return pointCloudPointAccessInterface->getAttributeByName((*it).c_str());
+    return getAttributeById(std::distance(originalAttributeNames.begin(), it));
 }
 
 std::vector<std::string> PcdPointCloudPointBasicAdapter::attributeList() const {
@@ -1165,6 +1304,10 @@ bool PcdPointCloudPointBasicAdapter::adaptInternalState() {
     static_assert(sizeof(float) == 4 && sizeof(double) == 8);
 
     if (pointCloudPointAccessInterface == nullptr) return false;
+
+    // get position and color
+    pointPosition = pointCloudPointAccessInterface->getPointPosition();
+    pointColor = pointCloudPointAccessInterface->getPointColor();
 
     auto convertAndCopy = [](auto data, auto* dataPtr, auto size) {
         std::memcpy(dataPtr, &data, size);
@@ -1316,7 +1459,7 @@ bool PcdPointCloudHeaderBasicAdapter::adaptInternalState()
     return true;
 }
 
-bool PcdPointCloudPoint::writePoint(std::ostream &writer, const PcdPointCloudPoint &point, PcdDataStorageType dataStorageType )
+bool PcdPointCloudPoint::writePoint(std::ostream &writer, const PcdPointCloudPoint &point, PcdDataStorageType dataStorageType)
 {
     switch (dataStorageType) {
         case PcdDataStorageType::ascii:
@@ -1385,7 +1528,14 @@ bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointClo
     
     // Write each field
     for (size_t i = 0; i < fieldCount; ++i) {
-        std::visit(visitor, point.getAttributeById(i).value());
+        auto attrOpt = getAttributeFromBuffer(point.fieldByteSize[i], point.fieldType[i], point.fieldOffset[i],
+            point.fieldCount[i], point.dataBuffer);
+        
+        if (!attrOpt.has_value()) {
+            return false;
+        }
+
+        std::visit(visitor, attrOpt.value());
         if (i < fieldCount - 1) {
             buffer << " "; // Add space between fields
         }
@@ -1401,22 +1551,71 @@ bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointClo
 PcdPointCloudPointFromSdcAdapter::PcdPointCloudPointFromSdcAdapter(
     std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointInterface, SdcPointCloudPoint* castedSdcPointCloudPoint):
     PcdPointCloudPointFromSdcAdapter(std::move(pointCloudPointInterface), castedSdcPointCloudPoint,
-    getPcdDataLayoutFromPointcloudPoint(castedSdcPointCloudPoint)) {}
+    getPcdDataLayoutFromSdcPointcloudPoint(castedSdcPointCloudPoint)) {}
 
 
 bool PcdPointCloudPointFromSdcAdapter::gotoNext() {
    return castedSdcPointCloudPoint->gotoNext();
 }
 
+PtGeometry<PointCloudGenericAttribute> PcdPointCloudPointFromSdcAdapter::getPointPosition() const {
+    return castedSdcPointCloudPoint->getPointPosition();
+}
+
+std::optional<PtColor<PointCloudGenericAttribute>> PcdPointCloudPointFromSdcAdapter::getPointColor() const {
+    return std::nullopt;
+}
+
+std::optional<PointCloudGenericAttribute> PcdPointCloudPointFromSdcAdapter::getAttributeById(int id) const {
+    // TODO: special case for point position
+    if (id < 0 || id >= attributeNames.size()) return std::nullopt;
+    return castedSdcPointCloudPoint->getAttributeByName(attributeNames[id].c_str());
+}
+
+std::optional<PointCloudGenericAttribute> PcdPointCloudPointFromSdcAdapter::getAttributeByName(const char *attributeName) const {
+    // find the attribute in the list of names
+    auto it = std::find(attributeNames.begin(), attributeNames.end(), attributeName);
+    if (it == attributeNames.end()) return std::nullopt;
+    return getAttributeById(std::distance(attributeNames.begin(), it));
+}
+
+std::vector<std::string> PcdPointCloudPointFromSdcAdapter::attributeList() const {
+    return attributeNames;
+}
+
 PcdPointCloudPointFromSdcAdapter::PcdPointCloudPointFromSdcAdapter(
     std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointInterface,
         SdcPointCloudPoint* castedSdcPointCloudPoint, const PcdDataLayout& attributeInformations) :
         castedSdcPointCloudPoint{castedSdcPointCloudPoint},
-        PcdPointCloudPoint{nullptr, std::get<0>(attributeInformations), std::get<2>(attributeInformations),
-            std::get<3>(attributeInformations), std::get<4>(attributeInformations), PcdDataStorageType::ascii,
+        PcdPointCloudPoint{std::get<0>(attributeInformations), std::get<2>(attributeInformations),
+            std::get<3>(attributeInformations), std::get<4>(attributeInformations), PcdDataStorageType::binary,
             castedSdcPointCloudPoint->getRecordDataBuffer()},
             pointCloudPointInterface{std::move(pointCloudPointInterface)} {
     
+}
+
+PcdDataLayout PcdPointCloudPointFromSdcAdapter::getPcdDataLayoutFromSdcPointcloudPoint(
+    SdcPointCloudPoint *sdcPointCloudPoint) {
+
+    if (sdcPointCloudPoint == nullptr) return PcdDataLayout{};
+
+    std::vector<std::string> attributeNames = std::vector<std::string>(SdcPointCloudPoint::attributeNames.begin(),
+        SdcPointCloudPoint::attributeNames.begin() + sdcPointCloudPoint->nbAttributes);
+    
+    std::vector<size_t> size = std::vector<size_t>(SdcPointCloudPoint::fieldByteSize.begin(),
+        SdcPointCloudPoint::fieldByteSize.begin() + sdcPointCloudPoint->nbAttributes);
+
+    std::vector<size_t> count(sdcPointCloudPoint->nbAttributes);
+    // fill the count with 1
+    std::fill(count.begin(), count.end(), 1);
+
+    std::array<uint8_t, 16> typeAll = {'F', 'F', 'F', 'F', 'F', 'F', 'U', 'U', 'U', 'U', 'U', 'U', 'U', 'U', 'F', 'I'};
+
+    std::vector<uint8_t> type = std::vector<uint8_t>(typeAll.begin(), typeAll.end());
+    type.resize(sdcPointCloudPoint->nbAttributes);
+
+    return {attributeNames, attributeNames, size, type, count};
+
 }
 
 } // namespace IO

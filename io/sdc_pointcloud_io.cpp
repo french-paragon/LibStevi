@@ -21,8 +21,16 @@ SdcPointCloudPoint::SdcPointCloudPoint(std::unique_ptr<std::istream> reader, uin
     minorVersion{minorVersion},
     nbAttributes{computeNbAttributes(majorVersion, minorVersion)},
     recordByteSize{computeRecordByteSize(majorVersion, minorVersion)},
-    reader{std::move(reader)}
-{ }
+    reader{std::move(reader)} {
+
+    for (size_t i = 0; i < nbAttributes; i++) {
+        std::string attrName{attributeNames[i]};
+        if (attrName != "x" && attrName != "y" && attrName != "z") {
+            exposedIdToInternalId.push_back(i);
+            exposedAttributeNames.push_back(attrName);
+        }
+    }
+}
 
 PtGeometry<PointCloudGenericAttribute> SdcPointCloudPoint::getPointPosition() const {
     return PtGeometry<PointCloudGenericAttribute>{
@@ -36,8 +44,13 @@ std::optional<PtColor<PointCloudGenericAttribute>> SdcPointCloudPoint::getPointC
     return std::nullopt; // Assuming color is not applicable
 }
 
-std::optional<PointCloudGenericAttribute> SdcPointCloudPoint::getAttributeById(int id) const {
-    if (id >= nbAttributes || id < 0) return std::nullopt; 
+std::optional<PointCloudGenericAttribute> SdcPointCloudPoint::getAttributeById(int exposedId) const {
+    if (exposedId < 0 || exposedId >= exposedIdToInternalId.size()) return std::nullopt;
+    
+    auto id = exposedIdToInternalId[exposedId];
+
+    if (id >= nbAttributes) return std::nullopt;
+
     switch (id) {
         case time_id:
             return PointCloudGenericAttribute{fromBytes<double>(dataBufferPtr + fieldOffset[time_id])};
@@ -77,15 +90,15 @@ std::optional<PointCloudGenericAttribute> SdcPointCloudPoint::getAttributeById(i
 }
 
 std::optional<PointCloudGenericAttribute> SdcPointCloudPoint::getAttributeByName(const char* attributeName) const {
-    auto it = std::find(attributeNames.begin(), attributeNames.end(), attributeName);
-    if (it != attributeNames.end()) {
-        return getAttributeById(std::distance(attributeNames.begin(), it));
+    auto it = std::find(exposedAttributeNames.begin(), exposedAttributeNames.end(), attributeName);
+    if (it != exposedAttributeNames.end()) {
+        return getAttributeById(std::distance(exposedAttributeNames.begin(), it));
     }
     return std::nullopt;
 }
 
 std::vector<std::string> SdcPointCloudPoint::attributeList() const {
-    return std::vector<std::string>(attributeNames.begin(), attributeNames.begin() + nbAttributes);
+    return std::vector<std::string>(exposedAttributeNames.begin(), exposedAttributeNames.end());
 }
 
 bool SdcPointCloudPoint::gotoNext() {

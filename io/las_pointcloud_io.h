@@ -376,8 +376,7 @@ public:
 
     virtual LasExtraAttributesInfos getExtraAttributesInfos() const = 0;
 
-    // TODO: make pure virtual
-    virtual bool write(std::ostream& writer) const;
+    bool write(std::ostream& writer) const;
 
     /**
      * @brief Obtain an adapter to a LasPointCloudPoint from any PointCloudPointAccessInterface. The adapted interface
