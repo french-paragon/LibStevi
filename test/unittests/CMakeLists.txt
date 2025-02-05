@@ -155,5 +155,9 @@ add_executable(testPointCloudIO testPointCloudIO.cpp)
 target_link_libraries(testPointCloudIO ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestPointCloudIO testPointCloudIO)
 
+add_executable(testInpaintingAlgorithms testInpaintingAlgorithms.cpp)
+target_link_libraries(testInpaintingAlgorithms ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestInpaintingAlgorithms testInpaintingAlgorithms)
+
 
 

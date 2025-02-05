@@ -153,7 +153,10 @@ Multidim::Array<T, nDim> nearestInPaintingBatched(Multidim::Array<T, nDim> const
         auto idx = idxConverter.getIndexFromPseudoFlatId(i);
         auto imgIdx = axisIdxCompressors.getUncompressedIndex(idx);
 
-        std::array<int,mDim> nearest = tree.closest(idx);
+        std::array<int,mDim> nearest = idx;
+        if (area2Fill.valueUnchecked(idx)) {
+            nearest = tree.closest(idx);
+        }
         auto imgNearest = axisIdxCompressors.getUncompressedIndex(nearest);
 
         for (int j = 0; j < nBatch; j++) {
