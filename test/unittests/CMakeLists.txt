@@ -81,6 +81,10 @@ add_test(TestImageClustering testImageClustering)
 
 add_executable(testImageIO testImageIO.cpp)
 target_link_libraries(testImageIO ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test Threads::Threads)
+if (TIFF_FOUND)
+        target_compile_definitions(testImageIO PRIVATE STEVI_IO_USE_TIFF)
+endif (TIFF_FOUND)
+
 add_test(TestImageIO testImageIO)
 
 add_executable(testFiniteDifferences testFiniteDifferences.cpp)

@@ -1,5 +1,22 @@
 #include "image_io.h"
 
+#define cimg_display 0 //no display from Cimg
+
+#ifdef STEVI_IO_USE_JPEG
+    #define cimg_use_jpeg //use jpg image format
+#endif //STEVI_IO_USE_JPEG
+
+#ifdef STEVI_IO_USE_PNG
+#define cimg_use_png //use png image format
+#endif //STEVI_IO_USE_PNG
+
+#ifdef STEVI_IO_USE_TIFF
+#define cimg_use_tiff //use tiff image format
+#define cimg_use_tif
+#endif //STEVI_IO_USE_TIFF
+
+#include <CImg.h>
+
 #ifdef STEVI_IO_USE_OPENEXR
 #include "read_exr.h"
 #endif
@@ -189,10 +206,6 @@ bool writeImage(std::string const& fileName, Multidim::Array<InType, 2> const& i
 
     for (int i = 0; i < shape[0]; i++) {
         for (int j = 0; j < shape[1]; j++) {
-
-            if (std::is_same_v<InType, bool>) {
-
-            }
 
             img(j,i) = static_cast<ImgType>(image.template value<Nc>(i,j)); //invert the height and width coordinates to match the convention followed by CImg
 
