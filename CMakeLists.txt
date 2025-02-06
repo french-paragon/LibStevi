@@ -167,6 +167,8 @@ set(LIB_SRC
         io/pcd_pointcloud_io.cpp
         io/las_pointcloud_io.h
         io/las_pointcloud_io.cpp
+        io/metacloud_io.h
+        io/metacloud_io.cpp
         io/attributeMapper.h
         io/attributeRemover.h
         io/attributeRemover.cpp
