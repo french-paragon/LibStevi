@@ -22,9 +22,10 @@ int main(int argc, char const *argv[]) {
         std::cerr << "Could not open file " << path << std::endl;
         return 1;
     }
-
+    auto metacloudFileDirectoryPath = path;
+    metacloudFileDirectoryPath.remove_filename();
     // read the file header
-    auto header = StereoVision::IO::MetaCloudHeader::readHeader(reader);
+    auto header = StereoVision::IO::MetaCloudHeader::readHeader(reader, metacloudFileDirectoryPath);
 
     if (header == nullptr) {
         std::cerr << "Could not read file " << path << std::endl;
@@ -99,5 +100,75 @@ int main(int argc, char const *argv[]) {
             std::cout << name << " : " << StereoVision::IO::castedPointCloudAttribute<std::string>(value) << std::endl;
         }
     }
+
+    // try to open it as a point cloud
+    auto pointCloudOpt = StereoVision::IO::openPointCloudMetacloud(path);
+
+    if (pointCloudOpt) {
+        std::cout << "Point cloud opened" << std::endl;
+    } else {
+        std::cout << "Cannot open the point cloud" << std::endl;
+        return 1;
+    }
+
+    auto& pointCloud = *pointCloudOpt;
+    auto& headerAbstract = pointCloud.headerAccess;
+    auto& cloudpoint = pointCloud.pointAccess;
+
+    std::cout << "------ Point cloud header attributes ------" << std::endl;
+    std::cout << "attributes: ";
+    for (const auto& name : headerAbstract->attributeList()) {
+        std::cout << "\"" << name << "\"" << " ";
+    }
+    std::cout << std::endl << std::endl;
+    // iterate and get the attribute by name
+    for (const auto& name : headerAbstract->attributeList()) {
+        auto valueOpt = headerAbstract->getAttributeByName(name.c_str());
+        if (valueOpt) {
+            auto value = *valueOpt;
+            std::cout << name << " : " << StereoVision::IO::castedPointCloudAttribute<std::string>(value) << std::endl;
+        }
+    }
+
+    auto startTime = std::chrono::high_resolution_clock::now();
+
+    std::cout << "------ Point cloud first point attributes ------" << std::endl;
+    // attribute list
+    std::cout << "attributes: ";
+    for (const auto& name : cloudpoint->attributeList()) {
+        std::cout << "\"" << name << "\"" << " ";
+    }
+    std::cout << std::endl << std::endl;
+    
+    // iterate and get the attribute by name
+    for (const auto& name : cloudpoint->attributeList()) {
+        auto valueOpt = cloudpoint->getAttributeByName(name.c_str());
+        if (valueOpt) {
+            auto value = *valueOpt;
+            std::cout << name << " : " << StereoVision::IO::castedPointCloudAttribute<std::string>(value) << std::endl;
+        }
+    }
+
+    size_t nbPoints = 1;
+    while (cloudpoint->gotoNext()) {
+        nbPoints++;
+    }
+    std::cout << "Number of points: " << nbPoints << std::endl;
+
+    std::cout << "------ Point cloud last point attributes ------" << std::endl;
+    // iterate and get the attribute by name
+    for (const auto& name : cloudpoint->attributeList()) {
+        auto valueOpt = cloudpoint->getAttributeByName(name.c_str());
+        if (valueOpt) {
+            auto value = *valueOpt;
+            std::cout << name << " : " << StereoVision::IO::castedPointCloudAttribute<std::string>(value) << std::endl;
+        }
+    }
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<double> elapsed = endTime - startTime;
+    std::cout << "Time: " << elapsed.count() << "s" << std::endl;
+
     return 0;
 }
