@@ -115,6 +115,14 @@ Eigen::Matrix<T,3,1> inverseRodriguezFormula(Eigen::Matrix<T,3,3> const& R) {
     return omega;
 }
 
+/*!
+ * \brief diffRodriguezLieAlgebra gives the right Jacobian of SO(3) for a given axis angle vector
+ * \param r the rotation axis
+ * \return J_{so(3)}(r), the right Jacobian of SO(3)
+ *
+ * J_{so(3)}(r) relate additional increments in so(3) and multiplicative increments in SO(3) such that:
+ * Exp(r + dr) = Exp(r)Exp(J_{so(3)}(r)dr) and Log(Exp(r)Exp(dr)) = r + J_{so(3)}(r)^-1 dr  for small dr
+ */
 template<typename T>
 Eigen::Matrix<T,3,3> diffRodriguezLieAlgebra(Eigen::Matrix<T,3,1> const& r) {
 
@@ -129,15 +137,15 @@ Eigen::Matrix<T,3,3> diffRodriguezLieAlgebra(Eigen::Matrix<T,3,1> const& r) {
 
     if (theta > 1e-6) {
         a = sin(theta)/theta;
-        b = (1 - cos(theta))/(theta*theta);
+        b = -(1 - cos(theta))/(theta*theta);
         c = (1 - a)/(theta*theta);
     } else {
         a = 1;
-        b = 1./2.;
+        b = -1./2.;
         c = 1./6.;
     }
 
-    dR = a*Eigen::Matrix<T,3,3>::Identity() + b*m + c*(r*r.transpose());
+    dR = Eigen::Matrix<T,3,3>::Identity() + b*m + c*(m*m);
 
     return dR;
 }

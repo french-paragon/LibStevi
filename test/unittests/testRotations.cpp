@@ -30,6 +30,9 @@ private Q_SLOTS:
     void testInverseRodriguezNumStable_data();
     void testInverseRodriguezNumStable();
 
+    void testJacobianSO3_data();
+    void testJacobianSO3();
+
 	void testDiffRodriguez_data();
 	void testDiffRodriguez();
 
@@ -52,7 +55,7 @@ private:
 
 
 void TestGeometryLibRotation::initTestCase() {
-	//srand((unsigned int) time(nullptr));
+    srand((unsigned int) time(nullptr));
 	std::random_device rd;
 	re.seed(rd());
 }
@@ -272,6 +275,66 @@ void TestGeometryLibRotation::testInverseRodriguezNumStable() {
     bool allFinite = r.array().allFinite();
 
     QVERIFY2(allFinite, "Expected coefficients are all supposed to be finite");
+
+}
+
+void TestGeometryLibRotation::testJacobianSO3_data() {
+
+    QTest::addColumn<float>("rx");
+    QTest::addColumn<float>("ry");
+    QTest::addColumn<float>("rz");
+
+    QTest::newRow("Identity") << 0.0f << 0.0f << 0.0f;
+
+    QTest::newRow("x axis one") << 1.0f << 0.0f << 0.0f;
+    QTest::newRow("y axis one") << 0.0f << 1.0f << 0.0f;
+    QTest::newRow("z axis one") << 0.0f << 0.0f << 1.0f;
+
+    QTest::newRow("x axis pi") << static_cast<float>(M_PI) << 0.0f << 0.0f;
+    QTest::newRow("y axis pi") << 0.0f << static_cast<float>(M_PI) << 0.0f;
+    QTest::newRow("z axis pi") << 0.0f << 0.0f << static_cast<float>(M_PI);
+
+    Eigen::Vector3f random = Eigen::Vector3f::Random();
+    QTest::newRow("Random 1") << random.x() << random.y() << random.z();
+    random = Eigen::Vector3f::Random();
+    QTest::newRow("Random 2") << random.x() << random.y() << random.z();
+    random = Eigen::Vector3f::Random();
+    QTest::newRow("Random 3") << random.x() << random.y() << random.z();
+
+}
+
+void TestGeometryLibRotation::testJacobianSO3() {
+
+    QFETCH(float, rx);
+    QFETCH(float, ry);
+    QFETCH(float, rz);
+
+    Eigen::Vector3f r(rx, ry, rz);
+
+    Eigen::Matrix3f R = rodriguezFormula<float>(r);
+    Eigen::Matrix3f Jr = diffRodriguezLieAlgebra<float>(r);
+
+    constexpr int nRuns = 100;
+
+    constexpr float epsilon = 1e-4;
+
+    for (int i = 0; i < nRuns; i++) {
+
+        Eigen::Vector3f dr = Eigen::Vector3f::Random();
+        dr *= epsilon;
+
+        Eigen::Matrix3f RJrdr = R * rodriguezFormula<float>(Jr*dr);
+
+        Eigen::Matrix3f Rdr = rodriguezFormula<float>(r + dr);
+
+        Eigen::Matrix3f delta = Rdr.transpose() * RJrdr;
+
+        Eigen::Vector3f logDelta = inverseRodriguezFormula(delta);
+
+        float error = logDelta.norm();
+
+        QVERIFY2( error < epsilon*1e-2, qPrintable(QString("Large error (%1) detected").arg(error)));
+    }
 
 }
 
