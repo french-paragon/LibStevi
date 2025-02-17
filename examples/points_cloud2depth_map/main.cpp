@@ -10,11 +10,16 @@
 
 #include <MultidimArrays/MultidimArrays.h>
 
+#include <imageProcessing/inpainting.h>
+#include <imageProcessing/morphologicalOperators.h>
 #include <geometry/rotations.h>
 #include <geometry/genericbinarypartitioningtree.h>
 #include <io/image_io.h>
+#include <io/pointcloud_io.h>
 
 #include <Eigen/Core>
+
+#include <tclap/CmdLine.h>
 
 #include <omp.h>
 
@@ -24,90 +29,35 @@ using BinaryTree = StereoVision::Geometry::GenericBSP<PointType, 2, StereoVision
 BinaryTree::ContainerT loadPoints(QString const& fileName) {
     BinaryTree::ContainerT ret;
 
-    QFile inFile(fileName);
+    std::optional<StereoVision::IO::FullPointCloudAccessInterface> optPointCloud =
+            StereoVision::IO::openPointCloud(fileName.toStdString());
 
-    if(!inFile.open(QFile::ReadOnly)) {
+    if (!optPointCloud.has_value()) {
         return ret;
     }
 
-    int count = 0;
-    QTextStream in(&inFile);
+    StereoVision::IO::FullPointCloudAccessInterface& ptCloud = optPointCloud.value();
 
-    in.seek(0);
+    bool hasMore = true;
 
-    while (!in.atEnd()) {
+    do {
 
-        QString line = in.readLine();
+        PointType point;
+        auto geom = ptCloud.pointAccess->castedPointGeometry<double>();
 
-        if (line.startsWith("VERSION")) {
-            continue;
-        }
+        point.x() = geom.x;
+        point.y() = geom.y;
+        point.z() = geom.z;
 
-        if (line.startsWith("FIELDS")) {
-            continue;
-        }
+        double intensity = StereoVision::IO::castedPointCloudAttribute<double>(
+                    ptCloud.pointAccess->getAttributeByName("intensity").value_or(0.0));
 
-        if (line.startsWith("SIZE")) {
-            continue;
-        }
+        point[3] = intensity;
 
-        if (line.startsWith("TYPE")) {
-            continue;
-        }
+        ret.push_back(point);
 
-        if (line.startsWith("WIDTH")) {
-            continue;
-        }
-
-        if (line.startsWith("HEIGHT")) {
-            continue;
-        }
-
-        if (line.startsWith("VIEWPOINT")) {
-            continue;
-        }
-
-        if (line.startsWith("POINTS")) {
-            QStringList points = line.split(" ", Qt::SkipEmptyParts);
-            if (points.size() == 2) {
-                bool ok = true;
-                size_t nPoints = points[1].toInt(&ok);
-
-                if (ok) {
-                    ret.reserve(nPoints);
-                }
-            }
-            continue;
-        }
-
-        if (line.startsWith("DATA")) {
-            continue;
-        }
-
-        QStringList splitted = line.split(" ", Qt::SkipEmptyParts);
-
-        if (splitted.size() < 4) {
-            continue;
-        }
-
-        PointType xyz;
-
-        bool ok = true;
-
-        for (int i = 0; i < 4; i++) {
-            xyz[i] = splitted[i].toFloat(&ok);
-
-            if (!ok) {
-                break;
-            }
-        }
-
-        if (!ok) {
-            continue;
-        }
-
-        ret.push_back(xyz);
-    }
+        hasMore = ptCloud.pointAccess->gotoNext();
+    } while (hasMore);
 
     return ret;
 }
@@ -151,6 +101,7 @@ Multidim::Array<float,3> generateDepthMapWithBinaryTree(std::array<int,2> shape,
     out << "Start creating raster!" << Qt::endl;
 
     constexpr float distTol = 8;
+    constexpr float bgVal = -1;
 
     #pragma omp parallel for
     for (int i = 0; i < shape[0]; i++) {
@@ -194,7 +145,7 @@ Multidim::Array<float,3> generateDepthMapWithBinaryTree(std::array<int,2> shape,
                 raster.atUnchecked(i,j,0) = point[2] - minZ;
                 raster.atUnchecked(i,j,1) = point[3];
             } else {
-                raster.atUnchecked(i,j,0) = -1;
+                raster.atUnchecked(i,j,0) = bgVal;
                 raster.atUnchecked(i,j,1) = 0;
             }
         }
@@ -204,24 +155,32 @@ Multidim::Array<float,3> generateDepthMapWithBinaryTree(std::array<int,2> shape,
 
 }
 
-Multidim::Array<float,2> generateDepthMapDirect(std::array<int,2> shape,
+std::tuple<Multidim::Array<float,3>,Multidim::Array<float,2>> generateDepthMapDirect(std::array<int,2> shape,
                                                 BinaryTree::ContainerT & points,
                                                 StereoVision::Geometry::AffineTransform<double> const& img2ptcloud,
                                                 StereoVision::Geometry::AffineTransform<double> const& ptcloud2img,
                                                 float minZ,
+                                                int bufferDepth,
                                                 QTextStream & out) {
 
-    Multidim::Array<float,2> raster(shape);
+    Multidim::Array<float,3> raster(shape[0], shape[1], bufferDepth);
+    Multidim::Array<float,2> intensity(shape[0], shape[1]);
 
     out << "Start creating raster!" << Qt::endl;
 
     constexpr float distTol = 2;
+    constexpr float bgVal = -1;
 
     #pragma omp parallel for
     for (int i = 0; i < shape[0]; i++) {
 
         for (int j = 0; j < shape[1]; j++) {
-            raster.atUnchecked(i,j) = -1;
+
+            intensity.atUnchecked(i,j) = 0;
+
+            for (int d = 0; d < bufferDepth; d++) {
+                raster.atUnchecked(i,j,d) = bgVal;
+            }
         }
     }
 
@@ -245,12 +204,25 @@ Multidim::Array<float,2> generateDepthMapDirect(std::array<int,2> shape,
 
         double z = ptCoords.z() - minZ;
 
-        if (raster.atUnchecked(i,j) < z) {
-            raster.atUnchecked(i,j) = z;
+        double currentZ = z;
+
+        for (int d = 0; d < bufferDepth; d++) {
+
+            double currentDepth = raster.atUnchecked(i,j,d);
+
+            if (raster.atUnchecked(i,j,d) < currentZ) {
+                raster.atUnchecked(i,j,d) = currentZ;
+            }
+
+            if (currentDepth > bgVal) {
+                currentZ = currentDepth;
+            }
         }
+
+        intensity.atUnchecked(i,j) = ptCoords[3];
     }
 
-    return raster;
+    return std::make_tuple(std::move(raster), std::move(intensity));
 
 }
 
@@ -363,29 +335,51 @@ int main(int argc, char** argv) {
     QTextStream out(stdout);
     QTextStream err(stderr);
 
-    if (argc < 3) {
-        err << "Invalid number of arguments provided" << Qt::endl;
-        return 1;
-    }
-
-    bool ok = true;
-    QString pointCloudFile = argv[1];
-    int resolution = QString(argv[2]).toInt(&ok);
-
-    if (!ok or resolution <= 0) {
-        err << "Invalid resolution provided" << Qt::endl;
-        return 1;
-    }
+    QString pointCloudFile;
+    int resolution;
+    int bufferDepth = 1;
+    int inPaintingRadius = 5;
 
     QVector<QString> clustersFileList;
     QVector<QString> validClustersFileList;
 
-    if (argc >= 4) {
-        clustersFileList = getFileList(argv[3]);
-    }
+    try {
+        TCLAP::CmdLine cmd("Export a point cloud to a depth map", '=', "0.0");
 
-    if (argc >= 5) {
-        validClustersFileList = getFileList(argv[4]);
+        TCLAP::UnlabeledValueArg<std::string> cloudFilePathArg("ptCloudFilePath", "Path where the points cloud is stored", true, "", "local path to point cloud file");
+
+        TCLAP::ValueArg<int> resArg("r","resolution", "resolution to use for export", true, 1, "int");
+        TCLAP::ValueArg<int> bufferDepthArg("b","bufferDepth", "buffer depth of the depth map", false, bufferDepth, "int");
+        TCLAP::ValueArg<std::string> clustersArg("", "clusters", "clusters definition file", false, "", "filepath");
+        TCLAP::ValueArg<std::string> vclustersArg("", "vclusters", "valid clusters definition file", false, "", "filepath");
+
+        cmd.add(cloudFilePathArg);
+        cmd.add(resArg);
+        cmd.add(bufferDepthArg);
+        cmd.add(clustersArg);
+        cmd.add(vclustersArg);
+
+        cmd.parse(argc, argv);
+
+        pointCloudFile = QString::fromStdString(cloudFilePathArg.getValue());
+        resolution = resArg.getValue();
+
+        if (bufferDepthArg.isSet()) {
+            int tmp = bufferDepthArg.getValue();
+            bufferDepth = std::max(tmp, 1);
+        }
+
+        if (clustersArg.isSet()) {
+            clustersFileList = getFileList(clustersArg.getValue().c_str());
+        }
+
+        if (vclustersArg.isSet()) {
+            validClustersFileList = getFileList(vclustersArg.getValue().c_str());
+        }
+
+
+    } catch (TCLAP::ArgException &e) {
+        err << "Argument error:" << e.error().c_str() << " for arg " << e.argId().c_str() << Qt::endl;
     }
 
     out << "Start loading points data!" << Qt::endl;
@@ -491,7 +485,7 @@ int main(int argc, char** argv) {
 
     bool useBinaryTree = true;
 
-    Multidim::Array<float,2> raster;
+    Multidim::Array<float,3> raster;
     Multidim::Array<float,2> intensityRaster;
 
     if (useBinaryTree) {
@@ -501,22 +495,46 @@ int main(int argc, char** argv) {
                                                      ptcloud2img,
                                                      minZ,
                                                      out);
-        raster = Multidim::Array<float,2>(data.shape()[0], data.shape()[1]);
+        raster = Multidim::Array<float,3>(data.shape()[0], data.shape()[1],1);
         intensityRaster = Multidim::Array<float,2>(data.shape()[0], data.shape()[1]);
 
         for (int i = 0; i < data.shape()[0]; i++) {
             for (int j = 0; j < data.shape()[1]; j++) {
-                raster.atUnchecked(i,j) = data.valueUnchecked(i,j,0);
+                raster.atUnchecked(i,j,0) = data.valueUnchecked(i,j,0);
                 intensityRaster.atUnchecked(i,j) = data.valueUnchecked(i,j,1);
             }
         }
+
     } else {
-        raster = generateDepthMapDirect(shape,
+        std::tie(raster, intensityRaster) = generateDepthMapDirect(shape,
                                      points,
                                      img2ptcloud,
                                      ptcloud2img,
                                      minZ,
+                                     bufferDepth,
                                      out);
+
+        Multidim::Array<bool,2> coverMask(shape[0], shape[1]);
+
+        for (int i = 0; i < shape[0]; i++) {
+            for (int j = 0; j < shape[1]; j++) {
+                coverMask.atUnchecked(i,j) = raster.valueUnchecked(i,j,0) >= 0; //pixels that do not need to be inpainted
+            }
+        }
+
+        Multidim::Array<bool,2> inpaintingMask =
+                StereoVision::ImageProcessing::erosion(inPaintingRadius+2,inPaintingRadius+2,
+                    StereoVision::ImageProcessing::dilation(inPaintingRadius,inPaintingRadius,coverMask)
+                );
+
+        for (int i = 0; i < shape[0]; i++) {
+            for (int j = 0; j < shape[1]; j++) {
+                inpaintingMask.atUnchecked(i,j) = inpaintingMask.valueUnchecked(i,j) and !coverMask.valueUnchecked(i,j);
+            }
+        }
+
+        raster = StereoVision::ImageProcessing::nearestInPaintingBatched<float,3,1>(raster,inpaintingMask,{2});
+        intensityRaster = StereoVision::ImageProcessing::nearestInPaintingMonochannel(intensityRaster, inpaintingMask);
     }
 
 
@@ -525,7 +543,7 @@ int main(int argc, char** argv) {
     QString outFile = pointCloudFile + ".tiff";
     QString outIntensityFile = pointCloudFile + "intensity.tiff";
 
-    ok = StereoVision::IO::writeImage<float, float>(outFile.toStdString(), raster);
+    bool ok = StereoVision::IO::writeImage<float, float>(outFile.toStdString(), raster);
 
     if (!ok) {
         err << "Error while writing image" << Qt::endl;
