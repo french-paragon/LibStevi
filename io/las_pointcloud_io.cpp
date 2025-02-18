@@ -1453,10 +1453,18 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
 
     auto pointPos = writer.tellp();
     size_t nbPoints = 0;
+    // reset to zero
+    lasHeader->publicHeaderBlock.numberOfPointsByReturn = {};
     // write the point cloud
     do {
         lasPointAccessAdapter->write(writer);
         if (writer.fail()) return false;
+        // get the return number. carreful: the return number starts at 1
+        auto returnNumber
+            = castedPointCloudAttribute<size_t>(lasPointAccessAdapter->getAttributeByName("returnNumber").value_or(1));
+        // force the return number to be between 1 and the number of returns
+        returnNumber = std::max(size_t{1}, std::min(returnNumber, lasHeader->publicHeaderBlock.numberOfPointsByReturn.size()));
+        lasHeader->publicHeaderBlock.numberOfPointsByReturn[returnNumber-1]++;
         nbPoints++;
     } while (lasPointAccessAdapter->gotoNext());
 
@@ -1470,11 +1478,30 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
     }
     // set the number of points
     lasHeader->publicHeaderBlock.numberOfPointRecords = nbPoints;
-    if (nbPoints <= std::numeric_limits<decltype(lasHeader->publicHeaderBlock.legacyNumberOfPointRecords)>::max()) {
+    constexpr auto maxValueLegacy =
+        std::numeric_limits<decltype(lasHeader->publicHeaderBlock.legacyNumberOfPointRecords)>::max();
+    if (nbPoints <= maxValueLegacy) {
         // set the legacy number of points
         lasHeader->publicHeaderBlock.legacyNumberOfPointRecords = nbPoints;
     }
-    // TODO: set the Number of Points by Return and legacy number of points by return
+    // try to set the legacy number of points by return from the number of points by return
+    lasHeader->publicHeaderBlock.legacyNumberOfPointsByReturn = {};
+    auto maxLegacyReturnNumber = lasHeader->publicHeaderBlock.legacyNumberOfPointsByReturn.size();
+    auto maxReturnNumber = lasHeader->publicHeaderBlock.numberOfPointsByReturn.size();
+    for (size_t i = 0; i < maxReturnNumber; i++) {
+        auto legacyReturnNumber = std::min(maxLegacyReturnNumber, i);
+        // if the return number is bigger than the legacy one, we add it to the value of the max legacy return number
+        // test if the number of points for this return number is bigger than the maximum value allowed by the type
+        size_t nbPointsByReturn = lasHeader->publicHeaderBlock.numberOfPointsByReturn[i]
+            + lasHeader->publicHeaderBlock.legacyNumberOfPointsByReturn[legacyReturnNumber];
+        if (nbPointsByReturn > maxValueLegacy) {
+            // cannot have a valid value
+            lasHeader->publicHeaderBlock.legacyNumberOfPointsByReturn = {};
+            break;
+        } else {
+            lasHeader->publicHeaderBlock.legacyNumberOfPointsByReturn[legacyReturnNumber] = nbPointsByReturn;
+        }
+    }
 
     // rewrite the public header:
     writer.seekp(beginPos);
