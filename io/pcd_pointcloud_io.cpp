@@ -792,8 +792,9 @@ bool PcdPointCloudHeader::getNextHeaderLine(std::istream& reader, std::string& l
     return false;
 }
 
-bool PcdPointCloudHeader::writeHeader(std::ostream &writer, const PcdPointCloudHeader &header, std::streampos &headerWidthPos,
-                    std::streampos &headerHeightPos, std::streampos &headerPointsPos) {
+bool PcdPointCloudHeader::writeHeader(std::ostream &writer, const PcdPointCloudHeader &header,
+    std::streampos &headerWidthPos, std::streampos &headerHeightPos, std::streampos &headerPointsPos) {
+    
     if (!writer.good()) return false;
 
     // convert the bigest size_t to a string and get its length
@@ -1115,7 +1116,10 @@ bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloud
     constexpr auto maxPrecision{std::numeric_limits<double>::digits10 + 1};
     *writer << std::setprecision(maxPrecision);
 
-    return writePointCloudPcd(*writer, pointCloud, dataStorageType);
+    auto success = writePointCloudPcd(*writer, pointCloud, dataStorageType);
+    writer->close();
+
+    return success;
 }
 
 bool writePointCloudPcd(std::ostream &writer, FullPointCloudAccessInterface &pointCloud,
@@ -1226,7 +1230,13 @@ bool writePointCloudPcd(std::ostream &writer, FullPointCloudAccessInterface &poi
         writer.seekp(0, std::ios_base::end);
     }
 
-    return true;
+    // writer.flush();
+    if (writer.fail()) {
+        return false;
+    } else {
+        return true;   
+    }
+
 }
 
 PcdPointCloudPointBasicAdapter::PcdPointCloudPointBasicAdapter(
