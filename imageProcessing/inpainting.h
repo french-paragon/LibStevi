@@ -171,6 +171,7 @@ Multidim::Array<T, nDim> nearestInPaintingBatched(Multidim::Array<T, nDim> const
         }
     }
 
+    
     return ret;
 }
 
