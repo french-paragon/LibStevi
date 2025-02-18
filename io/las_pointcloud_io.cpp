@@ -1351,12 +1351,12 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
 
     if (pointCloud.headerAccess != nullptr) {
         // try to get the xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset
-        auto xScaleFactorOpt = pointCloud.headerAccess->getAttributeByName("XScaleFactor");
-        auto yScaleFactorOpt = pointCloud.headerAccess->getAttributeByName("YScaleFactor");
-        auto zScaleFactorOpt = pointCloud.headerAccess->getAttributeByName("ZScaleFactor");
-        auto xOffsetOpt = pointCloud.headerAccess->getAttributeByName("XOffset");
-        auto yOffsetOpt = pointCloud.headerAccess->getAttributeByName("YOffset");
-        auto zOffsetOpt = pointCloud.headerAccess->getAttributeByName("ZOffset");
+        auto xScaleFactorOpt = pointCloud.headerAccess->getAttributeByName("xScaleFactor");
+        auto yScaleFactorOpt = pointCloud.headerAccess->getAttributeByName("yScaleFactor");
+        auto zScaleFactorOpt = pointCloud.headerAccess->getAttributeByName("zScaleFactor");
+        auto xOffsetOpt = pointCloud.headerAccess->getAttributeByName("xOffset");
+        auto yOffsetOpt = pointCloud.headerAccess->getAttributeByName("yOffset");
+        auto zOffsetOpt = pointCloud.headerAccess->getAttributeByName("zOffset");
 
         if (xScaleFactorOpt.has_value())
             xScaleFactor = castedPointCloudAttribute<double>(xScaleFactorOpt.value());
@@ -1380,21 +1380,21 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
 
     // try to cast the header to a las header
     auto lasHeader = dynamic_cast<LasPointCloudHeader*>(pointCloud.headerAccess.get());
-
     auto newHeader = std::make_unique<LasPointCloudHeader>();
-    if (!lasHeader) {
-        lasHeader = newHeader.get();
-        // return false; // header is not a las header
-        //TODO: create header + check that it matches the data of the pointcloud
-        // add the extra byte data
-        auto minimumNumberOfAttributes = lasPointAccessAdapter->getMinimumNumberOfAttributes();
-        auto extraAttributesInfos = lasPointAccessAdapter->getExtraAttributesInfos();
-        auto extraBytesVlrData = LasPointCloudHeader::generateExtraBytesVlrData(extraAttributesInfos);
-        LasVariableLengthRecord extraBytesVlr{"LASF_Spec", 4, extraBytesVlrData};
-        lasHeader->variableLengthRecords.push_back(extraBytesVlr);
-        lasHeader->publicHeaderBlock.numberOfVariableLengthRecords++;
+    if (lasHeader != nullptr) {
+        newHeader->publicHeaderBlock = lasHeader->publicHeaderBlock;
     }
+    lasHeader = newHeader.get();
 
+    // return false; // header is not a las header
+    //TODO: create header + check that it matches the data of the pointcloud
+    // add the extra byte data
+    auto minimumNumberOfAttributes = lasPointAccessAdapter->getMinimumNumberOfAttributes();
+    auto extraAttributesInfos = lasPointAccessAdapter->getExtraAttributesInfos();
+    auto extraBytesVlrData = LasPointCloudHeader::generateExtraBytesVlrData(extraAttributesInfos);
+    LasVariableLengthRecord extraBytesVlr{"LASF_Spec", 4, extraBytesVlrData};
+    lasHeader->variableLengthRecords.push_back(extraBytesVlr);
+    lasHeader->publicHeaderBlock.numberOfVariableLengthRecords++;
     // properly set the xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset for the header
     lasHeader->publicHeaderBlock.xScaleFactor = xScaleFactor;
     lasHeader->publicHeaderBlock.yScaleFactor = yScaleFactor;
