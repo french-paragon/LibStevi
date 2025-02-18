@@ -208,18 +208,21 @@ std::optional<FullPointCloudAccessInterface> openPointCloudSdc(std::unique_ptr<s
 bool writePointCloudSdc(const std::filesystem::path &sdcFilePath, FullPointCloudAccessInterface &pointCloud)
 {
 
-    auto outputFile = std::make_unique<ofstreamCustomBuffer<sdcFileWriterBufferSize>>();
+    auto writer = std::make_unique<ofstreamCustomBuffer<sdcFileWriterBufferSize>>();
 
-    outputFile->open(sdcFilePath, std::ios_base::binary);
+    writer->open(sdcFilePath, std::ios_base::binary);
 
     // fail if the file can't be opened
-    if (!outputFile->is_open()) return false;
+    if (!writer->is_open()) return false;
 
     // set the precision to the maximum
     constexpr auto maxPrecision{std::numeric_limits<double>::digits10 + 1};
-    *outputFile << std::setprecision(maxPrecision);
+    *writer << std::setprecision(maxPrecision);
 
-    return writePointCloudSdc(*outputFile, pointCloud);
+    auto success = writePointCloudSdc(*writer, pointCloud);
+    writer->close();
+
+    return success;
 }
 
 bool writePointCloudSdc(std::ostream &stream, FullPointCloudAccessInterface &pointCloud) {

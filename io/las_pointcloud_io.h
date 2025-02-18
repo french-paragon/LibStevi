@@ -170,6 +170,12 @@ public:
     
     auto getPointDataRecordLength() const { return pointDataRecordLength; }
     auto getPointDataRecordFormat() const { return pointDataRecordFormat; }
+    double getXScaleFactor() const { return xScaleFactor; }
+    double getYScaleFactor() const { return yScaleFactor; }
+    double getZScaleFactor() const { return zScaleFactor; }
+    double getXOffset() const { return xOffset; }
+    double getYOffset() const { return yOffset; }
+    double getZOffset() const { return zOffset; }
 };
 
 /// Class representing a variable length record (or extended variable length record)
@@ -347,21 +353,41 @@ protected:
     size_t recordByteSize; // number of bytes in the las point record
     char* dataBuffer;
     
+    double xScaleFactor = 0.01;
+    double yScaleFactor = 0.01;
+    double zScaleFactor = 0.01;
+    double xOffset = 0;
+    double yOffset = 0;
+    double zOffset = 0;
     /**
      * @brief Construct a new Las Point Cloud Point object
      * 
      * @param recordByteSize the size of the point record
+     * @param xScaleFactor the x scale factor
+     * @param yScaleFactor the y scale factor
+     * @param zScaleFactor the z scale factor
+     * @param xOffset the x offset
+     * @param yOffset the y offset
+     * @param zOffset the z offset
      */
-    LasPointCloudPoint(size_t recordByteSize);
+    LasPointCloudPoint(size_t recordByteSize, double xScaleFactor, double yScaleFactor, double zScaleFactor,
+        double xOffset, double yOffset, double zOffset);
 
     /**
      * @brief Construct a new Las Point Cloud Point object with a data buffer
      * 
      * @param recordByteSize the size of the point record
+     * @param xScaleFactor the x scale factor
+     * @param yScaleFactor the y scale factor
+     * @param zScaleFactor the z scale factor
+     * @param xOffset the x offset
+     * @param yOffset the y offset
+     * @param zOffset the z offset
      * @param dataBuffer the data buffer
      *
      **/
-    LasPointCloudPoint(size_t recordByteSize, char* dataBuffer);
+    LasPointCloudPoint(size_t recordByteSize, double xScaleFactor, double yScaleFactor, double zScaleFactor,
+        double xOffset, double yOffset, double zOffset, char* dataBuffer);
 
 private:
     std::vector<char> dataBufferContainer;
@@ -369,6 +395,13 @@ public:
     inline auto* getRecordDataBuffer() const { return dataBuffer; }
 
     inline auto getRecordByteSize() const { return recordByteSize; }
+
+    double getXScaleFactor() const { return xScaleFactor; }
+    double getYScaleFactor() const { return yScaleFactor; }
+    double getZScaleFactor() const { return zScaleFactor; }
+    double getXOffset() const { return xOffset; }
+    double getYOffset() const { return yOffset; }
+    double getZOffset() const { return zOffset; }
 
     virtual size_t getFormat() const = 0; // return the las format
 
@@ -384,10 +417,17 @@ public:
      * If the given interface is null, a nullptr is returned.
      * 
      * @param pointCloudPointAccessInterface the interface to adapt
+     * @param xScaleFactor the x scale factor. If the given interface is already a LasPointCloudPoint, this parameter is ignored
+     * @param yScaleFactor the y scale factor. If the given interface is already a LasPointCloudPoint, this parameter is ignored
+     * @param zScaleFactor the z scale factor. If the given interface is already a LasPointCloudPoint, this parameter is ignored
+     * @param xOffset the x offset. If the given interface is already a LasPointCloudPoint, this parameter is ignored
+     * @param yOffset the y offset. If the given interface is already a LasPointCloudPoint, this parameter is ignored
+     * @param zOffset the z offset. If the given interface is already a LasPointCloudPoint, this parameter is ignored
      * @return a unique_ptr to the adapted interface that can be safely cast to a LasPointCloudPoint
      */
     static std::unique_ptr<PointCloudPointAccessInterface> createAdapter(
-        std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterface);
+        std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterface, double xScaleFactor,
+        double yScaleFactor, double zScaleFactor, double xOffset, double yOffset, double zOffset);
 
     static bool formatContainsColor(size_t format) {return format == 2 || format == 3 || format == 5 || format == 7 ||
                                                            format == 8 || format == 10;}
