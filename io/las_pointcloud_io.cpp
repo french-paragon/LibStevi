@@ -954,10 +954,21 @@ std::optional<LasPublicHeaderBlock> LasPublicHeaderBlock::readPublicHeader(std::
     reader.read(reinterpret_cast<char*>(&header.maxZ), maxZ_size);
     reader.read(reinterpret_cast<char*>(&header.minZ), minZ_size);
     reader.read(reinterpret_cast<char*>(&header.startOfWaveformDataPacketRecord), startOfWaveformDataPacketRecord_size);
-    reader.read(reinterpret_cast<char*>(&header.startOfFirstExtendedVariableLengthRecord), startOfFirstExtendedVariableLengthRecord_size);
-    reader.read(reinterpret_cast<char*>(&header.numberOfExtendedVariableLengthRecords), numberOfExtendedVariableLengthRecords_size);
-    reader.read(reinterpret_cast<char*>(&header.numberOfPointRecords), numberOfPointRecords_size);
-    reader.read(reinterpret_cast<char*>(header.numberOfPointsByReturn.data()), numberOfPointsByReturn_size);
+    // version >= 1.4
+    if ((header.versionMajor == 1 && header.versionMinor >= 4) || header.versionMajor > 1) {
+        reader.read(reinterpret_cast<char*>(&header.startOfFirstExtendedVariableLengthRecord), startOfFirstExtendedVariableLengthRecord_size);
+        reader.read(reinterpret_cast<char*>(&header.numberOfExtendedVariableLengthRecords), numberOfExtendedVariableLengthRecords_size);
+        reader.read(reinterpret_cast<char*>(&header.numberOfPointRecords), numberOfPointRecords_size);
+        reader.read(reinterpret_cast<char*>(header.numberOfPointsByReturn.data()), numberOfPointsByReturn_size);
+    } else {
+        // copy data from legacy
+        header.startOfFirstExtendedVariableLengthRecord = 0;
+        header.numberOfExtendedVariableLengthRecords = 0;
+        header.numberOfPointRecords = header.legacyNumberOfPointRecords;
+        for (size_t i = 0; i < header.legacyNumberOfPointsByReturn.size(); i++) {
+            header.numberOfPointsByReturn[i] = header.legacyNumberOfPointsByReturn[i];
+        }
+    }
 
     if (reader.fail()) return std::nullopt;
 
@@ -998,10 +1009,13 @@ bool LasPublicHeaderBlock::writePublicHeader(std::ostream &writer, const LasPubl
     writer.write(reinterpret_cast<const char*>(&header.maxZ), maxZ_size);
     writer.write(reinterpret_cast<const char*>(&header.minZ), minZ_size);
     writer.write(reinterpret_cast<const char*>(&header.startOfWaveformDataPacketRecord), startOfWaveformDataPacketRecord_size);
-    writer.write(reinterpret_cast<const char*>(&header.startOfFirstExtendedVariableLengthRecord), startOfFirstExtendedVariableLengthRecord_size);
-    writer.write(reinterpret_cast<const char*>(&header.numberOfExtendedVariableLengthRecords), numberOfExtendedVariableLengthRecords_size);
-    writer.write(reinterpret_cast<const char*>(&header.numberOfPointRecords), numberOfPointRecords_size);
-    writer.write(reinterpret_cast<const char*>(header.numberOfPointsByReturn.data()), numberOfPointsByReturn_size);
+    // version >= 1.4
+    if ((header.versionMajor == 1 && header.versionMinor >= 4) || header.versionMajor > 1) {
+        writer.write(reinterpret_cast<const char*>(&header.startOfFirstExtendedVariableLengthRecord), startOfFirstExtendedVariableLengthRecord_size);
+        writer.write(reinterpret_cast<const char*>(&header.numberOfExtendedVariableLengthRecords), numberOfExtendedVariableLengthRecords_size);
+        writer.write(reinterpret_cast<const char*>(&header.numberOfPointRecords), numberOfPointRecords_size);
+        writer.write(reinterpret_cast<const char*>(header.numberOfPointsByReturn.data()), numberOfPointsByReturn_size);
+    }
 
     return writer.good();
 }
@@ -1383,18 +1397,36 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
     auto newHeader = std::make_unique<LasPointCloudHeader>();
     if (lasHeader != nullptr) {
         newHeader->publicHeaderBlock = lasHeader->publicHeaderBlock;
+        newHeader->variableLengthRecords = lasHeader->variableLengthRecords;
+        newHeader->extendedVariableLengthRecords = lasHeader->extendedVariableLengthRecords;
     }
+
     lasHeader = newHeader.get();
 
-    // return false; // header is not a las header
-    //TODO: create header + check that it matches the data of the pointcloud
     // add the extra byte data
-    auto minimumNumberOfAttributes = lasPointAccessAdapter->getMinimumNumberOfAttributes();
     auto extraAttributesInfos = lasPointAccessAdapter->getExtraAttributesInfos();
-    auto extraBytesVlrData = LasPointCloudHeader::generateExtraBytesVlrData(extraAttributesInfos);
-    LasVariableLengthRecord extraBytesVlr{"LASF_Spec", 4, extraBytesVlrData};
-    lasHeader->variableLengthRecords.push_back(extraBytesVlr);
-    lasHeader->publicHeaderBlock.numberOfVariableLengthRecords++;
+    if (extraAttributesInfos.name.size() > 0) {
+        auto extraBytesVlrData = LasPointCloudHeader::generateExtraBytesVlrData(extraAttributesInfos);
+        LasVariableLengthRecord extraBytesVlr{"LASF_Spec", 4, extraBytesVlrData};
+        // remove the VLR or EVLR if already present
+        for (size_t i_supp = lasHeader->variableLengthRecords.size(); i_supp > 0; i_supp--) {
+            size_t i = i_supp - 1;
+            if (lasHeader->variableLengthRecords[i].getUserId() == "LASF_Spec" && lasHeader->variableLengthRecords[i].getRecordId() == 4) {
+                lasHeader->variableLengthRecords.erase(lasHeader->variableLengthRecords.begin() + i);
+                lasHeader->publicHeaderBlock.numberOfVariableLengthRecords--;
+            }
+        }
+        for (size_t i_supp = lasHeader->extendedVariableLengthRecords.size(); i_supp > 0; i_supp--) {
+            size_t i = i_supp - 1;
+            if (lasHeader->extendedVariableLengthRecords[i].getUserId() == "LASF_Spec" && lasHeader->extendedVariableLengthRecords[i].getRecordId() == 4) {
+                lasHeader->extendedVariableLengthRecords.erase(lasHeader->extendedVariableLengthRecords.begin() + i);
+                lasHeader->publicHeaderBlock.numberOfExtendedVariableLengthRecords--;
+            }
+        }
+        // add it to the VLRs
+        lasHeader->variableLengthRecords.push_back(extraBytesVlr);
+        lasHeader->publicHeaderBlock.numberOfVariableLengthRecords++;
+    }
     // properly set the xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset for the header
     lasHeader->publicHeaderBlock.xScaleFactor = xScaleFactor;
     lasHeader->publicHeaderBlock.yScaleFactor = yScaleFactor;
@@ -1402,6 +1434,15 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
     lasHeader->publicHeaderBlock.xOffset = xOffset;
     lasHeader->publicHeaderBlock.yOffset = yOffset;
     lasHeader->publicHeaderBlock.zOffset = zOffset;
+
+    // set version to 1.4 + header size
+    lasHeader->publicHeaderBlock.versionMajor = 1;
+    lasHeader->publicHeaderBlock.versionMinor = 4;
+    lasHeader->publicHeaderBlock.headerSize = 375;
+
+    // set the point data record format and record length
+    lasHeader->publicHeaderBlock.pointDataRecordFormat = lasPointAccessAdapter->getFormat();
+    lasHeader->publicHeaderBlock.pointDataRecordLength = lasPointAccessAdapter->getRecordByteSize();
     
     // write the public header + the VLRs
     auto beginPos = writer.tellp();
@@ -1423,10 +1464,17 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
     auto evlrPos = writer.tellp();
     
     // update the public header and rewrite it
-    lasHeader->publicHeaderBlock.pointDataRecordFormat = lasPointAccessAdapter->getFormat();
     lasHeader->publicHeaderBlock.offsetToPointData = pointPos - beginPos;
-    lasHeader->publicHeaderBlock.pointDataRecordLength = lasPointAccessAdapter->getRecordByteSize();
-    lasHeader->publicHeaderBlock.startOfFirstExtendedVariableLengthRecord = evlrPos - beginPos;
+    if (lasHeader->publicHeaderBlock.numberOfExtendedVariableLengthRecords > 0) {
+        lasHeader->publicHeaderBlock.startOfFirstExtendedVariableLengthRecord = evlrPos - beginPos;   
+    }
+    // set the number of points
+    lasHeader->publicHeaderBlock.numberOfPointRecords = nbPoints;
+    if (nbPoints <= std::numeric_limits<decltype(lasHeader->publicHeaderBlock.legacyNumberOfPointRecords)>::max()) {
+        // set the legacy number of points
+        lasHeader->publicHeaderBlock.legacyNumberOfPointRecords = nbPoints;
+    }
+    // TODO: set the Number of Points by Return and legacy number of points by return
 
     // rewrite the public header:
     writer.seekp(beginPos);

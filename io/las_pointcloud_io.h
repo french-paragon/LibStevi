@@ -35,17 +35,17 @@ public:
          "startOfFirstExtendedVariableLengthRecord", "numberOfExtendedVariableLengthRecords", "numberOfPointRecords",
          "numberOfPointsByReturn"};
 
-    std::array<char, 4>  fileSignature;       // "LASF"
+    std::array<char, 4>  fileSignature = {'L', 'A', 'S', 'F'}; // "LASF"
     uint16_t fileSourceID;                    // File Source ID
     uint16_t globalEncoding;                  // Global Encoding
     uint32_t projectID_GUID_Data1;             // Project ID - GUID Data 1
     uint16_t projectID_GUID_Data2;            // Project ID - GUID Data 2
     uint16_t projectID_GUID_Data3;            // Project ID - GUID Data 3
-    std::array<uint8_t, 8> projectID_GUID_Data4; // Project ID - GUID Data 4
+    std::array<uint8_t, 8> projectID_GUID_Data4{}; // Project ID - GUID Data 4
     uint8_t versionMajor;                     // Version Major
     uint8_t versionMinor;                     // Version Minor
-    std::array<char, 32> systemIdentifier;    // System Identifier
-    std::array<char, 32> generatingSoftware;  // Generating Software
+    std::array<char, 32> systemIdentifier{};    // System Identifier
+    std::array<char, 32> generatingSoftware{};  // Generating Software
     uint16_t fileCreationDayOfYear;           // File Creation Day of Year
     uint16_t fileCreationYear;                // File Creation Year
     uint16_t headerSize;                      // Header Size
@@ -54,7 +54,7 @@ public:
     uint8_t pointDataRecordFormat;            // Point Data Record Format
     uint16_t pointDataRecordLength;           // Point Data Record Length
     uint32_t legacyNumberOfPointRecords;       // Legacy Number of Point Records
-    std::array<uint32_t, 5> legacyNumberOfPointsByReturn; // Legacy Number of Point by Return
+    std::array<uint32_t, 5> legacyNumberOfPointsByReturn{}; // Legacy Number of Point by Return
     double xScaleFactor;                            // X Scale Factor
     double yScaleFactor;                            // Y Scale Factor
     double zScaleFactor;                            // Z Scale Factor
@@ -71,7 +71,7 @@ public:
     uint64_t startOfFirstExtendedVariableLengthRecord; // Start of First Extended Variable Length Record
     uint32_t numberOfExtendedVariableLengthRecords; // Number of Extended Variable Length Records
     uint64_t numberOfPointRecords;        // Number of Point Records
-    std::array<uint64_t, 15> numberOfPointsByReturn;  // Number of Points by Return
+    std::array<uint64_t, 15> numberOfPointsByReturn{};  // Number of Points by Return
 
 private:
     // size in bytes of the data in the block
@@ -307,9 +307,9 @@ struct LasExtraBytesDescriptor {
 
 class LasPointCloudHeader : public PointCloudHeaderInterface {
 public:
-    LasPublicHeaderBlock publicHeaderBlock;
-    std::vector<LasVariableLengthRecord> variableLengthRecords;
-    std::vector<LasExtendedVariableLengthRecord> extendedVariableLengthRecords;
+    LasPublicHeaderBlock publicHeaderBlock{};
+    std::vector<LasVariableLengthRecord> variableLengthRecords{};
+    std::vector<LasExtendedVariableLengthRecord> extendedVariableLengthRecords{};
 protected:
     // attribute names for the header
 public:

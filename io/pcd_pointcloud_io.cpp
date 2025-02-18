@@ -1488,8 +1488,7 @@ bool PcdPointCloudPoint::writePointBinary(std::ostream &writer, const PcdPointCl
 {
     // simply write the bytes
     writer.write(point.dataBuffer, point.recordByteSize);
-    if (!writer.good()) return false;
-    return true;
+    return !writer.fail();
 }
 
 bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointCloudPoint &point)
@@ -1555,7 +1554,7 @@ bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointClo
 
     // Write accumulated output to writer
     writer << buffer.str();
-    return writer.good();
+    return !writer.fail();
 }
 
 PcdPointCloudPointFromSdcAdapter::PcdPointCloudPointFromSdcAdapter(
