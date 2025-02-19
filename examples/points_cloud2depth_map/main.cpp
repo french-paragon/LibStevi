@@ -391,6 +391,8 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    out << "Point data loaded!" << Qt::endl;
+
     float minX = points[0].x();
     float maxX = points[0].x();
     float minY = points[0].y();
@@ -483,7 +485,9 @@ int main(int argc, char** argv) {
 
     double nPts = points.size();
 
-    bool useBinaryTree = true;
+    out << "NPoints: " << nPts << " nPixels: " << nPixels << " Pixel size: " << invScale << "x" << invScale << " lunit" << Qt::endl;
+
+    bool useBinaryTree = false;
 
     Multidim::Array<float,3> raster;
     Multidim::Array<float,2> intensityRaster;
@@ -537,6 +541,8 @@ int main(int argc, char** argv) {
         intensityRaster = StereoVision::ImageProcessing::nearestInPaintingMonochannel(intensityRaster, inpaintingMask);
     }
 
+
+    out << "Computed raster (shape: " << raster.shape()[0] << "x" << raster.shape()[1] << "x" << raster.shape()[2] << ")" << Qt::endl;
 
     out << "Start writing image!" << Qt::endl;
 
