@@ -237,7 +237,7 @@ bool writePointCloudSdc(std::ostream &stream, FullPointCloudAccessInterface &poi
     auto newHeader = std::unique_ptr<SdcPointCloudHeader>();
 
     if (header == nullptr || header->majorVersion != sdcPointCloud->majorVersion ||
-        !header->minorVersion != sdcPointCloud->minorVersion) {
+        header->minorVersion != sdcPointCloud->minorVersion) {
 
         uint32_t headerSize{8};
         std::vector<std::byte> headerInformation{};
