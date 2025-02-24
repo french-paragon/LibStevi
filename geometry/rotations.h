@@ -554,6 +554,24 @@ Eigen::Matrix<Scalar, 3, 3> eulerDegXYZToRotation(Scalar eulerX,
 }
 
 template <typename Scalar>
+Eigen::Matrix<Scalar, 3, 3> eulerRadZYXToRotation(Scalar eulerX,
+                                                  Scalar eulerY,
+                                                  Scalar eulerZ) {
+
+    return (Eigen::AngleAxis<Scalar>(eulerZ, Eigen::Matrix<Scalar,3,1>::UnitZ())*
+            Eigen::AngleAxis<Scalar>(eulerY, Eigen::Matrix<Scalar,3,1>::UnitY())*
+            Eigen::AngleAxis<Scalar>(eulerX, Eigen::Matrix<Scalar,3,1>::UnitX())).toRotationMatrix();
+
+}
+
+template <typename Scalar>
+Eigen::Matrix<Scalar, 3, 3> eulerDegZYXToRotation(Scalar eulerX,
+                                                  Scalar eulerY,
+                                                  Scalar eulerZ) {
+    return eulerRadZYXToRotation(Scalar(eulerX/180*M_PI), Scalar(eulerY/180*M_PI), Scalar(eulerZ/180*M_PI));
+}
+
+template <typename Scalar>
 Eigen::Matrix<Scalar, 3, 1> rMat2eulerRadxyz(Eigen::Matrix<Scalar, 3, 3> const& RMat) {
     // assuming RMat = RMatx RMaty RMatz; Solution is:
     //        [      cy cz            - cy sz         sy    ]
@@ -562,13 +580,21 @@ Eigen::Matrix<Scalar, 3, 1> rMat2eulerRadxyz(Eigen::Matrix<Scalar, 3, 3> const& 
     //        [                                             ]
     //        [ sx sz - cx cz sy  cx sy sz + cz sx   cx cy  ]
 
-    double sinY = RMat(0,2);
-    double cosY = sqrt(1 - sinY*sinY);
+    double sinX;
+    double cosX;
 
-    double sinZ = -RMat(0,1)/cosY;
-    double sinX = -RMat(1,2)/cosY;
+    double sinY;
+    double cosY;
 
-    if (!std::isfinite(sinZ) or ! std::isfinite(sinX)) {
+    double sinZ;
+    double cosZ;
+
+    sinY = RMat(0,2);
+    cosY = sqrt(1 - sinY*sinY); //absolute value, but should yield euler angles that matches the matrix
+
+    double scale = 1./cosY;
+
+    if (!std::isfinite(scale)) {
         //we have RMat =
         //        [       0               0         +/-1]
         //        [                                     ]
@@ -581,17 +607,87 @@ Eigen::Matrix<Scalar, 3, 1> rMat2eulerRadxyz(Eigen::Matrix<Scalar, 3, 3> const& 
         } else {
             sinY = -1;
         }
+        cosY = 0;
 
-        double cosZ = RMat(1,1); //valid, if we assume X = 0, which we can
+        cosZ = RMat(1,1); //valid, if we assume X = 0, which we can
+        sinZ = RMat(1,2);
 
         //acceptable, as any
         sinX = 0;
-        sinZ = sqrt(1 - cosZ*cosZ);
+        cosX = 1;
+    } else {
+
+        cosX = scale*RMat(2,2);
+        sinX = -scale*RMat(1,2);
+
+        cosZ = scale*RMat(0,0);
+        sinZ = -scale*RMat(0,1);
     }
 
-    double X = std::asin(sinX);
-    double Y = std::asin(sinY);
-    double Z = std::asin(sinZ);
+    double X = std::atan2(sinX, cosX);
+    double Y = std::atan2(sinY, cosY);
+    double Z = std::atan2(sinZ, cosZ);
+
+    return Eigen::Matrix<Scalar, 3, 1>(X,Y,Z);
+}
+
+template <typename Scalar>
+Eigen::Matrix<Scalar, 3, 1> rMat2eulerRadzyx(Eigen::Matrix<Scalar, 3, 3> const& RMat) {
+    // assuming RMat = RMatz RMaty RMatx; Solution is:
+    //        [ cy cz    cz sy sx - cx sz    sz sx + cz cx sy ]
+    //        [                                               ]
+    //        [ cy sz    cx cz + sx sy sz    cx sz sy - cz sx ]
+    //        [                                               ]
+    //        [  -sy            cy sx              cx cy      ]
+
+    double sinX;
+    double cosX;
+
+    double sinY;
+    double cosY;
+
+    double sinZ;
+    double cosZ;
+
+    sinY = -RMat(2,0);
+    cosY = sqrt(1 - sinY*sinY); //absolute value, but should yield euler angles that matches the matrix
+
+    double scale = 1./cosY;
+
+    if (!std::isfinite(scale)) {
+        //we have RMat =
+        //        [   0    +/- cz sx - cx sz    sz sx +/- cz cx ]
+        //        [                                             ]
+        //        [   0    cx cz +/- sx sz    +/- cx sz - cz sx ]
+        //        [                                             ]
+        //        [ +/- 1         0                     0       ]
+        if (sinY > 0) {
+            sinY = 1;
+        } else {
+            sinY = -1;
+        }
+        cosY = 0;
+
+        cosZ = RMat(1,1); //valid, if we assume X = 0, which we can
+        sinZ = -RMat(0,1); //valid, if we assume X = 0, which we can
+
+        //acceptable, as any
+        sinX = 0;
+        cosX = 1;
+
+    } else {
+
+        cosX = scale*RMat(2,2);
+        sinX = scale*RMat(2,1);
+
+        cosZ = scale*RMat(0,0);
+        sinZ = scale*RMat(1,0);
+    }
+
+    double X = std::atan2(sinX, cosX);
+    double Y = std::atan2(sinY, cosY);
+    double Z = std::atan2(sinZ, cosZ);
+
 
     return Eigen::Matrix<Scalar, 3, 1>(X,Y,Z);
 }

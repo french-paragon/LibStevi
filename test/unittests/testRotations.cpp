@@ -579,7 +579,8 @@ void TestGeometryLibRotation::testEulerRad2RMat() {
 
 void TestGeometryLibRotation::testRMat2EulerRad() {
 
-    Eigen::Vector3d r0 = rMat2eulerRadxyz<double>(Eigen::Matrix3d::Identity());
+    Eigen::Vector3d r0xyz = rMat2eulerRadxyz<double>(Eigen::Matrix3d::Identity());
+    Eigen::Vector3d r0zyx = rMat2eulerRadzyx<double>(Eigen::Matrix3d::Identity());
 
     float epsilon = 1e-5;
 
@@ -587,42 +588,86 @@ void TestGeometryLibRotation::testRMat2EulerRad() {
 
         float target = 0;
 
-        float mismatch = std::abs(r0(i) - target);
-        QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 0 angle rotation (mismatch = %1)").arg(mismatch)));
+        float mismatch = std::abs(r0xyz(i) - target);
+        QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 0 angle rotation order xyz (mismatch = %1)").arg(mismatch)));
+
+        mismatch = std::abs(r0zyx(i) - target);
+        QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 0 angle rotation order zyx (mismatch = %1)").arg(mismatch)));
     }
 
-    Eigen::Matrix3d RX = eulerRadXYZToRotation<double>(M_PI_2,0,0);
-    Eigen::Matrix3d RY = eulerRadXYZToRotation<double>(0,M_PI_2,0);
-    Eigen::Matrix3d RZ = eulerRadXYZToRotation<double>(0,0,M_PI_2);
-
-    std::array<Eigen::Matrix3d, 3> axisMatrices = {RX, RY, RZ};
-
     for (int axis = 0; axis < 3; axis++) {
-        Eigen::Matrix3d& R = axisMatrices[axis];
+        std::array<double,3> angles = {0,0,0};
+        angles[axis] = M_PI_2;
+        Eigen::Matrix3d R = eulerRadXYZToRotation<double>(angles[0],angles[1],angles[2]);
 
-        Eigen::Vector3d r = rMat2eulerRadxyz<double>(R);
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                QVERIFY2(std::isfinite(R(i,j)), "Error in input rotation matrix");
+            }
+        }
+
+        Eigen::Vector3d rxyz = rMat2eulerRadxyz<double>(R);
+        Eigen::Vector3d rzyx = rMat2eulerRadzyx<double>(R);
 
         for (int i = 0; i < 3; i++) {
 
-            float target = (i == axis) ? M_PI_2 : 0;
+            float target = angles[i];
 
-            float mismatch = std::abs(r(i) - target);
-            QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a PI/2 angle rotation (mismatch = %1)").arg(mismatch)));
+            float mismatch = std::abs(rxyz(i) - target);
+            QVERIFY2(mismatch <= epsilon,
+                     qPrintable(QString("Error when reconstructing a PI/2 angle rotation order xyz (axis = %1, mismatch = %2)").arg(axis).arg(mismatch)));
+
+            mismatch = std::abs(rzyx(i) - target);
+            QVERIFY2(mismatch <= epsilon,
+                     qPrintable(QString("Error when reconstructing a PI/2 angle rotation order zxy (axis = %1, mismatch = %2)").arg(axis).arg(mismatch)));
         }
 
     }
 
     std::array<double, 3> targets{M_PI_2/4,M_PI_2/3,M_PI_2/2};
-    Eigen::Matrix3d RStrange = eulerRadXYZToRotation<double>(targets[0], targets[1], targets[2]);
+    Eigen::Matrix3d RStrangeXYZ = eulerRadXYZToRotation<double>(targets[0], targets[1], targets[2]);
+    Eigen::Matrix3d RStrangeZYX = eulerRadZYXToRotation<double>(targets[0], targets[1], targets[2]);
 
-    Eigen::Vector3d rStrange = rMat2eulerRadxyz<double>(RStrange);
+    Eigen::Vector3d rStrangeXYZ = rMat2eulerRadxyz<double>(RStrangeXYZ);
+    Eigen::Vector3d rStrangeZYX = rMat2eulerRadzyx<double>(RStrangeZYX);
 
     for (int i = 0; i < 3; i++) {
 
         float target = targets[i];
 
-        float mismatch = std::abs(rStrange(i) - target);
-        QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 0 angle rotation (mismatch = %1)").arg(mismatch)));
+        float mismatch = std::abs(rStrangeXYZ(i) - target);
+        QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 0 angle rotation order xyz (mismatch = %1)").arg(mismatch)));
+
+        mismatch = std::abs(rStrangeZYX(i) - target);
+        QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 0 angle rotation order zyx (mismatch = %1)").arg(mismatch)));
+    }
+
+    constexpr int nRepeats = 100;
+
+    std::uniform_real_distribution<double> rd(-M_PI, M_PI);
+
+    for (int i = 0; i < nRepeats; i++) {
+
+        Eigen::Matrix3d Rinitial = eulerRadXYZToRotation<double>(rd(re), rd(re), rd(re));
+
+        Eigen::Vector3d rXYZ = rMat2eulerRadxyz<double>(Rinitial);
+        Eigen::Vector3d rZYX = rMat2eulerRadzyx<double>(Rinitial);
+
+        Eigen::Matrix3d Rxyz = eulerRadXYZToRotation<double>(rXYZ[0],rXYZ[1],rXYZ[2]);
+        Eigen::Matrix3d Rzyx = eulerRadZYXToRotation<double>(rZYX[0],rZYX[1],rZYX[2]);
+
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+
+
+                float mismatch = std::abs(Rxyz(i,j) - Rinitial(i,j));
+                QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a random rotation order xyz (mismatch = %1)").arg(mismatch)));
+
+                mismatch = std::abs(Rzyx(i,j) - Rinitial(i,j));
+                QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a random rotation order zyx (mismatch = %1)").arg(mismatch)));
+            }
+        }
+
     }
 }
 
