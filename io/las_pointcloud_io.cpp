@@ -38,6 +38,7 @@ static constexpr size_t computeOffset() {
  * @brief Factory function that generate a LasPointCloudPoint object given a istream, the recordByteSize, the record format number (0-11) and the dataBuffer.
  * @param reader the istream
  * @param recordByteSize the size of the point record
+ * @param nbPoints the total number of points in the pointcloud
  * @param recordFormatNumber the format number
  * @param extraAttributesNames the names of the extra attributes
  * @param extraAttributesTypes the types of the extra attributes
@@ -50,15 +51,15 @@ static constexpr size_t computeOffset() {
  * extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets
  */
 static std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint(std::unique_ptr<std::istream> reader,
-    size_t recordByteSize, size_t recordFormatNumber, const std::vector<std::string>& extraAttributesNames = {},
-    const std::vector<uint8_t>& extraAttributesTypes = {}, const std::vector<size_t>& extraAttributesSizes = {},
-    const std::vector<size_t>& extraAttributesOffsets = {}, bool hideColorAndGeometricAttributes = false,
-    double xScaleFactor = 0.01, double yScaleFactor = 0.01, double zScaleFactor = 0.01, double xOffset = 0,
-    double yOffset = 0, double zOffset = 0, char* dataBuffer = nullptr);
+    size_t recordByteSize, size_t nbPoints, size_t recordFormatNumber,
+    const std::vector<std::string>& extraAttributesNames = {}, const std::vector<uint8_t>& extraAttributesTypes = {},
+    const std::vector<size_t>& extraAttributesSizes = {}, const std::vector<size_t>& extraAttributesOffsets = {},
+    bool hideColorAndGeometricAttributes = false, double xScaleFactor = 0.01, double yScaleFactor = 0.01,
+    double zScaleFactor = 0.01, double xOffset = 0, double yOffset = 0, double zOffset = 0, char* dataBuffer = nullptr);
 
 template <size_t N = size_t{0}>
 static std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::unique_ptr<std::istream> reader,
-    size_t recordByteSize, size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
+    size_t recordByteSize, size_t nbPoints, size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
     const std::vector<uint8_t> &extraAttributesTypes, const std::vector<size_t> &extraAttributesSizes,
     const std::vector<size_t> &extraAttributesOffsets, bool hideColorAndGeometricAttributes, double xScaleFactor,
     double yScaleFactor, double zScaleFactor, double xOffset, double yOffset, double zOffset, char* dataBuffer);
@@ -145,6 +146,9 @@ protected:
     std::vector<uint8_t> extraAttributesTypes;
     std::vector<size_t> extraAttributesSizes;
     std::vector<size_t> extraAttributesOffsets;
+    
+    const size_t nbPoints;
+    size_t currentPointIdOneBased = 0; // zero for non initialization, one for the first point
 
     // attribute names exposed to the user. For example, we might hide the color and geometric attributes.
     std::vector<std::string> exposedAttributeNames;
@@ -152,12 +156,13 @@ protected:
     std::vector<std::string> attributeNamesFullListInternal;
     std::vector<size_t> exposedIdToInternalId; // map the exposed id of an attribute to its internal id
 public:
-    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize,
+    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize, size_t nbPoints,
         const std::vector<std::string> &extraAttributesNames, const std::vector<uint8_t> &extraAttributesTypes,
         const std::vector<size_t> &extraAttributesSizes, const std::vector<size_t> &extraAttributesOffsets,
         bool hideColorAndGeometricAttributes, double xScaleFactor, double yScaleFactor, double zScaleFactor, double xOffset,
         double yOffset, double zOffset, char* dataBuffer) :
             reader{std::move(reader)},
+            nbPoints{nbPoints},
             extraAttributesNames{extraAttributesNames},
             extraAttributesTypes{extraAttributesTypes},
             extraAttributesSizes{extraAttributesSizes},
@@ -168,12 +173,13 @@ public:
         verifyAndCorrectParameters(hideColorAndGeometricAttributes);
     }
 
-    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize,
+    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize, size_t nbPoints,
         const std::vector<std::string> &extraAttributesNames, const std::vector<uint8_t> &extraAttributesTypes,
         const std::vector<size_t> &extraAttributesSizes,
         const std::vector<size_t> &extraAttributesOffsets, bool hideColorAndGeometricAttributes,
         double xScaleFactor, double yScaleFactor, double zScaleFactor, double xOffset, double yOffset, double zOffset) :
             reader{std::move(reader)},
+            nbPoints{nbPoints},
             extraAttributesNames{extraAttributesNames},
             extraAttributesTypes{extraAttributesTypes},
             extraAttributesSizes{extraAttributesSizes},
@@ -246,7 +252,7 @@ public:
     static constexpr size_t nbAttributes = 15;
 
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
-        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t>;
+        uint8_t, uint8_t, uint8_t, uint8_t, int8_t, uint8_t, uint16_t>;
 
     constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
         "numberOfReturns"sv, "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
@@ -273,7 +279,7 @@ public:
     static constexpr size_t nbAttributes = 16;
 
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
-        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double>;
+        uint8_t, uint8_t, uint8_t, uint8_t, int8_t, uint8_t, uint16_t, double>;
 
     constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
         "numberOfReturns"sv, "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
@@ -300,7 +306,7 @@ public:
     static constexpr size_t nbAttributes = 18;
 
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
-        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t>;
+        uint8_t, uint8_t, uint8_t, uint8_t, int8_t, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t>;
 
     constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
         "numberOfReturns"sv, "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
@@ -332,7 +338,7 @@ public:
     static constexpr size_t nbAttributes = 19;
 
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
-        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double, uint16_t, uint16_t, uint16_t>;
+        uint8_t, uint8_t, uint8_t, uint8_t, int8_t, uint8_t, uint16_t, double, uint16_t, uint16_t, uint16_t>;
 
     constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
         "numberOfReturns"sv, "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
@@ -364,7 +370,7 @@ public:
     static constexpr size_t nbAttributes = 23;
 
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
-        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double, uint8_t, uint64_t, uint32_t, float,
+        uint8_t, uint8_t, uint8_t, uint8_t, int8_t, uint8_t, uint16_t, double, uint8_t, uint64_t, uint32_t, float,
         float, float, float>;
 
     constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
@@ -394,7 +400,7 @@ public:
     static constexpr size_t nbAttributes = 26;
 
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
-        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double, uint16_t, uint16_t, uint16_t, uint8_t,
+        uint8_t, uint8_t, uint8_t, uint8_t, int8_t, uint8_t, uint16_t, double, uint16_t, uint16_t, uint16_t, uint8_t,
         uint64_t, uint32_t, float, float, float, float>;
 
     constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
@@ -1035,7 +1041,7 @@ std::optional<PointCloudGenericAttribute> LasPublicHeaderBlock::getPublicHeaderA
     case 5:
         return projectID_GUID_Data3;
     case 6:
-        return std::string{projectID_GUID_Data4.begin(), projectID_GUID_Data4.end()};
+        return std::vector<uint8_t>{projectID_GUID_Data4.begin(), projectID_GUID_Data4.end()};
     case 7:
         return versionMajor;
     case 8:
@@ -1191,6 +1197,8 @@ std::vector<std::string> LasPointCloudPoint_Base<D>::attributeList() const {
 
 template <class Derived>
 bool LasPointCloudPoint_Base<Derived>::gotoNext() {
+    if (nbPoints == 0 || currentPointIdOneBased >= nbPoints) return false;
+    currentPointIdOneBased++;
     reader->read(dataBuffer, recordByteSize);
     return reader->good();
 }
@@ -1331,6 +1339,8 @@ std::optional<FullPointCloudAccessInterface> openPointCloudLas(std::unique_ptr<s
         = header->getPointwiseExtraAttributesInfos();
     // create a point cloud
     auto pointCloud = createLasPointCloudPoint(std::move(reader), header->publicHeaderBlock.getPointDataRecordLength(),
+        std::max((size_t) header->publicHeaderBlock.legacyNumberOfPointRecords,
+            header->publicHeaderBlock.numberOfPointRecords),
         header->publicHeaderBlock.getPointDataRecordFormat(), extraAttributesNames, extraAttributesTypes,
         extraAttributesSizes, extraAttributesOffsets, true, header->publicHeaderBlock.getXScaleFactor(),
         header->publicHeaderBlock.getYScaleFactor(), header->publicHeaderBlock.getZScaleFactor(),
@@ -1532,7 +1542,7 @@ bool writePointCloudLas(const std::filesystem::path &lasFilePath, FullPointCloud
 
 template <size_t N>
 std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::unique_ptr<std::istream> reader,
-    size_t recordByteSize, size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
+    size_t recordByteSize, size_t nbPoints, size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
     const std::vector<uint8_t> &extraAttributesTypes, const std::vector<size_t> &extraAttributesSizes,
     const std::vector<size_t> &extraAttributesOffsets, bool hideColorAndGeometricAttributes, double xScaleFactor,
     double yScaleFactor, double zScaleFactor, double xOffset, double yOffset, double zOffset, char *dataBuffer) {
@@ -1541,31 +1551,31 @@ std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::unique_
         return nullptr;
     } else if (N == recordFormatNumber) {
         if (dataBuffer == nullptr) {
-            return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize,
+            return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize, nbPoints,
                 extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets,
                 hideColorAndGeometricAttributes, xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset);
         } else  {
-            return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize,
+            return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize, nbPoints,
                 extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets,
                 hideColorAndGeometricAttributes, xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset,
                 dataBuffer);
         }
     } else {
-        return createLasPointCloudPoint_helper<N+1>(std::move(reader), recordByteSize, recordFormatNumber,
-            extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets,
-            hideColorAndGeometricAttributes, xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset,
-            dataBuffer);
+        return createLasPointCloudPoint_helper<N+1>(std::move(reader), recordByteSize, nbPoints,
+            recordFormatNumber, extraAttributesNames, extraAttributesTypes, extraAttributesSizes,
+            extraAttributesOffsets, hideColorAndGeometricAttributes, xScaleFactor, yScaleFactor, zScaleFactor, xOffset,
+            yOffset, zOffset,dataBuffer);
     }
 }
 
 std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint(std::unique_ptr<std::istream> reader, size_t recordByteSize,
-    size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
+    size_t nbPoints, size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
     const std::vector<uint8_t> &extraAttributesTypes, const std::vector<size_t> &extraAttributesSizes,
     const std::vector<size_t> &extraAttributesOffsets, bool hideColorAndGeometricAttributes, double xScaleFactor,
     double yScaleFactor, double zScaleFactor, double xOffset, double yOffset, double zOffset, char *dataBuffer) {
 
-    auto lasPointCloudPoint = createLasPointCloudPoint_helper(std::move(reader), recordByteSize, recordFormatNumber, 
-        extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets,
+    auto lasPointCloudPoint = createLasPointCloudPoint_helper(std::move(reader), recordByteSize, nbPoints,
+        recordFormatNumber, extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets,
         hideColorAndGeometricAttributes, xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset,
         dataBuffer);
 
@@ -1577,7 +1587,6 @@ std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint(std::unique_ptr<std
     } else {
         return nullptr;
     }
-
     return std::move(lasPointCloudPoint);
 
 }
