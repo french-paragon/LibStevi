@@ -2,6 +2,7 @@
 #include "sdc_pointcloud_io.h"
 #include "pcd_pointcloud_io.h"
 #include "las_pointcloud_io.h"
+#include "metacloud_io.h"
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 
@@ -46,6 +47,8 @@ std::optional<FullPointCloudAccessInterface> openPointCloud(const std::filesyste
         return openPointCloudPcd(filePath);
     } else if (fileExtension == ".las" || fileExtension == ".LAS") {
         return openPointCloudLas(filePath);
+    } else if (fileExtension == ".metacloud" || fileExtension == ".METACLOUD") {
+        return openPointCloudMetacloud(filePath);
     } else {
         return std::nullopt;
     }
