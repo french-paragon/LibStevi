@@ -151,8 +151,9 @@ add_executable(testTypesUtils testTypesUtils.cpp)
 target_link_libraries(testTypesUtils ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestTypesUtils testTypesUtils)
 
-add_executable(testPointCloudIO testPointCloudIO.cpp)
-target_link_libraries(testPointCloudIO ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+configure_file(testPointCloudIO.cpp testPointCloudIO.cpp)
+add_executable(testPointCloudIO ${CMAKE_CURRENT_BINARY_DIR}/testPointCloudIO.cpp)
+target_link_libraries(testPointCloudIO ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Core)
 add_test(TestPointCloudIO testPointCloudIO)
 
 add_executable(testInpaintingAlgorithms testInpaintingAlgorithms.cpp)

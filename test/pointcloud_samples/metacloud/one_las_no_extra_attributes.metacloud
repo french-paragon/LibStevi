@@ -1,0 +1,10 @@
+# This is a comment about the metacloud descriptor file
+
+POINTS_FILES
+"../las/pointcloud_format10_with_extra_attributes.las"
+
+METACLOUD_ATTRIBUTES
+
+creator "simple metacloud based on one las file"
+
+description "This is a sample metacloud."
