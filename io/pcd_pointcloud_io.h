@@ -29,7 +29,7 @@ protected:
 
     bool containsColor = false; // true if the point cloud has color
     bool containsColorSingleField = false; // the colors are stored in one field rgb or rgba
-    bool containsAlpha = false; // true if the point cloud has alpha (or if the color is rgba/rgb since we cannot distinguish)
+    bool containsAlpha = false; // true if the point cloud has alpha (a, alpha, rgba)
     bool containsPosition = false; // true if the point cloud has position
     // indices for the color
     int rgbaIndex; // only if containsColor is true and containsColorSingleField is true
