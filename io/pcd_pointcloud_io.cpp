@@ -189,15 +189,18 @@ PcdPointCloudPoint::PcdPointCloudPoint(const std::vector<std::string>& attribute
     bool containsBlue = false;
     bool containsAlpha = false;
 
-    // find the index of the rgba field
+    // find the index of the rgb/rgba field
     auto it = std::find(attributeNames.begin(), attributeNames.end(), "rgba");
-     if (it == attributeNames.end()) {
-         it = std::find(attributeNames.begin(), attributeNames.end(), "rgb");
-     }
     if (it != attributeNames.end()) {
         rgbaIndex = std::distance(attributeNames.begin(), it);
         containsColorSingleField = true;
-        containsColor = true;
+        containsColor = true;    
+        containsAlpha = true;
+    } else if (it = std::find(attributeNames.begin(), attributeNames.end(), "rgb"); it != attributeNames.end()) {
+        rgbaIndex = std::distance(attributeNames.begin(), it);
+        containsColorSingleField = true;
+        containsColor = true;    
+        containsAlpha = false; 
     // with 3-4 color fields:
     } else if (!containsColor) {
         for (int i = 0; i < attributeNames.size(); i++) {
@@ -329,7 +332,12 @@ std::optional<PtColor<PointCloudGenericAttribute>> PcdPointCloudPointReader::get
         const uint8_t r = (rgba >> 16)  & 0x000000FF;
         const uint8_t g = (rgba >> 8)   & 0x000000FF;
         const uint8_t b =  rgba         & 0x000000FF;
-        return PtColor<PointCloudGenericAttribute>{r, g, b, a};
+        return PtColor<PointCloudGenericAttribute>{
+            r,
+            g,
+            b,
+            containsAlpha ? a : PointCloudGenericAttribute{EmptyParam{}}
+        };
     } else {
         return PtColor<PointCloudGenericAttribute>
             {
