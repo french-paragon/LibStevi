@@ -2,6 +2,7 @@
 #include <array>
 #include <iostream>
 #include <cstddef>
+#include <cmath>
 #include "las_pointcloud_io.h"
 #include "bit_manipulations.h"
 #include "fstreamCustomBuffer.h"
@@ -1109,10 +1110,18 @@ std::optional<PointCloudGenericAttribute> LasPublicHeaderBlock::getPublicHeaderA
 
 template <class D>
 PtGeometry<PointCloudGenericAttribute> LasPointCloudPoint_Base<D>::getPointPosition() const {
+    // the maximum value for the int32 type is used to represent a nan value
+    static const auto nan = std::nan("");
+    auto xRaw = fromBytes<returnType<D::x_id>>(getRecordDataBuffer() + offset<D::x_id>);
+    auto yRaw = fromBytes<returnType<D::y_id>>(getRecordDataBuffer() + offset<D::y_id>);
+    auto zRaw = fromBytes<returnType<D::z_id>>(getRecordDataBuffer() + offset<D::z_id>);
     return PtGeometry<PointCloudGenericAttribute>{
-        xScaleFactor * fromBytes<returnType<D::x_id>>(getRecordDataBuffer() + offset<D::x_id>) + xOffset,
-        yScaleFactor * fromBytes<returnType<D::y_id>>(getRecordDataBuffer() + offset<D::y_id>) + yOffset,
-        zScaleFactor * fromBytes<returnType<D::z_id>>(getRecordDataBuffer() + offset<D::z_id>) + zOffset
+        xRaw == std::numeric_limits<returnType<D::x_id>>::max() ? PointCloudGenericAttribute{nan} :
+            PointCloudGenericAttribute{xScaleFactor * xRaw + xOffset},
+        yRaw == std::numeric_limits<returnType<D::y_id>>::max() ? PointCloudGenericAttribute{nan} :
+            PointCloudGenericAttribute{yScaleFactor * yRaw + yOffset},
+        zRaw == std::numeric_limits<returnType<D::z_id>>::max() ? PointCloudGenericAttribute{nan} :
+            PointCloudGenericAttribute{zScaleFactor * zRaw + zOffset}
     };
 }
 
@@ -1982,13 +1991,17 @@ bool LasPointCloudPointBasicAdapter::adaptInternalState() {
 
     // get position and color
     pointPosition = pointCloudPointAccessInterface->getPointPosition();
+    auto pointPositionDouble = pointCloudPointAccessInterface->castedPointGeometry<double>();
 
     pointColor = pointCloudPointAccessInterface->getPointColor();
 
     pointPositionScaledInteger = {
-        static_cast<int32_t>((castedPointCloudAttribute<double>(pointPosition.x) - xOffset) / xScaleFactor),
-        static_cast<int32_t>((castedPointCloudAttribute<double>(pointPosition.y) - yOffset) / yScaleFactor),
-        static_cast<int32_t>((castedPointCloudAttribute<double>(pointPosition.z) - zOffset) / zScaleFactor)
+        static_cast<int32_t>(std::isnan(pointPositionDouble.x) ? std::numeric_limits<int32_t>::max() :
+            std::round(((pointPositionDouble.x) - xOffset) / xScaleFactor)),
+        static_cast<int32_t>(std::isnan(pointPositionDouble.y) ? std::numeric_limits<int32_t>::max() :
+            std::round(((pointPositionDouble.y) - yOffset) / yScaleFactor)),
+        static_cast<int32_t>(std::isnan(pointPositionDouble.z) ? std::numeric_limits<int32_t>::max() :
+            std::round(((pointPositionDouble.z) - zOffset) / zScaleFactor))
     };
     
     for (size_t fieldIt = 0; fieldIt < fieldByteSize.size(); fieldIt++) {
