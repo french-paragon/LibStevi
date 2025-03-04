@@ -740,6 +740,10 @@ void TestPointCloudIO::testLasPointCloud() {
                 qPrintable(QString("Failed to open the rewritten point cloud: %1").arg(filePath)));
             auto& originalPointAccess = originalFullPointCloud.value().pointAccess;
             auto& rewrittenPointAccess = rewrittenFullPointCloud.value().pointAccess;
+            auto* castedLasRewrittenPointAccess
+                = dynamic_cast<StereoVision::IO::LasPointCloudPoint*>(rewrittenPointAccess.get());
+            QVERIFY2(castedLasRewrittenPointAccess != nullptr,
+                qPrintable(QString("Failed to cast the point cloud to a las point cloud for file: %1").arg(filePath)));
             // iterate on all the points
             while (true) {
                 for (auto& originalAttrName: originalPointAccess->attributeList()) {
@@ -783,7 +787,100 @@ void TestPointCloudIO::testLasPointCloud() {
                         }, rewrittenAttrOpt.value());
                     }
                 }
+                auto comparePositionComponent = [&](auto originalComponent, auto rewrittenComponent, auto scaleFactor,
+                    auto offset) {
+                    
+                        // visit the attributes
+                    std::visit([&](auto& newComponent) {
+                        using new_type = std::decay_t<decltype(newComponent)>;
+                        if constexpr (std::is_integral_v<new_type> ||
+                                    std::is_floating_point_v<new_type>) {
+                            auto castedDoubleOriginalComponent
+                                = StereoVision::IO::castedPointCloudAttribute<double>(originalComponent);
+                            // both values should be nan
+                            if (std::isnan(castedDoubleOriginalComponent)) {
+                                QVERIFY2(std::isnan(static_cast<double>(newComponent)),
+                                    qPrintable(
+                                        QString("Original position component should be nan for file: %1")
+                                        .arg(originalFilePath)));
+                            } else {
+                                // precision depend on the scale factor and the offset
+                                // rescale + to int
+                                int64_t originalScaledInt = 
+                                    static_cast<int64_t>(
+                                        std::round(
+                                            (StereoVision::IO::castedPointCloudAttribute<double>(originalComponent)
+                                            - offset) / scaleFactor));
 
+                                int64_t newScaledInt = 
+                                    static_cast<int64_t>(
+                                        std::round(
+                                            (static_cast<double>(newComponent)
+                                            - offset) / scaleFactor));
+                                // compare the values
+                                // QCOMPARE(originalScaledInt, newScaledInt);
+                                QVERIFY2(originalScaledInt == newScaledInt,
+                                    qPrintable(
+                                        QString("Original scaled position: %1, rewritten scaled position: %2 for file: %3")
+                                        .arg(originalScaledInt).arg(newScaledInt).arg(originalFilePath)));
+                            }
+                        } else {
+                            QFAIL(qPrintable(
+                                QString("Unsupported type for the position component for file: %1").arg(originalFilePath)));
+                        }
+                    }, rewrittenComponent);
+                };
+
+                auto compareColorComponent = [&](auto originalComponent, auto rewrittenComponent) {
+                    // visit the attributes
+                    std::visit([&](auto& newComponent) {
+                        using new_type = std::decay_t<decltype(newComponent)>;
+                        if constexpr (std::is_integral_v<new_type> ||
+                                    std::is_floating_point_v<new_type>) {
+                            // cast the original type to the rewritten type
+                            auto castedComponent
+                                = StereoVision::IO::castedPointCloudAttribute<new_type>(originalComponent);
+                            // compare the values
+                            QCOMPARE(castedComponent, newComponent);
+                        } else if constexpr (std::is_same_v<new_type, StereoVision::IO::EmptyParam>) {
+                            QVERIFY2(std::holds_alternative<StereoVision::IO::EmptyParam>(originalComponent),
+                                qPrintable(QString("Both color components should be empty. Original file: %1")
+                                    .arg(originalFilePath)));
+                        } else {
+                            QFAIL(qPrintable(
+                                QString("Unsupported type for the color component for file: %1").arg(originalFilePath)));
+                        }
+                    }, rewrittenComponent);
+                };
+                auto xOffset = castedLasRewrittenPointAccess->getXOffset();
+                auto yOffset = castedLasRewrittenPointAccess->getYOffset();
+                auto zOffset = castedLasRewrittenPointAccess->getZOffset();
+
+                auto xScaleFactor = castedLasRewrittenPointAccess->getXScaleFactor();
+                auto yScaleFactor = castedLasRewrittenPointAccess->getYScaleFactor();
+                auto zScaleFactor = castedLasRewrittenPointAccess->getZScaleFactor();
+
+                // compare the position and the color
+                auto originalPointPosition = originalPointAccess->getPointPosition();
+                auto rewrittenPointPosition = rewrittenPointAccess->getPointPosition();
+                comparePositionComponent(originalPointPosition.x, rewrittenPointPosition.x, xScaleFactor, xOffset);
+                comparePositionComponent(originalPointPosition.y, rewrittenPointPosition.y, yScaleFactor, yOffset);
+                comparePositionComponent(originalPointPosition.z, rewrittenPointPosition.z, zScaleFactor, zOffset);
+
+                auto originalPointColorOpt = originalPointAccess->getPointColor();
+                auto rewrittenPointColorOpt = rewrittenPointAccess->getPointColor();
+                QCOMPARE(originalPointColorOpt.has_value(), rewrittenPointColorOpt.has_value());
+                if (originalPointColorOpt.has_value() && rewrittenPointColorOpt.has_value()) {
+                    auto originalPointColor = originalPointColorOpt.value();
+                    auto rewrittenPointColor = rewrittenPointColorOpt.value();
+
+                    compareColorComponent(originalPointColor.r, rewrittenPointColor.r);
+                    compareColorComponent(originalPointColor.g, rewrittenPointColor.g);
+                    compareColorComponent(originalPointColor.b, rewrittenPointColor.b);
+                    // las format does not contains color alpha...
+                    // compareColorComponent(originalPointColor.a, rewrittenPointColor.a);
+                }
+                
                 // Go to the next point
                 auto isNextPointOriginal = originalPointAccess->gotoNext();
                 auto isNextPointRewritten = rewrittenPointAccess->gotoNext();
