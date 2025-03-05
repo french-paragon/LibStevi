@@ -90,6 +90,7 @@ set(LIB_SRC
         geometry/stereorigrectifier.cpp
         geometry/stereorigrectifier.h
         geometry/genericbinarypartitioningtree.h
+        geometry/sensorframesconvention.h
         graphs/graphs.h
         graphs/doublyConnectedEdgeLists.h
         graphs/graph_flow.h

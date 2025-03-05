@@ -1,6 +1,7 @@
 #include <QtTest/QtTest>
 
 #include "geometry/rotations.h"
+#include "geometry/sensorframesconvention.h"
 
 #include <random>
 
@@ -48,6 +49,8 @@ private Q_SLOTS:
     void testRAxis2Quat2RAxis();
 
     void testRAxis2QuatDiff();
+
+    void testSensorFrameConversions();
 
 private:
 	std::default_random_engine re;
@@ -799,6 +802,41 @@ void TestGeometryLibRotation::testRAxis2QuatDiff() {
         QVERIFY(maxError < smoltol);
 
     }
+
+}
+
+void TestGeometryLibRotation::testSensorFrameConversions() {
+
+    using FRD = AxisSystemDefintion<Front, Right, Down>;
+    using LFD = AxisSystemDefintion<Left, Front, Down>;
+
+    Eigen::Matrix3i frame1toframe2 = getSensorFrameConversion<FRD,LFD>();
+
+    QCOMPARE(frame1toframe2(0,0),0);
+    QCOMPARE(frame1toframe2(1,0),1);
+    QCOMPARE(frame1toframe2(2,0),0);
+    QCOMPARE(frame1toframe2(0,1),-1);
+    QCOMPARE(frame1toframe2(1,1),0);
+    QCOMPARE(frame1toframe2(2,1),0);
+    QCOMPARE(frame1toframe2(0,2),0);
+    QCOMPARE(frame1toframe2(1,2),0);
+    QCOMPARE(frame1toframe2(2,2),1);
+
+    QCOMPARE(frame1toframe2.determinant(),1);
+
+    frame1toframe2 = getSensorFrameConversion<LFD,FRD>();
+
+    QCOMPARE(frame1toframe2(0,0),0);
+    QCOMPARE(frame1toframe2(1,0),-1);
+    QCOMPARE(frame1toframe2(2,0),0);
+    QCOMPARE(frame1toframe2(0,1),1);
+    QCOMPARE(frame1toframe2(1,1),0);
+    QCOMPARE(frame1toframe2(2,1),0);
+    QCOMPARE(frame1toframe2(0,2),0);
+    QCOMPARE(frame1toframe2(1,2),0);
+    QCOMPARE(frame1toframe2(2,2),1);
+
+    QCOMPARE(frame1toframe2.determinant(),1);
 
 }
 
