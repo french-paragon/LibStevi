@@ -165,13 +165,13 @@ class PcdPointCloudHeader : public PointCloudHeaderInterface {
 public:
     double version = 0.7;
     std::vector<std::string> fields = {};
-    std::vector<size_t> size = {};
+    std::vector<uint64_t> size = {};
     std::vector<uint8_t> type = {};
-    std::vector<size_t> count = {};
-    size_t width = 0;
-    size_t height = 0;
+    std::vector<uint64_t> count = {};
+    uint64_t width = 0;
+    uint64_t height = 0;
     std::vector<double> viewpoint = {0, 0, 0, 1, 0, 0, 0};
-    size_t points = 0;
+    uint64_t points = 0;
     PcdDataStorageType data = PcdDataStorageType::ascii;
 
 protected:
