@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "io/pointcloud_io.h"
 #include "io/las_pointcloud_io.h"
+#include "io/pcd_pointcloud_io.h"
 #include "io/bit_manipulations.h"
 
 #include <QtTest/QtTest>
@@ -57,6 +58,15 @@ private Q_SLOTS:
     void testLasExtraBytes();
 
     void testLasPointCloud();
+
+    //* *************** PCD ***********************
+    void testPcdPointCloud();
+
+    //* *************** SDC ***********************
+    // void testSdcPointCloud();
+
+    //* *************** MetaCloud ***********************
+    // void testMetacloudPointCloud();
     
 private:
     std::default_random_engine re;
@@ -73,6 +83,8 @@ private:
     void verifyLasHeaderAttributeValue(std::string attrName, StereoVision::IO::PointCloudGenericAttribute attr);
     
     void verifyLasPointAttributeValue(std::string attrName, StereoVision::IO::PointCloudGenericAttribute attr);
+
+    void verifyPcdHeaderAttributeValue(std::string attrName, StereoVision::IO::PointCloudGenericAttribute attr);
 };
 
 void TestPointCloudIO::initTestCase() {
@@ -1001,6 +1013,116 @@ void TestPointCloudIO::verifyLasPointAttributeValue(std::string attrName, Stereo
     
     QVERIFY2(isTypeCorrect,
         ("Attribute \"" + attrName + "\" has incorrect type. Expected: " + expectedTypeName).c_str());
+}
+
+void TestPointCloudIO::testPcdPointCloud() {
+
+    const std::vector<std::string> expectedHeaderAttributes
+        = {"version", "fields", "size", "type", "count", "width", "height", "viewpoint", "points", "data"};
+
+    auto originalFiles = lasFiles + pcdFiles + sdcFiles + metacloudFiles;
+    QStringList rewrittenFiles;
+    std::vector<QTemporaryFile> tempFiles(originalFiles.size()); // temp files that will be auto removed
+    for (size_t i = 0; i < originalFiles.size(); i++) {
+        // test if the file is open and get its path
+        QVERIFY2(tempFiles[i].open(), qPrintable(QString("Failed to open temporary file: %1")
+            .arg(tempFiles[i].fileName())));
+        QString tempFilePath = tempFiles[i].fileName();
+        // save the path
+        rewrittenFiles.append(tempFilePath);
+        // close the file
+        tempFiles[i].close();
+        // open the original point cloud and write it to the temporary file
+        auto fullPointCloud = StereoVision::IO::openPointCloud(originalFiles[i].toStdString());
+        QVERIFY2(fullPointCloud.has_value(),
+            qPrintable(QString("Failed to open point cloud: %1").arg(originalFiles[i])));
+        
+        auto& pointAccess = fullPointCloud->pointAccess;
+        auto& headerAccess = fullPointCloud->headerAccess;
+        QVERIFY2(pointAccess != nullptr, qPrintable(QString("The point cloud is null for file: %1")
+            .arg(originalFiles[i])));
+        QVERIFY2(headerAccess != nullptr, qPrintable(QString("The header is null for file: %1").arg(originalFiles[i])));
+
+        // write the point cloud to the temporary file
+        QVERIFY2(StereoVision::IO::writePointCloudPcd(tempFilePath.toStdString(), fullPointCloud.value()),
+            qPrintable(QString("Failed to write point cloud: %1 to file: %2").arg(originalFiles[i]).arg(tempFilePath)));
+    }
+
+    auto allFiles = pcdFiles + rewrittenFiles;
+    for (size_t i = 0; i < allFiles.size(); i++) {
+        auto filePath = allFiles[i];
+        bool isRewrittenFile = i >= pcdFiles.size();
+        auto originalFileIndex = i - pcdFiles.size();
+        // open the pcd file
+        auto fullPointCloud = StereoVision::IO::openPointCloudPcd(filePath.toStdString());
+        // verify that the interface is not nullopt and that the header and the point cloud are not nullptr
+        QVERIFY2(fullPointCloud != std::nullopt, qPrintable(QString("Failed to open pcd file: %1").arg(filePath)));
+        auto& pointAccess = fullPointCloud->pointAccess;
+        auto& headerAccess = fullPointCloud->headerAccess;
+        QVERIFY2(pointAccess != nullptr, qPrintable(QString("The point cloud is null for file: %1").arg(filePath)));
+        QVERIFY2(headerAccess != nullptr, qPrintable(QString("The header is null for file: %1").arg(filePath)));
+
+        for (auto& expectedAttrName: expectedHeaderAttributes) {
+            // attribute should exist
+            auto attrOpt = headerAccess->getAttributeByName(expectedAttrName.c_str());
+            QVERIFY2(attrOpt.has_value(),
+                qPrintable(QString("Failed to get the header attribute: %1 for file: %2")
+                    .arg(expectedAttrName.c_str()).arg(filePath)));
+            auto attr = attrOpt.value();
+
+            verifyPcdHeaderAttributeValue(expectedAttrName, attr);
+        }
+    }
+}
+
+void TestPointCloudIO::verifyPcdHeaderAttributeValue(std::string attrName,
+    StereoVision::IO::PointCloudGenericAttribute attr) {
+    bool isTypeCorrect = false;
+    
+    std::string expectedTypeName;
+    
+    if (attrName == "version") {
+        isTypeCorrect = std::holds_alternative<double>(attr);
+        expectedTypeName = "double";
+    } else if (attrName == "fields") {
+        isTypeCorrect = std::holds_alternative<std::vector<std::string>>(attr);
+        expectedTypeName = "std::vector<std::string>";
+    } else if (attrName == "size" || attrName == "count") {
+        isTypeCorrect = std::holds_alternative<std::vector<uint64_t>>(attr);
+        expectedTypeName = "std::vector<uint64_t>";
+    } else if (attrName == "type") {
+        isTypeCorrect = std::holds_alternative<std::vector<uint8_t>>(attr);
+        expectedTypeName = "std::vector<uint8_t>";
+    } else if (attrName == "width" || attrName == "height" || attrName == "points") {
+        isTypeCorrect = std::holds_alternative<uint64_t>(attr);
+        expectedTypeName = "uint64_t";
+    } else if (attrName == "viewpoint") {
+        isTypeCorrect = std::holds_alternative<std::vector<double>>(attr);
+        expectedTypeName = "std::vector<double>";
+    } else if (attrName == "data") {
+        isTypeCorrect = std::holds_alternative<std::string>(attr);
+        expectedTypeName = "std::string";  
+    } else {
+        // unexpected attribute
+        QFAIL(("Unexpected attribute: " + attrName).c_str());
+    }
+    
+    QVERIFY2(isTypeCorrect,
+        ("Attribute \"" + attrName + "\" has incorrect type. Expected: " + expectedTypeName).c_str());
+
+    // special case: viewpoint size is 7 and data storage is either "ascii", "binary" or "binary_compressed"
+    if (attrName == "viewpoint") {
+        auto castedAttr = StereoVision::IO::castedPointCloudAttribute<std::vector<double>>(attr);
+        QVERIFY2(castedAttr.size() == 7,
+            qPrintable(QString("Attribute \"viewpoint\" has incorrect size. Expected: 7. Actual: %1")
+                .arg(castedAttr.size())));
+    } else if (attrName == "data") {
+        auto castedAttr = StereoVision::IO::castedPointCloudAttribute<std::string>(attr);
+        QVERIFY2(castedAttr == "ascii" || castedAttr == "binary" || castedAttr == "binary_compressed",
+            qPrintable(QString("Attribute \"data\" has incorrect value. Expected: \"ascii\", \"binary\" or \
+                \"binary_compressed\". Actual: %1")
+                .arg(castedAttr.c_str())));
+    }
 }
 
 QTEST_MAIN(TestPointCloudIO)
