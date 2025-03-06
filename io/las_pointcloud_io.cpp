@@ -1309,7 +1309,6 @@ std::unique_ptr<PointCloudPointAccessInterface> LasPointCloudPoint::createAdapte
     double yScaleFactor, double zScaleFactor, double xOffset, double yOffset, double zOffset) {
     // test if nullptr. If so, return nullptr
     if (pointCloudPointAccessInterface == nullptr) {return nullptr;}
-
     // try to cast the point cloud to a las point cloud
     auto lasPoint = dynamic_cast<LasPointCloudPoint*>(pointCloudPointAccessInterface.get());
     if (lasPoint != nullptr) {
@@ -1404,7 +1403,7 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
         if (zOffsetOpt.has_value())
             zOffset = castedPointCloudAttribute<double>(zOffsetOpt.value());
     }
-    
+
     pointCloud.pointAccess = LasPointCloudPoint::createAdapter(std::move(pointCloud.pointAccess), xScaleFactor,
         yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset);
     // safe cast
@@ -1794,7 +1793,8 @@ std::optional<PointCloudGenericAttribute> LasPointCloudPointBasicAdapter::getAtt
         const char *attributeName) const {
     // search for the attribute name to only accept known attributes
     auto it = std::find(attributeNames.begin(), attributeNames.end(), attributeName);
-    return getAttributeById(it - attributeNames.begin());
+    if (it == attributeNames.end()) return std::nullopt;
+    return getAttributeById(std::distance(attributeNames.begin(), it));
 }
 
 std::vector<std::string> LasPointCloudPointBasicAdapter::attributeList() const {
@@ -1824,7 +1824,8 @@ bool LasPointCloudPointBasicAdapter::gotoNext()
 
 size_t LasPointCloudPointBasicAdapter::getSuitableFormat(const PointCloudPointAccessInterface &pointCloudPointAccessInterface,
     const std::optional<size_t> &defaultFormat) {
-
+    
+    // try to get the format
     auto isDefaultFormat = defaultFormat.has_value();
     size_t defaultFormatValue = defaultFormat.value_or(6);
 
@@ -1917,7 +1918,6 @@ LasPointCloudPointBasicAdapter::LasPointCloudPointBasicAdapter(
         bitfieldOffset{attributeInformations.bitfieldOffset},
         LasPointCloudPoint{attributeInformations.recordByteSize,
             xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset} {
-
     // default value is out of range
     xIndex = yIndex = zIndex = redIndex = greenIndex = blueIndex = attributeNames.size();
     containsColor = formatContainsColor(format);
