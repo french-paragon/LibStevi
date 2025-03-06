@@ -159,8 +159,9 @@ void TestPointCloudIO::testPointCloudInterfaces() {
 
     int count = 0;
 
-    StereoVision::IO::FullPointCloudAccessInterface interface(new StereoVision::IO::GenericPointCloudHeaderInterface<float, void>(testPointCloud),
-                                                              new StereoVision::IO::GenericPointCloudPointAccessInterface<float, void>(testPointCloud));
+    StereoVision::IO::FullPointCloudAccessInterface interface(
+        new StereoVision::IO::GenericPointCloudHeaderInterface<float, void>(testPointCloud),
+        new StereoVision::IO::GenericPointCloudPointAccessInterface<float, void>(testPointCloud));
 
     bool running;
 
@@ -462,18 +463,22 @@ void TestPointCloudIO::testLasExtraBytes() {
     uint8_t options = 2;
     std::array<char, 32> name{"sample"};
     std::array<uint8_t, 4> unused{0, 1, 2, 3};
-    std::array<std::byte, 8> no_data{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}, std::byte{5}, std::byte{6}, std::byte{7}, std::byte{8}};
+    std::array<std::byte, 8> no_data{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}, std::byte{5},
+        std::byte{6}, std::byte{7}, std::byte{8}};
     std::array<uint8_t, 16> deprecated1{"asdf"};
-    std::array<std::byte, 8> min {std::byte{43}, std::byte{44}, std::byte{45}, std::byte{46}, std::byte{47}, std::byte{48}, std::byte{49}, std::byte{50}};
+    std::array<std::byte, 8> min {std::byte{43}, std::byte{44}, std::byte{45}, std::byte{46}, std::byte{47},
+        std::byte{48}, std::byte{49}, std::byte{50}};
     std::array<uint8_t, 16> deprecated2{"5678"};
-    std::array<std::byte, 8> max{std::byte{51}, std::byte{52}, std::byte{53}, std::byte{54}, std::byte{55}, std::byte{56}, std::byte{57}, std::byte{58}};
+    std::array<std::byte, 8> max{std::byte{51}, std::byte{52}, std::byte{53}, std::byte{54}, std::byte{55},
+        std::byte{56}, std::byte{57}, std::byte{58}};
     std::array<uint8_t, 16> deprecated3{"1234"};
     double scale = 345.678;
     std::array<uint8_t, 16> deprecated4{"*+*"};
     double offset = 123.456;
     std::array<uint8_t, 16> deprecated5{"deprecated"};
     std::array<char, 32> description{"test description"};
-    StereoVision::IO::LasExtraBytesDescriptor extraBytes{reserved, data_type, options, name, unused, no_data, deprecated1, min, deprecated2, max, deprecated3, scale, deprecated4, offset, deprecated5, description};
+    StereoVision::IO::LasExtraBytesDescriptor extraBytes{reserved, data_type, options, name, unused, no_data,
+        deprecated1, min, deprecated2, max, deprecated3, scale, deprecated4, offset, deprecated5, description};
     // convert to a raw byte array
     auto rawBytes = extraBytes.toBytes();
     // reconvert it
@@ -499,13 +504,16 @@ void TestPointCloudIO::testLasExtraBytes() {
     double scale_3 = 3;
     double offset_3 = 5;
 
-    StereoVision::IO::LasExtraBytesDescriptor extraBytes3{data_type_3, name_3, 0, description_3, no_data_3, min_3, max_3, scale_3, offset_3};
+    StereoVision::IO::LasExtraBytesDescriptor extraBytes3{data_type_3, name_3, 0, description_3, no_data_3, min_3,
+        max_3, scale_3, offset_3};
     // convert to raw bytes
     auto rawBytes3 = extraBytes3.toBytes();
     // expected extra byte 
-    StereoVision::IO::LasExtraBytesDescriptor expectedExtraBytes3 {std::array<uint8_t, 2>{}, uint8_t{9}, uint8_t{0b00011111}, std::array<char, 32>{"testFloat"},
+    StereoVision::IO::LasExtraBytesDescriptor expectedExtraBytes3 {std::array<uint8_t, 2>{}, uint8_t{9},
+        uint8_t{0b00011111}, std::array<char, 32>{"testFloat"},
         std::array<uint8_t, 4>{}, no_data_3_raw, std::array<uint8_t, 16>{}, min_3_raw, std::array<uint8_t, 16>{},
-        max_3_raw, std::array<uint8_t, 16>{}, scale_3, std::array<uint8_t, 16>{}, offset_3, std::array<uint8_t, 16>{}, std::array<char, 32>{"descriptionTest"}};
+        max_3_raw, std::array<uint8_t, 16>{}, scale_3, std::array<uint8_t, 16>{}, offset_3, std::array<uint8_t, 16>{},
+        std::array<char, 32>{"descriptionTest"}};
     // raw bytes
     auto expectedRawBytes3 = expectedExtraBytes3.toBytes();
 
@@ -522,9 +530,11 @@ void TestPointCloudIO::testLasExtraBytes() {
     // convert to raw bytes
     auto rawBytes5 = extraBytes5.toBytes();
     // expected extra byte 
-    StereoVision::IO::LasExtraBytesDescriptor expectedExtraBytes5 {std::array<uint8_t, 2>{}, uint8_t{9}, uint8_t{}, std::array<char, 32>{"testFloat"},
-        std::array<uint8_t, 4>{}, std::array<std::byte, 8>{}, std::array<uint8_t, 16>{}, std::array<std::byte, 8>{}, std::array<uint8_t, 16>{},
-        std::array<std::byte, 8>{}, std::array<uint8_t, 16>{}, 0, std::array<uint8_t, 16>{}, 0, std::array<uint8_t, 16>{}, std::array<char, 32>{}};
+    StereoVision::IO::LasExtraBytesDescriptor expectedExtraBytes5 {std::array<uint8_t, 2>{}, uint8_t{9}, uint8_t{},
+        std::array<char, 32>{"testFloat"}, std::array<uint8_t, 4>{}, std::array<std::byte, 8>{},
+        std::array<uint8_t, 16>{}, std::array<std::byte, 8>{}, std::array<uint8_t, 16>{},
+        std::array<std::byte, 8>{}, std::array<uint8_t, 16>{}, 0, std::array<uint8_t, 16>{}, 0,
+        std::array<uint8_t, 16>{}, std::array<char, 32>{}};
     // raw bytes
     auto expectedRawBytes5 = expectedExtraBytes5.toBytes();
 
@@ -833,12 +843,14 @@ void TestPointCloudIO::testLasPointCloud() {
                                 // QCOMPARE(originalScaledInt, newScaledInt);
                                 QVERIFY2(originalScaledInt == newScaledInt,
                                     qPrintable(
-                                        QString("Original scaled position: %1, rewritten scaled position: %2 for file: %3")
+                                        QString("Original scaled position: %1, "
+                                        "rewritten scaled position: %2 for file: %3")
                                         .arg(originalScaledInt).arg(newScaledInt).arg(originalFilePath)));
                             }
                         } else {
                             QFAIL(qPrintable(
-                                QString("Unsupported type for the position component for file: %1").arg(originalFilePath)));
+                                QString("Unsupported type for the position component for file: %1")
+                                .arg(originalFilePath)));
                         }
                     }, rewrittenComponent);
                 };
@@ -860,7 +872,8 @@ void TestPointCloudIO::testLasPointCloud() {
                                     .arg(originalFilePath)));
                         } else {
                             QFAIL(qPrintable(
-                                QString("Unsupported type for the color component for file: %1").arg(originalFilePath)));
+                                QString("Unsupported type for the color component for file: %1")
+                                    .arg(originalFilePath)));
                         }
                     }, rewrittenComponent);
                 };
@@ -899,8 +912,8 @@ void TestPointCloudIO::testLasPointCloud() {
                 
                 if (isNextPointOriginal != isNextPointRewritten) {
                     QVERIFY2(isNextPointOriginal == isNextPointRewritten,
-                        qPrintable(QString("The original point cloud : %1 and the rewritten point cloud: \
-                            %2 have different number of points").arg(originalFilePath).arg(filePath)));
+                        qPrintable(QString("The original point cloud : %1 and the rewritten point cloud: "
+                            "%2 have different number of points").arg(originalFilePath).arg(filePath)));
                 }
 
                 if (!isNextPointOriginal || !isNextPointRewritten) {
@@ -966,7 +979,8 @@ void TestPointCloudIO::verifyLasHeaderAttributeValue(std::string attrName,
     }
 }
 
-void TestPointCloudIO::verifyLasPointAttributeValue(std::string attrName, StereoVision::IO::PointCloudGenericAttribute attr) {
+void TestPointCloudIO::verifyLasPointAttributeValue(std::string attrName,
+    StereoVision::IO::PointCloudGenericAttribute attr) {
 
     bool isTypeCorrect = false;
     
@@ -1023,31 +1037,36 @@ void TestPointCloudIO::testPcdPointCloud() {
     auto originalFiles = lasFiles + pcdFiles + sdcFiles + metacloudFiles;
     QStringList rewrittenFiles;
     std::vector<QTemporaryFile> tempFiles(originalFiles.size()); // temp files that will be auto removed
-    for (size_t i = 0; i < originalFiles.size(); i++) {
-        // test if the file is open and get its path
-        QVERIFY2(tempFiles[i].open(), qPrintable(QString("Failed to open temporary file: %1")
-            .arg(tempFiles[i].fileName())));
-        QString tempFilePath = tempFiles[i].fileName();
-        // save the path
-        rewrittenFiles.append(tempFilePath);
-        // close the file
-        tempFiles[i].close();
-        // open the original point cloud and write it to the temporary file
-        auto fullPointCloud = StereoVision::IO::openPointCloud(originalFiles[i].toStdString());
-        QVERIFY2(fullPointCloud.has_value(),
-            qPrintable(QString("Failed to open point cloud: %1").arg(originalFiles[i])));
-        
-        auto& pointAccess = fullPointCloud->pointAccess;
-        auto& headerAccess = fullPointCloud->headerAccess;
-        QVERIFY2(pointAccess != nullptr, qPrintable(QString("The point cloud is null for file: %1")
-            .arg(originalFiles[i])));
-        QVERIFY2(headerAccess != nullptr, qPrintable(QString("The header is null for file: %1").arg(originalFiles[i])));
-
-        // write the point cloud to the temporary file
-        QVERIFY2(StereoVision::IO::writePointCloudPcd(tempFilePath.toStdString(), fullPointCloud.value()),
-            qPrintable(QString("Failed to write point cloud: %1 to file: %2").arg(originalFiles[i]).arg(tempFilePath)));
+    for (auto pcdStorage : {StereoVision::IO::PcdDataStorageType::ascii,
+        StereoVision::IO::PcdDataStorageType::binary}) {
+        for (size_t i = 0; i < originalFiles.size(); i++) {
+            // test if the file is open and get its path
+            QVERIFY2(tempFiles[i].open(), qPrintable(QString("Failed to open temporary file: %1")
+                .arg(tempFiles[i].fileName())));
+            QString tempFilePath = tempFiles[i].fileName();
+            // save the path
+            rewrittenFiles.append(tempFilePath);
+            // close the file
+            tempFiles[i].close();
+            // open the original point cloud and write it to the temporary file
+            auto fullPointCloud = StereoVision::IO::openPointCloud(originalFiles[i].toStdString());
+            QVERIFY2(fullPointCloud.has_value(),
+                qPrintable(QString("Failed to open point cloud: %1").arg(originalFiles[i])));
+            
+            auto& pointAccess = fullPointCloud->pointAccess;
+            auto& headerAccess = fullPointCloud->headerAccess;
+            QVERIFY2(pointAccess != nullptr, qPrintable(QString("The point cloud is null for file: %1")
+                .arg(originalFiles[i])));
+            QVERIFY2(headerAccess != nullptr, qPrintable(QString("The header is null for file: %1")
+                .arg(originalFiles[i])));
+            // write the point cloud to the temporary file
+            QVERIFY2(StereoVision::IO::writePointCloudPcd(tempFilePath.toStdString(), fullPointCloud.value(),
+                pcdStorage), qPrintable(QString("Failed to write point cloud: %1 to file: %2").arg(originalFiles[i])
+                    .arg(tempFilePath)));
+        }
     }
-
+    originalFiles = originalFiles + originalFiles;
+    
     auto allFiles = pcdFiles + rewrittenFiles;
     for (size_t i = 0; i < allFiles.size(); i++) {
         auto filePath = allFiles[i];
@@ -1061,7 +1080,6 @@ void TestPointCloudIO::testPcdPointCloud() {
         auto& headerAccess = fullPointCloud->headerAccess;
         QVERIFY2(pointAccess != nullptr, qPrintable(QString("The point cloud is null for file: %1").arg(filePath)));
         QVERIFY2(headerAccess != nullptr, qPrintable(QString("The header is null for file: %1").arg(filePath)));
-
         for (auto& expectedAttrName: expectedHeaderAttributes) {
             // attribute should exist
             auto attrOpt = headerAccess->getAttributeByName(expectedAttrName.c_str());
@@ -1071,6 +1089,174 @@ void TestPointCloudIO::testPcdPointCloud() {
             auto attr = attrOpt.value();
 
             verifyPcdHeaderAttributeValue(expectedAttrName, attr);
+        }
+        if (isRewrittenFile) {
+            auto originalFilePath = originalFiles[originalFileIndex];
+            auto originalFullPointCloud = StereoVision::IO::openPointCloud(originalFilePath.toStdString());
+            auto rewrittenFullPointCloud = StereoVision::IO::openPointCloudPcd(filePath.toStdString());
+            QVERIFY2(originalFullPointCloud.has_value(),
+                qPrintable(QString("Failed to open the original point cloud: %1").arg(originalFilePath)));
+            QVERIFY2(rewrittenFullPointCloud.has_value(),
+                qPrintable(QString("Failed to open the rewritten point cloud: %1").arg(filePath)));
+            auto& originalPointAccess = originalFullPointCloud.value().pointAccess;
+            auto& rewrittenPointAccess = rewrittenFullPointCloud.value().pointAccess;
+            auto* castedPcdRewrittenPointAccess
+                = dynamic_cast<StereoVision::IO::PcdPointCloudPoint*>(rewrittenPointAccess.get());
+            QVERIFY2(castedPcdRewrittenPointAccess != nullptr,
+                qPrintable(QString("Failed to cast the point cloud to a pcd point cloud for file: %1").arg(filePath)));
+            // iterate on all the points
+            while (true) {
+                for (auto& originalAttrName: originalPointAccess->attributeList()) {
+                    auto originalAttrOpt = originalPointAccess->getAttributeByName(originalAttrName.c_str());
+                    QVERIFY2(originalAttrOpt.has_value(),
+                        qPrintable(QString("Failed to get the original point attribute: %1 for file: %2")
+                            .arg(originalAttrName.c_str()).arg(originalFilePath)));
+                    auto originalAttr = originalAttrOpt.value();
+                    
+                    // test if it is a valid pcd type. If not, the attribute will not be present
+                    if (std::holds_alternative<uint8_t>(originalAttr) ||
+                        std::holds_alternative<uint16_t>(originalAttr) ||
+                        std::holds_alternative<uint32_t>(originalAttr) ||
+                        std::holds_alternative<uint64_t>(originalAttr) ||
+                        std::holds_alternative<int8_t>(originalAttr) ||
+                        std::holds_alternative<int16_t>(originalAttr) ||
+                        std::holds_alternative<int32_t>(originalAttr) ||
+                        std::holds_alternative<int64_t>(originalAttr) ||
+                        std::holds_alternative<float>(originalAttr) ||
+                        std::holds_alternative<double>(originalAttr) ||
+                        // vectors
+                        std::holds_alternative<std::vector<uint8_t>>(originalAttr) ||
+                        std::holds_alternative<std::vector<uint16_t>>(originalAttr) ||
+                        std::holds_alternative<std::vector<uint32_t>>(originalAttr) ||
+                        std::holds_alternative<std::vector<uint64_t>>(originalAttr) ||
+                        std::holds_alternative<std::vector<int8_t>>(originalAttr) ||
+                        std::holds_alternative<std::vector<int16_t>>(originalAttr) ||
+                        std::holds_alternative<std::vector<int32_t>>(originalAttr) ||
+                        std::holds_alternative<std::vector<int64_t>>(originalAttr) ||
+                        std::holds_alternative<std::vector<float>>(originalAttr) ||
+                        std::holds_alternative<std::vector<double>>(originalAttr)) {
+                        
+                        // remove underscores:
+                        std::string attrNameNoSpace;
+
+                        for (char c : originalAttrName) {
+                            if (c == '_'|| std::isalnum(static_cast<unsigned char>(c))) {
+                                attrNameNoSpace += c;
+                            } else if (std::isspace(static_cast<unsigned char>(c))) {
+                                // Replace spaces with underscores
+                                attrNameNoSpace += '_';
+                            }
+                            // Other characters are ignored
+                        }
+                        auto rewrittenAttrOpt = rewrittenPointAccess->getAttributeByName(attrNameNoSpace.c_str());
+                        QVERIFY2(rewrittenAttrOpt.has_value(),
+                            qPrintable(QString("Failed to get the rewritten point attribute: %1 for file: %2")
+                                .arg(attrNameNoSpace.c_str()).arg(filePath)));
+                        
+                        // visit the attribute
+                        std::visit([&](auto& rewrittenAttr) {
+                            using rewritten_type = std::decay_t<decltype(rewrittenAttr)>;
+                            if constexpr (std::is_integral_v<rewritten_type> ||
+                                        std::is_floating_point_v<rewritten_type>) {
+                                // cast the original type to the rewritten type
+                                auto originalCastedAttr
+                                    = StereoVision::IO::castedPointCloudAttribute<rewritten_type>(originalAttr);
+                                // compare the values
+                                QCOMPARE(originalCastedAttr, rewrittenAttr);
+                            } else if constexpr (StereoVision::IO::is_vector_v<rewritten_type>) {
+                                auto originalCastedAttr
+                                    = StereoVision::IO::castedPointCloudAttribute<rewritten_type>(originalAttr);
+                                // compare the sizes
+                                QCOMPARE(originalCastedAttr.size(), rewrittenAttr.size());
+                                // compare the values
+                                for (size_t i = 0; i < originalCastedAttr.size(); i++) {
+                                    QCOMPARE(originalCastedAttr[i], rewrittenAttr[i]);
+                                }
+                            } else {
+                                QFAIL(qPrintable(
+                                    QString("Unsupported type for attribute: %1").arg(originalAttrName.c_str())));
+                            }
+                        }, rewrittenAttrOpt.value());
+                    }
+                }
+                auto comparePositionComponent = [&](auto originalComponent, auto rewrittenComponent) {
+                    
+                        // visit the attributes
+                    std::visit([&](auto& newComponent) {
+                        using new_type = std::decay_t<decltype(newComponent)>;
+                        if constexpr (std::is_integral_v<new_type> ||
+                                    std::is_floating_point_v<new_type>) {
+                            
+                            QVERIFY2(std::holds_alternative<new_type>(originalComponent),
+                                qPrintable(QString("Type mismatch for the position between original and rewritten file. "
+                                                "Original file: %1").arg(originalFilePath)));
+                            auto castedOriginalComponent
+                                = StereoVision::IO::castedPointCloudAttribute<new_type>(originalComponent);
+                            
+                                QCOMPARE(castedOriginalComponent, newComponent);
+                        } else {
+                            QFAIL(qPrintable(
+                                QString("Unsupported type for the position component for file: %1").arg(originalFilePath)));
+                        }
+                    }, rewrittenComponent);
+                };
+
+                auto compareColorComponent = [&](auto originalComponent, auto rewrittenComponent) {
+                    // visit the attributes
+                    std::visit([&](auto& newComponent) {
+                        using new_type = std::decay_t<decltype(newComponent)>;
+                        if constexpr (std::is_integral_v<new_type> ||
+                                    std::is_floating_point_v<new_type>) {
+                            // cast the original type to the rewritten type
+                            auto castedComponent
+                                = StereoVision::IO::castedPointCloudAttribute<new_type>(originalComponent);
+                            // compare the values
+                            QCOMPARE(castedComponent, newComponent);
+                        } else if constexpr (std::is_same_v<new_type, StereoVision::IO::EmptyParam>) {
+                            QVERIFY2(std::holds_alternative<StereoVision::IO::EmptyParam>(originalComponent),
+                                qPrintable(QString("Both color components should be empty. Original file: %1")
+                                    .arg(originalFilePath)));
+                        } else {
+                            QFAIL(qPrintable(
+                                QString("Unsupported type for the color component for file: %1").arg(originalFilePath)));
+                        }
+                    }, rewrittenComponent);
+                };
+
+                // compare the position and the color
+                auto originalPointPosition = originalPointAccess->getPointPosition();
+                auto rewrittenPointPosition = rewrittenPointAccess->getPointPosition();
+                comparePositionComponent(originalPointPosition.x, rewrittenPointPosition.x);
+                comparePositionComponent(originalPointPosition.y, rewrittenPointPosition.y);
+                comparePositionComponent(originalPointPosition.z, rewrittenPointPosition.z);
+
+                auto originalPointColorOpt = originalPointAccess->getPointColor();
+                auto rewrittenPointColorOpt = rewrittenPointAccess->getPointColor();
+                QCOMPARE(originalPointColorOpt.has_value(), rewrittenPointColorOpt.has_value());
+                if (originalPointColorOpt.has_value() && rewrittenPointColorOpt.has_value()) {
+                    auto originalPointColor = originalPointColorOpt.value();
+                    auto rewrittenPointColor = rewrittenPointColorOpt.value();
+
+                    compareColorComponent(originalPointColor.r, rewrittenPointColor.r);
+                    compareColorComponent(originalPointColor.g, rewrittenPointColor.g);
+                    compareColorComponent(originalPointColor.b, rewrittenPointColor.b);
+                    compareColorComponent(originalPointColor.a, rewrittenPointColor.a);
+                }
+                
+                // Go to the next point
+                auto isNextPointOriginal = originalPointAccess->gotoNext();
+                auto isNextPointRewritten = rewrittenPointAccess->gotoNext();
+                
+                if (isNextPointOriginal != isNextPointRewritten) {
+                    QVERIFY2(isNextPointOriginal == isNextPointRewritten,
+                        qPrintable(QString("The original point cloud : %1 and the rewritten point cloud: "
+                            "%2 have different number of points").arg(originalFilePath).arg(filePath)));
+                }
+
+                if (!isNextPointOriginal || !isNextPointRewritten) {
+                    break;
+                }
+            }
         }
     }
 }
@@ -1119,8 +1305,8 @@ void TestPointCloudIO::verifyPcdHeaderAttributeValue(std::string attrName,
     } else if (attrName == "data") {
         auto castedAttr = StereoVision::IO::castedPointCloudAttribute<std::string>(attr);
         QVERIFY2(castedAttr == "ascii" || castedAttr == "binary" || castedAttr == "binary_compressed",
-            qPrintable(QString("Attribute \"data\" has incorrect value. Expected: \"ascii\", \"binary\" or \
-                \"binary_compressed\". Actual: %1")
+            qPrintable(QString("Attribute \"data\" has incorrect value. Expected: \"ascii\", \"binary\" or "
+                "\"binary_compressed\". Actual: %1")
                 .arg(castedAttr.c_str())));
     }
 }
