@@ -1291,7 +1291,7 @@ std::optional<PointCloudGenericAttribute> PcdPointCloudPointBasicAdapter::getAtt
     } else if (pointColor.has_value() && containsAlpha && id == aIndex) {
         attValue = (*pointColor).a;
     } else { // default case
-        attValue = pointCloudPointAccessInterface->getAttributeByName(attributeNames[id].c_str()).value_or(0);
+        attValue = pointCloudPointAccessInterface->getAttributeByName(originalAttributeNames[id].c_str()).value_or(0);
     }
 
     return attValue;
@@ -1299,9 +1299,9 @@ std::optional<PointCloudGenericAttribute> PcdPointCloudPointBasicAdapter::getAtt
 
 std::optional<PointCloudGenericAttribute> PcdPointCloudPointBasicAdapter::getAttributeByName(const char *attributeName) const {
     // find the attribute in the list of sanitized attribute names
-    auto it = std::find(originalAttributeNames.begin(), originalAttributeNames.end(), attributeName);
-    if (it == originalAttributeNames.end()) return std::nullopt;
-    return getAttributeById(std::distance(originalAttributeNames.begin(), it));
+    auto it = std::find(attributeNames.begin(), attributeNames.end(), attributeName);
+    if (it == attributeNames.end()) return std::nullopt;
+    return getAttributeById(std::distance(attributeNames.begin(), it));
 }
 
 std::vector<std::string> PcdPointCloudPointBasicAdapter::attributeList() const {
