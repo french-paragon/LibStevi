@@ -245,6 +245,7 @@ std::optional<PointCloudGenericAttribute> MetaCloudHeader::getAttributeById(int 
 std::optional<PointCloudGenericAttribute> MetaCloudHeader::getAttributeByName(const char *attributeName) const {
     // find the index of the attribute
     auto it = std::find(headerAttributeNames.begin(), headerAttributeNames.end(), attributeName);
+    if (it == headerAttributeNames.end()) return std::nullopt;
     return getAttributeById(std::distance(headerAttributeNames.begin(), it));
 }
 
@@ -476,6 +477,7 @@ std::optional<PointCloudGenericAttribute> MetaCloudExtraAttributeReader::getAttr
 std::optional<PointCloudGenericAttribute> MetaCloudExtraAttributeReader::getAttributeByName(
     const char *attributeName) const {
     auto it = std::find(attributeNames.begin(), attributeNames.end(), attributeName);
+    if (it == attributeNames.end()) return std::nullopt;
     return getAttributeById(std::distance(attributeNames.begin(), it));
 }
 
@@ -627,6 +629,7 @@ std::optional<PointCloudGenericAttribute> MetaCloudPoint::getAttributeById(int i
 
 std::optional<PointCloudGenericAttribute> MetaCloudPoint::getAttributeByName(const char *attributeName) const {
     auto it = std::find(attributeNames.begin(), attributeNames.end(), attributeName);
+    if (it == attributeNames.end()) return std::nullopt;
     return getAttributeById(std::distance(attributeNames.begin(), it));
 }
 

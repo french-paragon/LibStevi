@@ -2,6 +2,7 @@
 #include <array>
 #include <iostream>
 #include <cstddef>
+#include <cmath>
 #include "las_pointcloud_io.h"
 #include "bit_manipulations.h"
 #include "fstreamCustomBuffer.h"
@@ -38,6 +39,7 @@ static constexpr size_t computeOffset() {
  * @brief Factory function that generate a LasPointCloudPoint object given a istream, the recordByteSize, the record format number (0-11) and the dataBuffer.
  * @param reader the istream
  * @param recordByteSize the size of the point record
+ * @param nbPoints the total number of points in the pointcloud
  * @param recordFormatNumber the format number
  * @param extraAttributesNames the names of the extra attributes
  * @param extraAttributesTypes the types of the extra attributes
@@ -50,15 +52,15 @@ static constexpr size_t computeOffset() {
  * extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets
  */
 static std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint(std::unique_ptr<std::istream> reader,
-    size_t recordByteSize, size_t recordFormatNumber, const std::vector<std::string>& extraAttributesNames = {},
-    const std::vector<uint8_t>& extraAttributesTypes = {}, const std::vector<size_t>& extraAttributesSizes = {},
-    const std::vector<size_t>& extraAttributesOffsets = {}, bool hideColorAndGeometricAttributes = false,
-    double xScaleFactor = 0.01, double yScaleFactor = 0.01, double zScaleFactor = 0.01, double xOffset = 0,
-    double yOffset = 0, double zOffset = 0, char* dataBuffer = nullptr);
+    size_t recordByteSize, size_t nbPoints, size_t recordFormatNumber,
+    const std::vector<std::string>& extraAttributesNames = {}, const std::vector<uint8_t>& extraAttributesTypes = {},
+    const std::vector<size_t>& extraAttributesSizes = {}, const std::vector<size_t>& extraAttributesOffsets = {},
+    bool hideColorAndGeometricAttributes = false, double xScaleFactor = 0.01, double yScaleFactor = 0.01,
+    double zScaleFactor = 0.01, double xOffset = 0, double yOffset = 0, double zOffset = 0, char* dataBuffer = nullptr);
 
 template <size_t N = size_t{0}>
 static std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::unique_ptr<std::istream> reader,
-    size_t recordByteSize, size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
+    size_t recordByteSize, size_t nbPoints, size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
     const std::vector<uint8_t> &extraAttributesTypes, const std::vector<size_t> &extraAttributesSizes,
     const std::vector<size_t> &extraAttributesOffsets, bool hideColorAndGeometricAttributes, double xScaleFactor,
     double yScaleFactor, double zScaleFactor, double xOffset, double yOffset, double zOffset, char* dataBuffer);
@@ -145,6 +147,9 @@ protected:
     std::vector<uint8_t> extraAttributesTypes;
     std::vector<size_t> extraAttributesSizes;
     std::vector<size_t> extraAttributesOffsets;
+    
+    const size_t nbPoints;
+    size_t currentPointIdOneBased = 0; // zero for non initialization, one for the first point
 
     // attribute names exposed to the user. For example, we might hide the color and geometric attributes.
     std::vector<std::string> exposedAttributeNames;
@@ -152,12 +157,13 @@ protected:
     std::vector<std::string> attributeNamesFullListInternal;
     std::vector<size_t> exposedIdToInternalId; // map the exposed id of an attribute to its internal id
 public:
-    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize,
+    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize, size_t nbPoints,
         const std::vector<std::string> &extraAttributesNames, const std::vector<uint8_t> &extraAttributesTypes,
         const std::vector<size_t> &extraAttributesSizes, const std::vector<size_t> &extraAttributesOffsets,
         bool hideColorAndGeometricAttributes, double xScaleFactor, double yScaleFactor, double zScaleFactor, double xOffset,
         double yOffset, double zOffset, char* dataBuffer) :
             reader{std::move(reader)},
+            nbPoints{nbPoints},
             extraAttributesNames{extraAttributesNames},
             extraAttributesTypes{extraAttributesTypes},
             extraAttributesSizes{extraAttributesSizes},
@@ -168,12 +174,13 @@ public:
         verifyAndCorrectParameters(hideColorAndGeometricAttributes);
     }
 
-    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize,
+    LasPointCloudPoint_Base(std::unique_ptr<std::istream> reader, size_t recordByteSize, size_t nbPoints,
         const std::vector<std::string> &extraAttributesNames, const std::vector<uint8_t> &extraAttributesTypes,
         const std::vector<size_t> &extraAttributesSizes,
         const std::vector<size_t> &extraAttributesOffsets, bool hideColorAndGeometricAttributes,
         double xScaleFactor, double yScaleFactor, double zScaleFactor, double xOffset, double yOffset, double zOffset) :
             reader{std::move(reader)},
+            nbPoints{nbPoints},
             extraAttributesNames{extraAttributesNames},
             extraAttributesTypes{extraAttributesTypes},
             extraAttributesSizes{extraAttributesSizes},
@@ -246,7 +253,7 @@ public:
     static constexpr size_t nbAttributes = 15;
 
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
-        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t>;
+        uint8_t, uint8_t, uint8_t, uint8_t, int8_t, uint8_t, uint16_t>;
 
     constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
         "numberOfReturns"sv, "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
@@ -273,7 +280,7 @@ public:
     static constexpr size_t nbAttributes = 16;
 
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
-        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double>;
+        uint8_t, uint8_t, uint8_t, uint8_t, int8_t, uint8_t, uint16_t, double>;
 
     constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
         "numberOfReturns"sv, "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
@@ -300,7 +307,7 @@ public:
     static constexpr size_t nbAttributes = 18;
 
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
-        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t>;
+        uint8_t, uint8_t, uint8_t, uint8_t, int8_t, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t>;
 
     constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
         "numberOfReturns"sv, "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
@@ -332,7 +339,7 @@ public:
     static constexpr size_t nbAttributes = 19;
 
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
-        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double, uint16_t, uint16_t, uint16_t>;
+        uint8_t, uint8_t, uint8_t, uint8_t, int8_t, uint8_t, uint16_t, double, uint16_t, uint16_t, uint16_t>;
 
     constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
         "numberOfReturns"sv, "scanDirectionFlag"sv, "edgeOfFlightLineFlag"sv, "classification"sv, "syntheticFlag"sv,
@@ -364,7 +371,7 @@ public:
     static constexpr size_t nbAttributes = 23;
 
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
-        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double, uint8_t, uint64_t, uint32_t, float,
+        uint8_t, uint8_t, uint8_t, uint8_t, int8_t, uint8_t, uint16_t, double, uint8_t, uint64_t, uint32_t, float,
         float, float, float>;
 
     constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
@@ -394,7 +401,7 @@ public:
     static constexpr size_t nbAttributes = 26;
 
     using returnTypeList = std::tuple<int32_t, int32_t, int32_t, uint16_t, uint8_t, uint8_t, uint8_t, uint8_t,
-        uint8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint16_t, double, uint16_t, uint16_t, uint16_t, uint8_t,
+        uint8_t, uint8_t, uint8_t, uint8_t, int8_t, uint8_t, uint16_t, double, uint16_t, uint16_t, uint16_t, uint8_t,
         uint64_t, uint32_t, float, float, float, float>;
 
     constexpr static auto attributeNames = std::array{"x"sv, "y"sv, "z"sv, "intensity"sv, "returnNumber"sv,
@@ -954,10 +961,21 @@ std::optional<LasPublicHeaderBlock> LasPublicHeaderBlock::readPublicHeader(std::
     reader.read(reinterpret_cast<char*>(&header.maxZ), maxZ_size);
     reader.read(reinterpret_cast<char*>(&header.minZ), minZ_size);
     reader.read(reinterpret_cast<char*>(&header.startOfWaveformDataPacketRecord), startOfWaveformDataPacketRecord_size);
-    reader.read(reinterpret_cast<char*>(&header.startOfFirstExtendedVariableLengthRecord), startOfFirstExtendedVariableLengthRecord_size);
-    reader.read(reinterpret_cast<char*>(&header.numberOfExtendedVariableLengthRecords), numberOfExtendedVariableLengthRecords_size);
-    reader.read(reinterpret_cast<char*>(&header.numberOfPointRecords), numberOfPointRecords_size);
-    reader.read(reinterpret_cast<char*>(header.numberOfPointsByReturn.data()), numberOfPointsByReturn_size);
+    // version >= 1.4
+    if ((header.versionMajor == 1 && header.versionMinor >= 4) || header.versionMajor > 1) {
+        reader.read(reinterpret_cast<char*>(&header.startOfFirstExtendedVariableLengthRecord), startOfFirstExtendedVariableLengthRecord_size);
+        reader.read(reinterpret_cast<char*>(&header.numberOfExtendedVariableLengthRecords), numberOfExtendedVariableLengthRecords_size);
+        reader.read(reinterpret_cast<char*>(&header.numberOfPointRecords), numberOfPointRecords_size);
+        reader.read(reinterpret_cast<char*>(header.numberOfPointsByReturn.data()), numberOfPointsByReturn_size);
+    } else {
+        // copy data from legacy
+        header.startOfFirstExtendedVariableLengthRecord = 0;
+        header.numberOfExtendedVariableLengthRecords = 0;
+        header.numberOfPointRecords = header.legacyNumberOfPointRecords;
+        for (size_t i = 0; i < header.legacyNumberOfPointsByReturn.size(); i++) {
+            header.numberOfPointsByReturn[i] = header.legacyNumberOfPointsByReturn[i];
+        }
+    }
 
     if (reader.fail()) return std::nullopt;
 
@@ -998,10 +1016,13 @@ bool LasPublicHeaderBlock::writePublicHeader(std::ostream &writer, const LasPubl
     writer.write(reinterpret_cast<const char*>(&header.maxZ), maxZ_size);
     writer.write(reinterpret_cast<const char*>(&header.minZ), minZ_size);
     writer.write(reinterpret_cast<const char*>(&header.startOfWaveformDataPacketRecord), startOfWaveformDataPacketRecord_size);
-    writer.write(reinterpret_cast<const char*>(&header.startOfFirstExtendedVariableLengthRecord), startOfFirstExtendedVariableLengthRecord_size);
-    writer.write(reinterpret_cast<const char*>(&header.numberOfExtendedVariableLengthRecords), numberOfExtendedVariableLengthRecords_size);
-    writer.write(reinterpret_cast<const char*>(&header.numberOfPointRecords), numberOfPointRecords_size);
-    writer.write(reinterpret_cast<const char*>(header.numberOfPointsByReturn.data()), numberOfPointsByReturn_size);
+    // version >= 1.4
+    if ((header.versionMajor == 1 && header.versionMinor >= 4) || header.versionMajor > 1) {
+        writer.write(reinterpret_cast<const char*>(&header.startOfFirstExtendedVariableLengthRecord), startOfFirstExtendedVariableLengthRecord_size);
+        writer.write(reinterpret_cast<const char*>(&header.numberOfExtendedVariableLengthRecords), numberOfExtendedVariableLengthRecords_size);
+        writer.write(reinterpret_cast<const char*>(&header.numberOfPointRecords), numberOfPointRecords_size);
+        writer.write(reinterpret_cast<const char*>(header.numberOfPointsByReturn.data()), numberOfPointsByReturn_size);
+    }
 
     return writer.good();
 }
@@ -1021,7 +1042,7 @@ std::optional<PointCloudGenericAttribute> LasPublicHeaderBlock::getPublicHeaderA
     case 5:
         return projectID_GUID_Data3;
     case 6:
-        return std::string{projectID_GUID_Data4.begin(), projectID_GUID_Data4.end()};
+        return std::vector<uint8_t>{projectID_GUID_Data4.begin(), projectID_GUID_Data4.end()};
     case 7:
         return versionMajor;
     case 8:
@@ -1089,10 +1110,18 @@ std::optional<PointCloudGenericAttribute> LasPublicHeaderBlock::getPublicHeaderA
 
 template <class D>
 PtGeometry<PointCloudGenericAttribute> LasPointCloudPoint_Base<D>::getPointPosition() const {
+    // the maximum value for the int32 type is used to represent a nan value
+    static const auto nan = std::nan("");
+    auto xRaw = fromBytes<returnType<D::x_id>>(getRecordDataBuffer() + offset<D::x_id>);
+    auto yRaw = fromBytes<returnType<D::y_id>>(getRecordDataBuffer() + offset<D::y_id>);
+    auto zRaw = fromBytes<returnType<D::z_id>>(getRecordDataBuffer() + offset<D::z_id>);
     return PtGeometry<PointCloudGenericAttribute>{
-        xScaleFactor * fromBytes<returnType<D::x_id>>(getRecordDataBuffer() + offset<D::x_id>) + xOffset,
-        yScaleFactor * fromBytes<returnType<D::y_id>>(getRecordDataBuffer() + offset<D::y_id>) + yOffset,
-        zScaleFactor * fromBytes<returnType<D::z_id>>(getRecordDataBuffer() + offset<D::z_id>) + zOffset
+        xRaw == std::numeric_limits<returnType<D::x_id>>::max() ? PointCloudGenericAttribute{nan} :
+            PointCloudGenericAttribute{xScaleFactor * xRaw + xOffset},
+        yRaw == std::numeric_limits<returnType<D::y_id>>::max() ? PointCloudGenericAttribute{nan} :
+            PointCloudGenericAttribute{yScaleFactor * yRaw + yOffset},
+        zRaw == std::numeric_limits<returnType<D::z_id>>::max() ? PointCloudGenericAttribute{nan} :
+            PointCloudGenericAttribute{zScaleFactor * zRaw + zOffset}
     };
 }
 
@@ -1177,6 +1206,8 @@ std::vector<std::string> LasPointCloudPoint_Base<D>::attributeList() const {
 
 template <class Derived>
 bool LasPointCloudPoint_Base<Derived>::gotoNext() {
+    if (nbPoints == 0 || currentPointIdOneBased >= nbPoints) return false;
+    currentPointIdOneBased++;
     reader->read(dataBuffer, recordByteSize);
     return reader->good();
 }
@@ -1278,7 +1309,6 @@ std::unique_ptr<PointCloudPointAccessInterface> LasPointCloudPoint::createAdapte
     double yScaleFactor, double zScaleFactor, double xOffset, double yOffset, double zOffset) {
     // test if nullptr. If so, return nullptr
     if (pointCloudPointAccessInterface == nullptr) {return nullptr;}
-
     // try to cast the point cloud to a las point cloud
     auto lasPoint = dynamic_cast<LasPointCloudPoint*>(pointCloudPointAccessInterface.get());
     if (lasPoint != nullptr) {
@@ -1317,6 +1347,8 @@ std::optional<FullPointCloudAccessInterface> openPointCloudLas(std::unique_ptr<s
         = header->getPointwiseExtraAttributesInfos();
     // create a point cloud
     auto pointCloud = createLasPointCloudPoint(std::move(reader), header->publicHeaderBlock.getPointDataRecordLength(),
+        std::max((size_t) header->publicHeaderBlock.legacyNumberOfPointRecords,
+            header->publicHeaderBlock.numberOfPointRecords),
         header->publicHeaderBlock.getPointDataRecordFormat(), extraAttributesNames, extraAttributesTypes,
         extraAttributesSizes, extraAttributesOffsets, true, header->publicHeaderBlock.getXScaleFactor(),
         header->publicHeaderBlock.getYScaleFactor(), header->publicHeaderBlock.getZScaleFactor(),
@@ -1371,7 +1403,7 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
         if (zOffsetOpt.has_value())
             zOffset = castedPointCloudAttribute<double>(zOffsetOpt.value());
     }
-    
+
     pointCloud.pointAccess = LasPointCloudPoint::createAdapter(std::move(pointCloud.pointAccess), xScaleFactor,
         yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset);
     // safe cast
@@ -1383,18 +1415,36 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
     auto newHeader = std::make_unique<LasPointCloudHeader>();
     if (lasHeader != nullptr) {
         newHeader->publicHeaderBlock = lasHeader->publicHeaderBlock;
+        newHeader->variableLengthRecords = lasHeader->variableLengthRecords;
+        newHeader->extendedVariableLengthRecords = lasHeader->extendedVariableLengthRecords;
     }
+
     lasHeader = newHeader.get();
 
-    // return false; // header is not a las header
-    //TODO: create header + check that it matches the data of the pointcloud
     // add the extra byte data
-    auto minimumNumberOfAttributes = lasPointAccessAdapter->getMinimumNumberOfAttributes();
     auto extraAttributesInfos = lasPointAccessAdapter->getExtraAttributesInfos();
-    auto extraBytesVlrData = LasPointCloudHeader::generateExtraBytesVlrData(extraAttributesInfos);
-    LasVariableLengthRecord extraBytesVlr{"LASF_Spec", 4, extraBytesVlrData};
-    lasHeader->variableLengthRecords.push_back(extraBytesVlr);
-    lasHeader->publicHeaderBlock.numberOfVariableLengthRecords++;
+    if (extraAttributesInfos.name.size() > 0) {
+        auto extraBytesVlrData = LasPointCloudHeader::generateExtraBytesVlrData(extraAttributesInfos);
+        LasVariableLengthRecord extraBytesVlr{"LASF_Spec", 4, extraBytesVlrData};
+        // remove the VLR or EVLR if already present
+        for (size_t i_supp = lasHeader->variableLengthRecords.size(); i_supp > 0; i_supp--) {
+            size_t i = i_supp - 1;
+            if (lasHeader->variableLengthRecords[i].getUserId() == "LASF_Spec" && lasHeader->variableLengthRecords[i].getRecordId() == 4) {
+                lasHeader->variableLengthRecords.erase(lasHeader->variableLengthRecords.begin() + i);
+                lasHeader->publicHeaderBlock.numberOfVariableLengthRecords--;
+            }
+        }
+        for (size_t i_supp = lasHeader->extendedVariableLengthRecords.size(); i_supp > 0; i_supp--) {
+            size_t i = i_supp - 1;
+            if (lasHeader->extendedVariableLengthRecords[i].getUserId() == "LASF_Spec" && lasHeader->extendedVariableLengthRecords[i].getRecordId() == 4) {
+                lasHeader->extendedVariableLengthRecords.erase(lasHeader->extendedVariableLengthRecords.begin() + i);
+                lasHeader->publicHeaderBlock.numberOfExtendedVariableLengthRecords--;
+            }
+        }
+        // add it to the VLRs
+        lasHeader->variableLengthRecords.push_back(extraBytesVlr);
+        lasHeader->publicHeaderBlock.numberOfVariableLengthRecords++;
+    }
     // properly set the xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset for the header
     lasHeader->publicHeaderBlock.xScaleFactor = xScaleFactor;
     lasHeader->publicHeaderBlock.yScaleFactor = yScaleFactor;
@@ -1402,6 +1452,15 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
     lasHeader->publicHeaderBlock.xOffset = xOffset;
     lasHeader->publicHeaderBlock.yOffset = yOffset;
     lasHeader->publicHeaderBlock.zOffset = zOffset;
+
+    // set version to 1.4 + header size
+    lasHeader->publicHeaderBlock.versionMajor = 1;
+    lasHeader->publicHeaderBlock.versionMinor = 4;
+    lasHeader->publicHeaderBlock.headerSize = 375;
+
+    // set the point data record format and record length
+    lasHeader->publicHeaderBlock.pointDataRecordFormat = lasPointAccessAdapter->getFormat();
+    lasHeader->publicHeaderBlock.pointDataRecordLength = lasPointAccessAdapter->getRecordByteSize();
     
     // write the public header + the VLRs
     auto beginPos = writer.tellp();
@@ -1412,10 +1471,18 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
 
     auto pointPos = writer.tellp();
     size_t nbPoints = 0;
+    // reset to zero
+    lasHeader->publicHeaderBlock.numberOfPointsByReturn = {};
     // write the point cloud
     do {
         lasPointAccessAdapter->write(writer);
         if (writer.fail()) return false;
+        // get the return number. carreful: the return number starts at 1
+        auto returnNumber
+            = castedPointCloudAttribute<size_t>(lasPointAccessAdapter->getAttributeByName("returnNumber").value_or(1));
+        // force the return number to be between 1 and the number of returns
+        returnNumber = std::max(size_t{1}, std::min(returnNumber, lasHeader->publicHeaderBlock.numberOfPointsByReturn.size()));
+        lasHeader->publicHeaderBlock.numberOfPointsByReturn[returnNumber-1]++;
         nbPoints++;
     } while (lasPointAccessAdapter->gotoNext());
 
@@ -1423,10 +1490,36 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
     auto evlrPos = writer.tellp();
     
     // update the public header and rewrite it
-    lasHeader->publicHeaderBlock.pointDataRecordFormat = lasPointAccessAdapter->getFormat();
     lasHeader->publicHeaderBlock.offsetToPointData = pointPos - beginPos;
-    lasHeader->publicHeaderBlock.pointDataRecordLength = lasPointAccessAdapter->getRecordByteSize();
-    lasHeader->publicHeaderBlock.startOfFirstExtendedVariableLengthRecord = evlrPos - beginPos;
+    if (lasHeader->publicHeaderBlock.numberOfExtendedVariableLengthRecords > 0) {
+        lasHeader->publicHeaderBlock.startOfFirstExtendedVariableLengthRecord = evlrPos - beginPos;   
+    }
+    // set the number of points
+    lasHeader->publicHeaderBlock.numberOfPointRecords = nbPoints;
+    constexpr auto maxValueLegacy =
+        std::numeric_limits<decltype(lasHeader->publicHeaderBlock.legacyNumberOfPointRecords)>::max();
+    if (nbPoints <= maxValueLegacy) {
+        // set the legacy number of points
+        lasHeader->publicHeaderBlock.legacyNumberOfPointRecords = nbPoints;
+    }
+    // try to set the legacy number of points by return from the number of points by return
+    lasHeader->publicHeaderBlock.legacyNumberOfPointsByReturn = {};
+    auto maxLegacyReturnNumber = lasHeader->publicHeaderBlock.legacyNumberOfPointsByReturn.size();
+    auto maxReturnNumber = lasHeader->publicHeaderBlock.numberOfPointsByReturn.size();
+    for (size_t i = 0; i < maxReturnNumber; i++) {
+        auto legacyReturnNumber = std::min(maxLegacyReturnNumber, i);
+        // if the return number is bigger than the legacy one, we add it to the value of the max legacy return number
+        // test if the number of points for this return number is bigger than the maximum value allowed by the type
+        size_t nbPointsByReturn = lasHeader->publicHeaderBlock.numberOfPointsByReturn[i]
+            + lasHeader->publicHeaderBlock.legacyNumberOfPointsByReturn[legacyReturnNumber];
+        if (nbPointsByReturn > maxValueLegacy) {
+            // cannot have a valid value
+            lasHeader->publicHeaderBlock.legacyNumberOfPointsByReturn = {};
+            break;
+        } else {
+            lasHeader->publicHeaderBlock.legacyNumberOfPointsByReturn[legacyReturnNumber] = nbPointsByReturn;
+        }
+    }
 
     // rewrite the public header:
     writer.seekp(beginPos);
@@ -1457,7 +1550,7 @@ bool writePointCloudLas(const std::filesystem::path &lasFilePath, FullPointCloud
 
 template <size_t N>
 std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::unique_ptr<std::istream> reader,
-    size_t recordByteSize, size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
+    size_t recordByteSize, size_t nbPoints, size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
     const std::vector<uint8_t> &extraAttributesTypes, const std::vector<size_t> &extraAttributesSizes,
     const std::vector<size_t> &extraAttributesOffsets, bool hideColorAndGeometricAttributes, double xScaleFactor,
     double yScaleFactor, double zScaleFactor, double xOffset, double yOffset, double zOffset, char *dataBuffer) {
@@ -1466,31 +1559,31 @@ std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint_helper(std::unique_
         return nullptr;
     } else if (N == recordFormatNumber) {
         if (dataBuffer == nullptr) {
-            return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize,
+            return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize, nbPoints,
                 extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets,
                 hideColorAndGeometricAttributes, xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset);
         } else  {
-            return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize,
+            return std::make_unique<LasPointCloudPoint_Format<N>>(std::move(reader), recordByteSize, nbPoints,
                 extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets,
                 hideColorAndGeometricAttributes, xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset,
                 dataBuffer);
         }
     } else {
-        return createLasPointCloudPoint_helper<N+1>(std::move(reader), recordByteSize, recordFormatNumber,
-            extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets,
-            hideColorAndGeometricAttributes, xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset,
-            dataBuffer);
+        return createLasPointCloudPoint_helper<N+1>(std::move(reader), recordByteSize, nbPoints,
+            recordFormatNumber, extraAttributesNames, extraAttributesTypes, extraAttributesSizes,
+            extraAttributesOffsets, hideColorAndGeometricAttributes, xScaleFactor, yScaleFactor, zScaleFactor, xOffset,
+            yOffset, zOffset,dataBuffer);
     }
 }
 
 std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint(std::unique_ptr<std::istream> reader, size_t recordByteSize,
-    size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
+    size_t nbPoints, size_t recordFormatNumber, const std::vector<std::string> &extraAttributesNames,
     const std::vector<uint8_t> &extraAttributesTypes, const std::vector<size_t> &extraAttributesSizes,
     const std::vector<size_t> &extraAttributesOffsets, bool hideColorAndGeometricAttributes, double xScaleFactor,
     double yScaleFactor, double zScaleFactor, double xOffset, double yOffset, double zOffset, char *dataBuffer) {
 
-    auto lasPointCloudPoint = createLasPointCloudPoint_helper(std::move(reader), recordByteSize, recordFormatNumber, 
-        extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets,
+    auto lasPointCloudPoint = createLasPointCloudPoint_helper(std::move(reader), recordByteSize, nbPoints,
+        recordFormatNumber, extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets,
         hideColorAndGeometricAttributes, xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset,
         dataBuffer);
 
@@ -1502,7 +1595,6 @@ std::unique_ptr<LasPointCloudPoint> createLasPointCloudPoint(std::unique_ptr<std
     } else {
         return nullptr;
     }
-
     return std::move(lasPointCloudPoint);
 
 }
@@ -1701,7 +1793,8 @@ std::optional<PointCloudGenericAttribute> LasPointCloudPointBasicAdapter::getAtt
         const char *attributeName) const {
     // search for the attribute name to only accept known attributes
     auto it = std::find(attributeNames.begin(), attributeNames.end(), attributeName);
-    return getAttributeById(it - attributeNames.begin());
+    if (it == attributeNames.end()) return std::nullopt;
+    return getAttributeById(std::distance(attributeNames.begin(), it));
 }
 
 std::vector<std::string> LasPointCloudPointBasicAdapter::attributeList() const {
@@ -1731,7 +1824,8 @@ bool LasPointCloudPointBasicAdapter::gotoNext()
 
 size_t LasPointCloudPointBasicAdapter::getSuitableFormat(const PointCloudPointAccessInterface &pointCloudPointAccessInterface,
     const std::optional<size_t> &defaultFormat) {
-
+    
+    // try to get the format
     auto isDefaultFormat = defaultFormat.has_value();
     size_t defaultFormatValue = defaultFormat.value_or(6);
 
@@ -1824,7 +1918,6 @@ LasPointCloudPointBasicAdapter::LasPointCloudPointBasicAdapter(
         bitfieldOffset{attributeInformations.bitfieldOffset},
         LasPointCloudPoint{attributeInformations.recordByteSize,
             xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset} {
-
     // default value is out of range
     xIndex = yIndex = zIndex = redIndex = greenIndex = blueIndex = attributeNames.size();
     containsColor = formatContainsColor(format);
@@ -1898,13 +1991,17 @@ bool LasPointCloudPointBasicAdapter::adaptInternalState() {
 
     // get position and color
     pointPosition = pointCloudPointAccessInterface->getPointPosition();
+    auto pointPositionDouble = pointCloudPointAccessInterface->castedPointGeometry<double>();
 
     pointColor = pointCloudPointAccessInterface->getPointColor();
 
     pointPositionScaledInteger = {
-        static_cast<int32_t>((castedPointCloudAttribute<double>(pointPosition.x) - xOffset) / xScaleFactor),
-        static_cast<int32_t>((castedPointCloudAttribute<double>(pointPosition.y) - yOffset) / yScaleFactor),
-        static_cast<int32_t>((castedPointCloudAttribute<double>(pointPosition.z) - zOffset) / zScaleFactor)
+        static_cast<int32_t>(std::isnan(pointPositionDouble.x) ? std::numeric_limits<int32_t>::max() :
+            std::round(((pointPositionDouble.x) - xOffset) / xScaleFactor)),
+        static_cast<int32_t>(std::isnan(pointPositionDouble.y) ? std::numeric_limits<int32_t>::max() :
+            std::round(((pointPositionDouble.y) - yOffset) / yScaleFactor)),
+        static_cast<int32_t>(std::isnan(pointPositionDouble.z) ? std::numeric_limits<int32_t>::max() :
+            std::round(((pointPositionDouble.z) - zOffset) / zScaleFactor))
     };
     
     for (size_t fieldIt = 0; fieldIt < fieldByteSize.size(); fieldIt++) {

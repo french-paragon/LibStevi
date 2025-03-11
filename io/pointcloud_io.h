@@ -198,7 +198,8 @@ T_ castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
         return std::visit(toString, val);
     } else {
         // redundant assertion in case we add other types
-        static_assert(std::is_same_v<T, std::string> or (std::is_integral_v<T> || std::is_floating_point_v<T> || isVectorReturnType),
+        static_assert(std::is_same_v<T, std::string> or std::is_integral_v<T> or
+                      std::is_floating_point_v<T> or isVectorReturnType,
             "Target type should be an integral, a floating point number or a vector at this stage");
 
         T ret = std::visit([&] (auto&& arg) {
