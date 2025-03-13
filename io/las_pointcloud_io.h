@@ -393,8 +393,14 @@ private:
     std::vector<char> dataBufferContainer;
 public:
     inline auto* getRecordDataBuffer() const { return dataBuffer; }
-
     inline auto getRecordByteSize() const { return recordByteSize; }
+
+    /// @brief set the record data buffer
+    /// @param newDataBuffer the new data buffer, must be able to contain recordByteSize bytes
+    inline void setRecordDataBuffer(decltype(dataBuffer) newDataBuffer) { dataBuffer = newDataBuffer; }
+    /// @brief use the local data buffer to store the point data
+    inline void useLocalDataBuffer() { dataBufferContainer.resize(recordByteSize);
+                                       dataBuffer = dataBufferContainer.data(); }
 
     double getXScaleFactor() const { return xScaleFactor; }
     double getYScaleFactor() const { return yScaleFactor; }

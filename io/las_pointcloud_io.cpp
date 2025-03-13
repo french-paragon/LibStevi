@@ -617,6 +617,9 @@ protected:
     PtGeometry<PointCloudGenericAttribute> pointPosition;
     PtGeometry<int32_t> pointPositionScaledInteger;
     std::optional<PtColor<PointCloudGenericAttribute>> pointColor;
+    std::optional<PtColor<uint16_t>> pointColorInteger;
+
+    std::vector<size_t> mapIdToAdaptedInterfaceId;
 public:
     /**
      * @brief adapt a point cloud point access interface to the LasPointCloudPoint interface.
@@ -1473,19 +1476,28 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
     size_t nbPoints = 0;
     // reset to zero
     lasHeader->publicHeaderBlock.numberOfPointsByReturn = {};
-    // write the point cloud
+    
+    auto attrList = lasPointAccessAdapter->attributeList();
+    // get id of the return number attribute
+    size_t returnNumberId = attrList.size(); // make sure it will fail if not found
+    if (auto it = std::find(attrList.begin(), attrList.end(), "returnNumber"); it != attrList.end()) {
+        returnNumberId = std::distance(it, attrList.begin());
+    }
+    
+    // Write the point cloud
     do {
         lasPointAccessAdapter->write(writer);
         if (writer.fail()) return false;
-        // get the return number. carreful: the return number starts at 1
-        auto returnNumber
-            = castedPointCloudAttribute<size_t>(lasPointAccessAdapter->getAttributeByName("returnNumber").value_or(1));
-        // force the return number to be between 1 and the number of returns
-        returnNumber = std::max(size_t{1}, std::min(returnNumber, lasHeader->publicHeaderBlock.numberOfPointsByReturn.size()));
-        lasHeader->publicHeaderBlock.numberOfPointsByReturn[returnNumber-1]++;
+        // Get the return number
+        auto returnNumber = castedPointCloudAttribute<size_t>(
+            lasPointAccessAdapter->getAttributeById(returnNumberId).value_or(1));
+        // Force the return number to be between 1 and the number of returns
+        returnNumber = std::max<size_t>(1,
+            std::min(returnNumber, lasHeader->publicHeaderBlock.numberOfPointsByReturn.size()));
+        // Increment the number of points for the specific return number
+        lasHeader->publicHeaderBlock.numberOfPointsByReturn[returnNumber - 1]++;
         nbPoints++;
     } while (lasPointAccessAdapter->gotoNext());
-
 
     auto evlrPos = writer.tellp();
     
@@ -1531,7 +1543,7 @@ bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &poi
 }
 
 bool writePointCloudLas(const std::filesystem::path &lasFilePath, FullPointCloudAccessInterface &pointCloud) {
-   // open the file
+    // open the file
     auto writer = std::make_unique<fstreamCustomBuffer<lasFileWriterBufferSize>>();
 
     writer->open(lasFilePath, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
@@ -1541,6 +1553,9 @@ bool writePointCloudLas(const std::filesystem::path &lasFilePath, FullPointCloud
     // set the precision to the maximum
     constexpr auto maxPrecision{std::numeric_limits<double>::digits10 + 1};
     *writer << std::setprecision(maxPrecision);
+
+    // no flushing
+    *writer << std::nounitbuf;
 
     auto success = writePointCloudLas(*writer, pointCloud);
     writer->close();
@@ -1755,6 +1770,7 @@ PtGeometry<PointCloudGenericAttribute> LasPointCloudPointBasicAdapter::getPointP
 }
 
 std::optional<PtColor<PointCloudGenericAttribute>> LasPointCloudPointBasicAdapter::getPointColor() const {
+
     return pointColor;
 }
 
@@ -1771,19 +1787,19 @@ std::optional<PointCloudGenericAttribute> LasPointCloudPointBasicAdapter::getAtt
     } else if (id == zIndex) {
         attValue = pointPositionScaledInteger.z;
     } else if (id == redIndex && containsColor) {
-        if (pointColor.has_value()) {
-            attValue = (*pointColor).r;
+        if (pointColorInteger.has_value()) {
+            attValue = (*pointColorInteger).r;
         }
     } else if (id == greenIndex && containsColor) {
-        if (pointColor.has_value()) {
-            attValue = (*pointColor).g;
+        if (pointColorInteger.has_value()) {
+            attValue = (*pointColorInteger).g;
         }
     } else if (id == blueIndex && containsColor) {
-        if (pointColor.has_value()) {
-            attValue = (*pointColor).b;
+        if (pointColorInteger.has_value()) {
+            attValue = (*pointColorInteger).b;
         }
     } else { // default case
-        attValue = pointCloudPointAccessInterface->getAttributeByName(attributeNames[id].c_str()).value_or(0);
+        attValue = pointCloudPointAccessInterface->getAttributeById(mapIdToAdaptedInterfaceId[id]).value_or(0);
     }
 
     return castAttributeToLasType(attValue, fieldType[id], fieldByteSize[id]);
@@ -1938,6 +1954,20 @@ LasPointCloudPointBasicAdapter::LasPointCloudPointBasicAdapter(
         }
     }
 
+    mapIdToAdaptedInterfaceId = std::vector<size_t>(attributeNames.size());
+
+    if (pointCloudPointAccessInterface != nullptr) {
+        auto adaptedInterfaceAttributes = pointCloudPointAccessInterface->attributeList();
+        for (size_t i = 0; i < attributeNames.size(); ++i) {
+            auto it = std::find(adaptedInterfaceAttributes.begin(), adaptedInterfaceAttributes.end(), attributeNames[i]);
+            if (it != adaptedInterfaceAttributes.end()) {
+                mapIdToAdaptedInterfaceId[i] = std::distance(adaptedInterfaceAttributes.begin(), it);
+            } else {
+                mapIdToAdaptedInterfaceId[i] = adaptedInterfaceAttributes.size();
+            }
+        }
+    }
+
     adaptInternalState();
 }
 
@@ -1993,8 +2023,6 @@ bool LasPointCloudPointBasicAdapter::adaptInternalState() {
     pointPosition = pointCloudPointAccessInterface->getPointPosition();
     auto pointPositionDouble = pointCloudPointAccessInterface->castedPointGeometry<double>();
 
-    pointColor = pointCloudPointAccessInterface->getPointColor();
-
     pointPositionScaledInteger = {
         static_cast<int32_t>(std::isnan(pointPositionDouble.x) ? std::numeric_limits<int32_t>::max() :
             std::round(((pointPositionDouble.x) - xOffset) / xScaleFactor)),
@@ -2003,6 +2031,14 @@ bool LasPointCloudPointBasicAdapter::adaptInternalState() {
         static_cast<int32_t>(std::isnan(pointPositionDouble.z) ? std::numeric_limits<int32_t>::max() :
             std::round(((pointPositionDouble.z) - zOffset) / zScaleFactor))
     };
+
+    pointColor = pointCloudPointAccessInterface->getPointColor();
+    if (pointColor.has_value()) {
+        pointColorInteger = castedPointColor<uint16_t>();
+    } else {
+        pointColorInteger = std::nullopt;
+    }
+
     
     for (size_t fieldIt = 0; fieldIt < fieldByteSize.size(); fieldIt++) {
         auto size = fieldByteSize[fieldIt];
@@ -2163,12 +2199,14 @@ LasDataLayout LasPointCloudPointBasicAdapter::getLasDataLayoutFromPointcloudPoin
         }
         size_t offset = LasPointCloudPoint_Format<Format>::minimumRecordByteSize;
         // now get all the custom attributes
-        for (const auto& attrName : pointcloudPointAccessInterface.attributeList()) {
+        auto attrList = pointcloudPointAccessInterface.attributeList();
+        for (size_t i = 0; i < attrList.size(); ++i) {
+            auto attrName = attrList[i];
             // find the attribute in the list
             auto it = std::find(dataLayout.attributeNames.begin(), dataLayout.attributeNames.end(), attrName);
             if (it == dataLayout.attributeNames.end()) { // if not found, it is a new custom attribute
                 // try to get it
-                auto attrOpt = pointcloudPointAccessInterface.getAttributeByName(attrName.c_str());
+                auto attrOpt = pointcloudPointAccessInterface.getAttributeById(i);
                 if (attrOpt.has_value()) {
                     auto attrValue = attrOpt.value();
                     auto [type, size] = std::visit(visitorCustomAttributes, attrValue);

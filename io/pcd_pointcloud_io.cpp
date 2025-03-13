@@ -56,6 +56,8 @@ protected:
     // stored position and color
     PtGeometry<PointCloudGenericAttribute> pointPosition;
     std::optional<PtColor<PointCloudGenericAttribute>> pointColor;
+
+    std::vector<size_t> mapIdToAdaptedInterfaceId;
 public:
     /**
      * @brief Adapter class to obtain a PcdPointCloudPoint from any PointCloudPointAccessInterface
@@ -187,7 +189,7 @@ PcdPointCloudPoint::PcdPointCloudPoint(const std::vector<std::string>& attribute
     bool containsRed = false;
     bool containsGreen = false;
     bool containsBlue = false;
-    bool containsAlpha = false;
+    bool containsAlpha_ = false;
 
     // find the index of the rgb/rgba field
     auto it = std::find(attributeNames.begin(), attributeNames.end(), "rgba");
@@ -195,12 +197,12 @@ PcdPointCloudPoint::PcdPointCloudPoint(const std::vector<std::string>& attribute
         rgbaIndex = std::distance(attributeNames.begin(), it);
         containsColorSingleField = true;
         containsColor = true;    
-        containsAlpha = true;
+        this->containsAlpha = true;
     } else if (it = std::find(attributeNames.begin(), attributeNames.end(), "rgb"); it != attributeNames.end()) {
         rgbaIndex = std::distance(attributeNames.begin(), it);
         containsColorSingleField = true;
         containsColor = true;    
-        containsAlpha = false; 
+        this->containsAlpha = false; 
     // with 3-4 color fields:
     } else if (!containsColor) {
         for (int i = 0; i < attributeNames.size(); i++) {
@@ -216,12 +218,12 @@ PcdPointCloudPoint::PcdPointCloudPoint(const std::vector<std::string>& attribute
                 containsBlue = true;
             } else if (name == "a") {
                 aIndex = i;
-                containsAlpha = true;
+                containsAlpha_ = true;
             }
         }
         containsColor = containsRed && containsGreen && containsBlue;
         containsColorSingleField = false;
-        this->containsAlpha = containsAlpha;
+        this->containsAlpha = containsAlpha_;
     }
 
     // "red", "green", "blue", "alpha"
@@ -239,12 +241,12 @@ PcdPointCloudPoint::PcdPointCloudPoint(const std::vector<std::string>& attribute
                 containsBlue = true;
             } else if (name == "alpha") {
                 aIndex = i;
-                containsAlpha = true;
+                containsAlpha_ = true;
             }
         }
         containsColor = containsRed && containsGreen && containsBlue;
         containsColorSingleField = false;
-        this->containsAlpha = containsAlpha;
+        this->containsAlpha = containsAlpha_;
     }
 
     // find the index of the position fields
@@ -353,13 +355,17 @@ std::optional<PointCloudGenericAttribute> PcdPointCloudPointReader::getAttribute
     static_assert(sizeof(float) == 4); // check if float is 4 bytes, should be true on most systems
     static_assert(sizeof(double) == 8); // check if double is 8 bytes
 
+    if (id < 0 || id >= fieldByteSize.size()) {
+        return std::nullopt;
+    }
+
     const auto size = fieldByteSize[id];
     const auto type = fieldType[id];
     const auto offset = fieldOffset[id];
     const auto count = fieldCount[id];
 
     // test if id is valid
-    if (id < 0 || id >= fieldByteSize.size() || size + offset > recordByteSize) {
+    if (size + offset > recordByteSize) {
         return std::nullopt;
     }
  
@@ -827,22 +833,22 @@ bool PcdPointCloudHeader::writeHeader(std::ostream &writer, const PcdPointCloudH
     };
 
     // write the data
-    writer << "VERSION" << " " << header.version << std::endl
-           << "FIELDS" << " " << vectorToString(header.fields) << std::endl
-           << "SIZE" << " " << vectorToString(header.size) << std::endl
-           << "TYPE" << " " << vectorToString(header.type) << std::endl
-           << "COUNT" << " " << vectorToString(header.count) << std::endl
+    writer << "VERSION" << " " << header.version << '\n'
+           << "FIELDS" << " " << vectorToString(header.fields) << '\n'
+           << "SIZE" << " " << vectorToString(header.size) << '\n'
+           << "TYPE" << " " << vectorToString(header.type) << '\n'
+           << "COUNT" << " " << vectorToString(header.count) << '\n'
            << "WIDTH" << " ";
     headerWidthPos = writer.tellp();
-    writer << widthStr << std::endl
+    writer << widthStr << '\n'
             << "HEIGHT" << " "; 
     headerHeightPos = writer.tellp();
-    writer << heightStr << std::endl
-           << "VIEWPOINT" << " " << vectorToString(header.viewpoint) << std::endl
+    writer << heightStr << '\n'
+           << "VIEWPOINT" << " " << vectorToString(header.viewpoint) << '\n'
            << "POINTS" << " ";
     headerPointsPos = writer.tellp();
-    writer << pointsStr << std::endl
-           << "DATA" << " " << header.data << std::endl;
+    writer << pointsStr << '\n'
+           << "DATA" << " " << header.data << '\n';
 
     return true;
 }
@@ -949,7 +955,8 @@ PcdDataLayout getPcdDataLayoutFromPointcloudPoint(PointCloudPointAccessInterface
         
     
     size_t nbAttributes = 0;
-    for (auto&& attributeName : attributeNames) {
+    for (size_t i = 0; i < attributeNames.size(); i++) {
+        auto attributeName = attributeNames[i];
         // try to find the attribute name in the header
         std::optional<PointCloudGenericAttribute> attrOpt = std::nullopt;
 
@@ -969,7 +976,7 @@ PcdDataLayout getPcdDataLayoutFromPointcloudPoint(PointCloudPointAccessInterface
         } else if (isColor && isAlpha && attributeName == "a") {
             attrOpt = pointColor.a;
         } else {
-            attrOpt = pointcloudPointAccessInterface->getAttributeByName(attributeName.c_str());
+            attrOpt = pointcloudPointAccessInterface->getAttributeById(i);
         }
 
         if (attrOpt) {
@@ -1074,7 +1081,7 @@ std::string sanitizeAttributeNamePcd(const std::string &str) {
 }
 
 std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesystem::path &pcdFilePath) {
-   // open the file
+    // open the file
     auto reader = std::make_unique<ifstreamCustomBuffer<pcdFileReaderBufferSize>>();
 
     constexpr auto maxPrecision{std::numeric_limits<double>::digits10 + 1};
@@ -1121,6 +1128,9 @@ bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloud
     // set the precision to the maximum
     constexpr auto maxPrecision{std::numeric_limits<double>::digits10 + 1};
     *writer << std::setprecision(maxPrecision);
+
+    // no flushing
+    *writer << std::nounitbuf;
 
     auto success = writePointCloudPcd(*writer, pointCloud, dataStorageType);
     writer->close();
@@ -1252,6 +1262,21 @@ PcdPointCloudPointBasicAdapter::PcdPointCloudPointBasicAdapter(
         pointCloudPointAccessInterfaceUniquePtr{std::move(pointCloudPointAccessInterfaceUniquePtr)},
         pointCloudPointAccessInterface{pointCloudPointAccessInterface} {
     
+    mapIdToAdaptedInterfaceId = std::vector<size_t>(attributeNames.size());
+
+    if (pointCloudPointAccessInterface != nullptr) {
+        auto adaptedInterfaceAttributes = pointCloudPointAccessInterface->attributeList();
+        for (size_t i = 0; i < originalAttributeNames.size(); ++i) {
+            auto it = std::find(adaptedInterfaceAttributes.begin(), adaptedInterfaceAttributes.end(),
+                originalAttributeNames[i]);
+            if (it != adaptedInterfaceAttributes.end()) {
+                mapIdToAdaptedInterfaceId[i] = std::distance(adaptedInterfaceAttributes.begin(), it);
+            } else {
+                mapIdToAdaptedInterfaceId[i] = adaptedInterfaceAttributes.size();
+            }
+        }
+    }
+
     adaptInternalState(); // set the internal state for the first time
 }
 
@@ -1291,7 +1316,7 @@ std::optional<PointCloudGenericAttribute> PcdPointCloudPointBasicAdapter::getAtt
     } else if (pointColor.has_value() && containsAlpha && id == aIndex) {
         attValue = (*pointColor).a;
     } else { // default case
-        attValue = pointCloudPointAccessInterface->getAttributeByName(originalAttributeNames[id].c_str()).value_or(0);
+        attValue = pointCloudPointAccessInterface->getAttributeById(mapIdToAdaptedInterfaceId[id]).value_or(0);
     }
 
     return attValue;
@@ -1493,69 +1518,55 @@ bool PcdPointCloudPoint::writePointBinary(std::ostream &writer, const PcdPointCl
     return !writer.fail();
 }
 
-bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointCloudPoint &point)
-{
-    std::ostringstream buffer; // Accumulate output to a buffer for the point
-    // copy the formatting:
-    buffer.copyfmt(writer);
-
-    // Visitor for handling each field type
-    auto visitor = [&buffer](auto &&attr) {
-        using T = std::decay_t<decltype(attr)>;
-        if constexpr (std::is_same_v<T, std::string> || std::is_floating_point_v<T>) {
-            buffer << attr;
-        } else if constexpr (std::is_integral_v<T>) {
-            if constexpr (std::is_signed_v<T>) {
-                buffer << static_cast<intmax_t>(attr);
-            } else {
-                buffer << static_cast<uintmax_t>(attr);
-            }
-        } else if constexpr (is_vector_v<T>) {
-            for (size_t i = 0; i < attr.size(); ++i) {
-                if constexpr (std::is_same_v<typename T::value_type, std::string> || 
-                              std::is_floating_point_v<typename T::value_type>) {
-                    buffer << attr[i];
-                } else if constexpr (std::is_integral_v<typename T::value_type>) {
-                    if constexpr (std::is_signed_v<typename T::value_type>) {
-                        buffer << static_cast<intmax_t>(attr[i]);
-                    } else {
-                        buffer << static_cast<uintmax_t>(attr[i]);
-                    }
-                }
-                if (i < attr.size() - 1) { 
-                    buffer << " "; // Add space after all but the last element
-                }
-            }
-        } else {
-            static_assert(is_vector_v<T> or
-                    std::is_integral_v<T> or
-                    std::is_same_v<T, std::string> or
-                    std::is_floating_point_v<T> or
-                    std::is_same_v<T, EmptyParam>, "Unsupported type");
-        }
-    };
-
+bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointCloudPoint &point) {
     size_t fieldCount = point.fieldCount.size();
-    
-    // Write each field
     for (size_t i = 0; i < fieldCount; ++i) {
-        auto attrOpt = getAttributeFromBuffer(point.fieldByteSize[i], point.fieldType[i], point.fieldOffset[i],
-            point.fieldCount[i], point.dataBuffer);
-        
-        if (!attrOpt.has_value()) {
-            return false;
+        auto recordData = point.dataBuffer + point.fieldOffset[i];
+        if (point.fieldType[i] == 'F') { // Floating point types (float, double)
+            if (point.fieldByteSize[i] == 4) { // float
+                float value = fromBytes<float>(recordData);
+                writer << value;
+            } else if (point.fieldByteSize[i] == 8) { // double
+                double value = fromBytes<double>(recordData);
+                writer << value;
+            }
+        } else if (point.fieldType[i] == 'I') { // Integer types
+            if (point.fieldByteSize[i] == 1) { // int8_t
+                int8_t value = fromBytes<int8_t>(recordData);
+                writer << static_cast<int16_t>(value); // Cast to int16_t for proper display
+            } else if (point.fieldByteSize[i] == 2) { // int16_t
+                int16_t value = fromBytes<int16_t>(recordData);
+                writer << value;
+            } else if (point.fieldByteSize[i] == 4) { // int32_t
+                int32_t value = fromBytes<int32_t>(recordData);
+                writer << value;
+            } else if (point.fieldByteSize[i] == 8) { // int64_t
+                int64_t value = fromBytes<int64_t>(recordData);
+                writer << value;
+            }
+        } else if (point.fieldType[i] == 'U') { // Unsigned types
+            if (point.fieldByteSize[i] == 1) { // uint8_t
+                uint8_t value = fromBytes<uint8_t>(recordData);
+                writer << static_cast<uint16_t>(value); // Cast to uint16_t for proper display
+            } else if (point.fieldByteSize[i] == 2) { // uint16_t
+                uint16_t value = fromBytes<uint16_t>(recordData);
+                writer << value;
+            } else if (point.fieldByteSize[i] == 4) { // uint32_t
+                uint32_t value = fromBytes<uint32_t>(recordData);
+                writer << value;
+            } else if (point.fieldByteSize[i] == 8) { // uint64_t
+                uint64_t value = fromBytes<uint64_t>(recordData);
+                writer << value;
+            }
         }
 
-        std::visit(visitor, attrOpt.value());
+        // Separate fields with spaces (if not the last field)
         if (i < fieldCount - 1) {
-            buffer << " "; // Add space between fields
+            writer << " ";
         }
     }
 
-    buffer << std::endl;
-
-    // Write accumulated output to writer
-    writer << buffer.str();
+    writer << '\n';
     return !writer.fail();
 }
 

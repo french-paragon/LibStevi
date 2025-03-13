@@ -549,12 +549,14 @@ MetaCloudPoint::MetaCloudPoint(std::vector<std::unique_ptr<FullPointCloudAccessI
             const auto& pointCloudPointInterface,
             bool isExtraAttributeAccessor = false,
             size_t extraAttributeAccessorId = std::numeric_limits<size_t>::max()) {
-
-        for (auto& attributeName : pointCloudPointInterface->attributeList()) {
+        
+        auto attrList = pointCloudPointInterface->attributeList();
+        for (size_t i = 0; i < attrList.size(); i++) {
+            auto attributeName = attrList[i];
             // test if the attribute name is not already in the list
             if (std::find(attributeNames.begin(), attributeNames.end(), attributeName) == attributeNames.end()) {
                 // try to get the type of the attribute
-                auto attributeValueOpt = pointCloudPointInterface->getAttributeByName(attributeName.c_str());
+                auto attributeValueOpt = pointCloudPointInterface->getAttributeById(i);
                 if (attributeValueOpt.has_value()) {
                     auto typeOpt = getMetaCloudSimpleType(attributeValueOpt.value());
                     if (typeOpt.has_value()) {
@@ -604,10 +606,8 @@ std::optional<PtColor<PointCloudGenericAttribute>> MetaCloudPoint::getPointColor
 }
 
 std::optional<PointCloudGenericAttribute> MetaCloudPoint::getAttributeById(int id) const {
-
-    std::optional<PointCloudGenericAttribute> attribute = std::nullopt;
-
     if (id >= 0 && id < attributeNames.size()) {
+        std::optional<PointCloudGenericAttribute> attribute = std::nullopt;
         if (isExtraAttribute[id]) {
             auto extraAttributeAccessorId = attributeIdToExtraAttributeAccessor[id];
             if (extraAttributeAccessorId < extraAttributeAccessors.size()
@@ -622,9 +622,11 @@ std::optional<PointCloudGenericAttribute> MetaCloudPoint::getAttributeById(int i
             attribute = pointCloudInterfaces[currentPointCloud]->pointAccess
                 ->getAttributeByName(attributeNames[id].c_str());
         }
+        // force the cast to the correct type
+        return castMetaCloudAttribute(attribute.value_or(EmptyParam{}), attributeTypes[id]);
+    } else {
+        return std::nullopt;
     }
-    // force the cast to the correct type
-    return castMetaCloudAttribute(attribute.value_or(EmptyParam{}), attributeTypes[id]);
 }
 
 std::optional<PointCloudGenericAttribute> MetaCloudPoint::getAttributeByName(const char *attributeName) const {

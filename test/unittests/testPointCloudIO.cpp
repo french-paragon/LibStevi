@@ -54,6 +54,9 @@ private Q_SLOTS:
     void testCastedPointCloudAttribute();
     void testCastedPointCloudAttribute_data();
 
+    void testCastedPointColor();
+    void testCastedPointColor_data();
+
     //* *************** LAS ***********************
     void testLasExtraBytes();
 
@@ -194,6 +197,213 @@ void TestPointCloudIO::testPointCloudInterfaces() {
 
     QCOMPARE(attributes.size(), 1);
     QCOMPARE(attributes[0], nPointsAttrName);
+}
+
+void TestPointCloudIO::testCastedPointColor_data() {
+    QTest::addColumn<StereoVision::IO::PointCloudGenericAttribute>("redInput");
+    QTest::addColumn<StereoVision::IO::PointCloudGenericAttribute>("greenInput");
+    QTest::addColumn<StereoVision::IO::PointCloudGenericAttribute>("blueInput");
+    QTest::addColumn<StereoVision::IO::PointCloudGenericAttribute>("alphaInput");
+
+    QTest::addColumn<uint8_t>("redCast_uint8_t");
+    QTest::addColumn<uint8_t>("greenCast_uint8_t");
+    QTest::addColumn<uint8_t>("blueCast_uint8_t");
+    QTest::addColumn<uint8_t>("alphaCast_uint8_t");
+    QTest::addColumn<uint16_t>("redCast_uint16_t");
+    QTest::addColumn<uint16_t>("greenCast_uint16_t");
+    QTest::addColumn<uint16_t>("blueCast_uint16_t");
+    QTest::addColumn<uint16_t>("alphaCast_uint16_t");
+    QTest::addColumn<uint32_t>("redCast_uint32_t");
+    QTest::addColumn<uint32_t>("greenCast_uint32_t");
+    QTest::addColumn<uint32_t>("blueCast_uint32_t");
+    QTest::addColumn<uint32_t>("alphaCast_uint32_t");
+    QTest::addColumn<uint64_t>("redCast_uint64_t");
+    QTest::addColumn<uint64_t>("greenCast_uint64_t");
+    QTest::addColumn<uint64_t>("blueCast_uint64_t");
+    QTest::addColumn<uint64_t>("alphaCast_uint64_t");
+    QTest::addColumn<float>("redCast_float");
+    QTest::addColumn<float>("greenCast_float");
+    QTest::addColumn<float>("blueCast_float");
+    QTest::addColumn<float>("alphaCast_float");
+    QTest::addColumn<double>("redCast_double");
+    QTest::addColumn<double>("greenCast_double");
+    QTest::addColumn<double>("blueCast_double");
+    QTest::addColumn<double>("alphaCast_double");
+
+    StereoVision::IO::EmptyParam empty{};
+    StereoVision::IO::PointCloudGenericAttribute r;
+    StereoVision::IO::PointCloudGenericAttribute g;
+    StereoVision::IO::PointCloudGenericAttribute b;
+    StereoVision::IO::PointCloudGenericAttribute a;
+
+    // float -> float (no change)
+    r = 0.5f;
+    g = 0.75f;
+    b = 0.25f;
+    a = empty;
+    QTest::newRow("float_no_alpha")
+        << r << g << b << a
+        << uint8_t(128) << uint8_t(191) << uint8_t(64) << uint8_t(255)
+        << uint16_t(32768) << uint16_t(49151) << uint16_t(16384) << uint16_t(65535)
+        << uint32_t(2147483648UL) << uint32_t(3221225471UL) << uint32_t(1073741824UL) << uint32_t(4294967295UL)
+        << uint64_t(9223372036854775808ULL) << uint64_t(13835058055282163711ULL) << uint64_t(4611686018427387903ULL) << uint64_t(18446744073709551615ULL)
+        << 0.5f << 0.75f << 0.25f << 1.0f
+        << double{0.5f} << double{0.75f} << double{0.25f} << double{1.0f};
+
+
+    r = 0.5f;
+    g = 1.0f;
+    b = 0.0f;
+    a = 1.4f; // can exceed 1
+    QTest::newRow("float_alpha")
+        << r << g << b << a
+        << uint8_t(128) << uint8_t(255) << uint8_t(0) << uint8_t(255)
+        << uint16_t(32768) << uint16_t(65535) << uint16_t(0) << uint16_t(65535)
+        << uint32_t(2147483648UL) << uint32_t(4294967295UL) << uint32_t(0UL) << uint32_t(4294967295UL)
+        << uint64_t(9223372036854775808ULL) << uint64_t(18446744073709551615ULL) << uint64_t(0ULL) << uint64_t(18446744073709551615ULL)
+        << 0.5f << 1.0f << 0.0f << 1.4f
+        << double{0.5f} << double{1.0f} << double{0.0f} << double{1.4f};
+
+    r = uint8_t{128}; 
+    g = uint8_t{255};
+    b = uint8_t{64};
+    a = empty;
+    QTest::newRow("uint8_no_alpha")
+        << r << g << b << a
+        << uint8_t(128) << uint8_t(255) << uint8_t(64) << uint8_t(255)
+        << uint16_t(32896) << uint16_t(65535) << uint16_t(16448) << uint16_t(65535)
+        << uint32_t(2155905152UL) << uint32_t(4294967295UL) << uint32_t(1077952576UL) << uint32_t(4294967295UL)
+        << uint64_t(9259542123273814000ULL) << uint64_t(18446744073709551615ULL) << uint64_t(4629771061636907000) << uint64_t(18446744073709551615ULL)
+        << 0.5019607843137255f  << 1.0f  << 0.25098039215686274f  << 1.0f
+        << 0.5019607843137255d << 1.0d << 0.25098039215686274d << 1.0d;
+
+
+    r = uint8_t{255}; 
+    g = uint8_t{100};
+    b = uint8_t{150};
+    a = uint8_t{18};
+    QTest::newRow("uint8_alpha")
+        << r << g << b << a
+        << uint8_t(255) << uint8_t(100) << uint8_t(150) << uint8_t(18)
+        << uint16_t(65535) << uint16_t(25700) << uint16_t(38550) << uint16_t(4626)
+        << uint32_t(4294967295UL) << uint32_t(1684300900UL) << uint32_t(2526451350UL) << uint32_t(303174162UL)
+        << uint64_t(18446744073709551615ULL) << uint64_t(7234017283807667000ULL) << uint64_t(10851025925711501000ULL) << uint64_t(1302123111085380000ULL)
+        << 1.0f  << 0.39215686274509803f  << 0.5882352941176471f  << 0.07058823529411765f
+        << 1.0d << 0.39215686274509803d << 0.5882352941176471d << 0.07058823529411765d;
+}
+
+void TestPointCloudIO::testCastedPointColor() {
+
+    QFETCH(StereoVision::IO::PointCloudGenericAttribute, redInput);
+    QFETCH(StereoVision::IO::PointCloudGenericAttribute, greenInput);
+    QFETCH(StereoVision::IO::PointCloudGenericAttribute, blueInput);
+    QFETCH(StereoVision::IO::PointCloudGenericAttribute, alphaInput);
+
+    QFETCH(uint8_t, redCast_uint8_t);
+    QFETCH(uint8_t, greenCast_uint8_t);
+    QFETCH(uint8_t, blueCast_uint8_t);
+    QFETCH(uint8_t, alphaCast_uint8_t);
+
+    QFETCH(uint16_t, redCast_uint16_t);
+    QFETCH(uint16_t, greenCast_uint16_t);
+    QFETCH(uint16_t, blueCast_uint16_t);
+    QFETCH(uint16_t, alphaCast_uint16_t);
+
+    QFETCH(uint32_t, redCast_uint32_t);
+    QFETCH(uint32_t, greenCast_uint32_t);
+    QFETCH(uint32_t, blueCast_uint32_t);
+    QFETCH(uint32_t, alphaCast_uint32_t);
+
+    QFETCH(uint64_t, redCast_uint64_t);
+    QFETCH(uint64_t, greenCast_uint64_t);
+    QFETCH(uint64_t, blueCast_uint64_t);
+    QFETCH(uint64_t, alphaCast_uint64_t);
+
+    QFETCH(float, redCast_float);
+    QFETCH(float, greenCast_float);
+    QFETCH(float, blueCast_float);
+    QFETCH(float, alphaCast_float);
+
+    QFETCH(double, redCast_double);
+    QFETCH(double, greenCast_double);
+    QFETCH(double, blueCast_double);
+    QFETCH(double, alphaCast_double);
+
+    StereoVision::IO::GenericPointCloud<float, StereoVision::IO::PointCloudGenericAttribute> testPointCloud;
+
+    StereoVision::IO::GenericPointCloud<float, StereoVision::IO::PointCloudGenericAttribute>::Point point;
+    point.rgba.r = redInput;
+    point.rgba.g = greenInput;
+    point.rgba.b = blueInput;
+    point.rgba.a = alphaInput;
+    testPointCloud.addPoint(point);
+
+    StereoVision::IO::FullPointCloudAccessInterface interface(
+        new StereoVision::IO::GenericPointCloudHeaderInterface<float, StereoVision::IO::PointCloudGenericAttribute>(testPointCloud),
+        new StereoVision::IO::GenericPointCloudPointAccessInterface<float, StereoVision::IO::PointCloudGenericAttribute>(testPointCloud));
+    
+    
+    // casted values
+    auto inputColorOpt = interface.pointAccess->getPointColor();
+    auto castedColorOpt_uint8_t = interface.pointAccess->castedPointColor<uint8_t>();
+    auto castedColorOpt_uint16_t = interface.pointAccess->castedPointColor<uint16_t>();
+    auto castedColorOpt_uint32_t = interface.pointAccess->castedPointColor<uint32_t>();
+    auto castedColorOpt_uint64_t = interface.pointAccess->castedPointColor<uint64_t>();
+    auto castedColorOpt_float = interface.pointAccess->castedPointColor<float>();
+    auto castedColorOpt_double = interface.pointAccess->castedPointColor<double>();
+
+    QVERIFY(inputColorOpt.has_value());
+    QVERIFY(castedColorOpt_uint8_t.has_value());
+    QVERIFY(castedColorOpt_uint16_t.has_value());
+    QVERIFY(castedColorOpt_uint32_t.has_value());
+    QVERIFY(castedColorOpt_uint64_t.has_value());
+    QVERIFY(castedColorOpt_float.has_value());
+    QVERIFY(castedColorOpt_double.has_value());
+
+    auto inputColor = inputColorOpt.value();
+    auto castedColor_uint8_t = castedColorOpt_uint8_t.value();
+    auto castedColor_uint16_t = castedColorOpt_uint16_t.value();
+    auto castedColor_uint32_t = castedColorOpt_uint32_t.value();
+    auto castedColor_uint64_t = castedColorOpt_uint64_t.value();
+    auto castedColor_float = castedColorOpt_float.value();
+    auto castedColor_double = castedColorOpt_double.value();
+
+    QCOMPARE(redInput, inputColor.r);
+    QCOMPARE(greenInput, inputColor.g);
+    QCOMPARE(blueInput, inputColor.b);
+    QCOMPARE(alphaInput, inputColor.a);
+
+    QCOMPARE(redCast_uint8_t, castedColor_uint8_t.r);
+    QCOMPARE(greenCast_uint8_t, castedColor_uint8_t.g);
+    QCOMPARE(blueCast_uint8_t, castedColor_uint8_t.b);
+    QCOMPARE(alphaCast_uint8_t, castedColor_uint8_t.a);
+
+    QCOMPARE(redCast_uint16_t, castedColor_uint16_t.r);
+    QCOMPARE(greenCast_uint16_t, castedColor_uint16_t.g);
+    QCOMPARE(blueCast_uint16_t, castedColor_uint16_t.b);
+    QCOMPARE(alphaCast_uint16_t, castedColor_uint16_t.a);
+
+    QCOMPARE(redCast_uint32_t, castedColor_uint32_t.r);
+    QCOMPARE(greenCast_uint32_t, castedColor_uint32_t.g);
+    QCOMPARE(blueCast_uint32_t, castedColor_uint32_t.b);
+    QCOMPARE(alphaCast_uint32_t, castedColor_uint32_t.a);    
+
+    // for 64bit integer: test after convertion to double because lost precision
+    QCOMPARE((double) redCast_uint64_t, (double) castedColor_uint64_t.r);    
+    QCOMPARE((double) greenCast_uint64_t, (double) castedColor_uint64_t.g);    
+    QCOMPARE((double) blueCast_uint64_t, (double) castedColor_uint64_t.b);    
+    QCOMPARE((double) alphaCast_uint64_t, (double) castedColor_uint64_t.a);    
+
+    QCOMPARE(redCast_float, castedColor_float.r);    
+    QCOMPARE(greenCast_float, castedColor_float.g);    
+    QCOMPARE(blueCast_float, castedColor_float.b);    
+    QCOMPARE(alphaCast_float, castedColor_float.a);    
+
+    QCOMPARE(redCast_double, castedColor_double.r);    
+    QCOMPARE(greenCast_double, castedColor_double.g);    
+    QCOMPARE(blueCast_double, castedColor_double.b);    
+    QCOMPARE(alphaCast_double, castedColor_double.a);
+    
 }
 
 void TestPointCloudIO::testCastedPointCloudAttribute_data() {
@@ -710,6 +920,11 @@ void TestPointCloudIO::testLasPointCloud() {
         size_t nbPoints = 1;
         // iterate on all the points
         do {
+            // make sure getById and get by name return the same result
+            auto attrList = pointAccess->attributeList();
+            for (size_t i = 0; i < attrList.size(); ++i) {
+                QVERIFY(pointAccess->getAttributeByName(attrList[i].c_str()) == pointAccess->getAttributeById(i));
+            }
             for (auto& expectedAttrName: expectedPointAttributes[formatNumber]) {
                 // attribute should exist
                 auto attrOpt = pointAccess->getAttributeByName(expectedAttrName.c_str());
@@ -725,19 +940,19 @@ void TestPointCloudIO::testLasPointCloud() {
                         qPrintable(QString("Failed to get the point color for file: %1").arg(filePath)));
                     auto pointColor = pointColorOpt.value();
                     // verify the type
-                    std::holds_alternative<uint8_t>(pointColor.r);
-                    std::holds_alternative<uint8_t>(pointColor.g);
-                    std::holds_alternative<uint8_t>(pointColor.b);
-                    std::holds_alternative<StereoVision::IO::EmptyParam>(pointColor.a);
+                     QVERIFY(std::holds_alternative<uint16_t>(pointColor.r));
+                     QVERIFY(std::holds_alternative<uint16_t>(pointColor.g));
+                     QVERIFY(std::holds_alternative<uint16_t>(pointColor.b));
+                     QVERIFY(std::holds_alternative<StereoVision::IO::EmptyParam>(pointColor.a));
                 } else if (expectedAttrName == "x" || expectedAttrName == "y" || expectedAttrName == "z") {
                     // the position is hidden
                     QVERIFY2(!attrOpt.has_value(),
                         qPrintable(QString("The position attribute should be hidden for file: %1").arg(filePath)));
                     auto pointPosition = pointAccess->getPointPosition();
                     // verify the type
-                    std::holds_alternative<double>(pointPosition.x);
-                    std::holds_alternative<double>(pointPosition.y);
-                    std::holds_alternative<double>(pointPosition.z);
+                     QVERIFY(std::holds_alternative<double>(pointPosition.x));
+                     QVERIFY(std::holds_alternative<double>(pointPosition.y));
+                     QVERIFY(std::holds_alternative<double>(pointPosition.z));
                 } else {
                     QVERIFY2(attrOpt.has_value(),
                         qPrintable(QString("Failed to get the point attribute: %1 for file: %2")
@@ -855,28 +1070,6 @@ void TestPointCloudIO::testLasPointCloud() {
                     }, rewrittenComponent);
                 };
 
-                auto compareColorComponent = [&](auto originalComponent, auto rewrittenComponent) {
-                    // visit the attributes
-                    std::visit([&](auto& newComponent) {
-                        using new_type = std::decay_t<decltype(newComponent)>;
-                        if constexpr (std::is_integral_v<new_type> ||
-                                    std::is_floating_point_v<new_type>) {
-                            // cast the original type to the rewritten type
-                            auto castedComponent
-                                = StereoVision::IO::castedPointCloudAttribute<new_type>(originalComponent);
-                            // compare the values
-                            QCOMPARE(castedComponent, newComponent);
-                        } else if constexpr (std::is_same_v<new_type, StereoVision::IO::EmptyParam>) {
-                            QVERIFY2(std::holds_alternative<StereoVision::IO::EmptyParam>(originalComponent),
-                                qPrintable(QString("Both color components should be empty. Original file: %1")
-                                    .arg(originalFilePath)));
-                        } else {
-                            QFAIL(qPrintable(
-                                QString("Unsupported type for the color component for file: %1")
-                                    .arg(originalFilePath)));
-                        }
-                    }, rewrittenComponent);
-                };
                 auto xOffset = castedLasRewrittenPointAccess->getXOffset();
                 auto yOffset = castedLasRewrittenPointAccess->getYOffset();
                 auto zOffset = castedLasRewrittenPointAccess->getZOffset();
@@ -892,18 +1085,18 @@ void TestPointCloudIO::testLasPointCloud() {
                 comparePositionComponent(originalPointPosition.y, rewrittenPointPosition.y, yScaleFactor, yOffset);
                 comparePositionComponent(originalPointPosition.z, rewrittenPointPosition.z, zScaleFactor, zOffset);
 
-                auto originalPointColorOpt = originalPointAccess->getPointColor();
-                auto rewrittenPointColorOpt = rewrittenPointAccess->getPointColor();
+                auto originalPointColorOpt = originalPointAccess->castedPointColor<uint16_t>();
+                auto rewrittenPointColorOpt = rewrittenPointAccess->castedPointColor<uint16_t>();
                 QCOMPARE(originalPointColorOpt.has_value(), rewrittenPointColorOpt.has_value());
                 if (originalPointColorOpt.has_value() && rewrittenPointColorOpt.has_value()) {
                     auto originalPointColor = originalPointColorOpt.value();
                     auto rewrittenPointColor = rewrittenPointColorOpt.value();
 
-                    compareColorComponent(originalPointColor.r, rewrittenPointColor.r);
-                    compareColorComponent(originalPointColor.g, rewrittenPointColor.g);
-                    compareColorComponent(originalPointColor.b, rewrittenPointColor.b);
+                    QCOMPARE(originalPointColor.r, rewrittenPointColor.r);
+                    QCOMPARE(originalPointColor.g, rewrittenPointColor.g);
+                    QCOMPARE(originalPointColor.b, rewrittenPointColor.b);
                     // las format does not contains color alpha...
-                    // compareColorComponent(originalPointColor.a, rewrittenPointColor.a);
+                    QCOMPARE(rewrittenPointColor.a, 65535);
                 }
                 
                 // Go to the next point
@@ -1090,6 +1283,15 @@ void TestPointCloudIO::testPcdPointCloud() {
 
             verifyPcdHeaderAttributeValue(expectedAttrName, attr);
         }
+
+        do {
+            // make sure getById and get by name return the same result
+            auto attrList = pointAccess->attributeList();
+            for (size_t i = 0; i < attrList.size(); ++i) {
+                QVERIFY(pointAccess->getAttributeByName(attrList[i].c_str()) == pointAccess->getAttributeById(i));
+            }
+        } while (pointAccess->gotoNext());
+
         if (isRewrittenFile) {
             auto originalFilePath = originalFiles[originalFileIndex];
             auto originalFullPointCloud = StereoVision::IO::openPointCloud(originalFilePath.toStdString());

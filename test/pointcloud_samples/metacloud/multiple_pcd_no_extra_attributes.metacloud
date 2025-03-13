@@ -1,0 +1,14 @@
+# This is a comment about the metacloud descriptor file
+
+POINTS_FILES
+
+# we add multiple pcd files
+
+../pcd/xyz_rgb_ascii.pcd
+../pcd/xyz_rgb_binary.pcd
+
+METACLOUD_ATTRIBUTES
+
+creator "simple metacloud based on multiple pcd files"
+
+description "This is a sample metacloud."
