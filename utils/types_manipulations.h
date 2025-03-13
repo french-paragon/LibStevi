@@ -109,13 +109,13 @@ inline bool matchdescr(std::string descr) {
 template<typename T>
 constexpr T defaultWhiteLevel() {
 
-	return (std::is_integral_v<T>) ? std::numeric_limits<T>::max() : 1.0;
+    return (std::is_integral_v<T>) ? std::numeric_limits<T>::max() : static_cast<T>(1.0);
 }
 
 template<typename T>
 constexpr T defaultBlackLevel() {
 
-	return (std::is_integral_v<T>) ? 0 : 0.0;
+    return static_cast<T>(0.0);
 }
 
 /*!

@@ -29,6 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <optional>
 #include <memory>
 #include <algorithm>
+#include <cmath>
 #include <type_traits>
 #include <filesystem>
 #include "../utils/types_manipulations.h"
@@ -56,7 +57,7 @@ struct PtColor<void>{
 };
 
 struct EmptyParam {
-
+    inline constexpr bool operator==(const EmptyParam&) const { return true; } // EmptyParam are always equal
 };
 
 using PointCloudGenericAttribute =
@@ -129,12 +130,12 @@ T_ castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
 
     static_assert(isSimpleReturnType or isVectorReturnType, "Target type must be a supported type!");
 
-    if (std::holds_alternative<EmptyParam>(val)) {
-        return T();
-    }
-
     if (std::holds_alternative<T>(val)) {
         return std::get<T>(val);
+    }
+
+    if (std::holds_alternative<EmptyParam>(val)) {
+        return T();
     }
 
     // to string visitor
@@ -392,19 +393,41 @@ public:
         PtColor<Color_T> ret;
         PtColor<PointCloudGenericAttribute>& raw = raw_opt.value();
 
-        ret.r = castedPointCloudAttribute<Color_T>(raw.r);
-        ret.g = castedPointCloudAttribute<Color_T>(raw.g);
-        ret.b = castedPointCloudAttribute<Color_T>(raw.b);
-        // if empty, use default black level
-        if (std::holds_alternative<EmptyParam>(raw.a)) {
-            ret.a = TypesManipulations::defaultWhiteLevel<Color_T>();
-        } else {
-            ret.a = castedPointCloudAttribute<Color_T>(raw.a);
-        }
-
+        auto convertColor = [](auto&& colorVariant) {
+            return std::visit([&](auto&& color) -> Color_T {
+                using Current_t = std::decay_t<decltype(color)>;
+                if constexpr(std::is_same_v<Current_t, Color_T>) { // do nothing if same type
+                    return color;
+                } else if constexpr (std::is_floating_point_v<Current_t> && std::is_floating_point_v<Color_T>) {
+                    return static_cast<Color_T>(color);
+                } else if constexpr (std::is_arithmetic_v<Color_T> && std::is_arithmetic_v<Current_t>) {
+                    constexpr double maxWhiteLevelReturn_d
+                        = static_cast<double>(TypesManipulations::defaultWhiteLevel<Color_T>());
+                    constexpr double maxWhiteLevelCurrent_d
+                        = static_cast<double>(TypesManipulations::defaultWhiteLevel<Current_t>());
+                    double rescaledColorDouble = 
+                        std::clamp<double>(color / maxWhiteLevelCurrent_d, 0.0d, 1.0d) * maxWhiteLevelReturn_d;
+                    if constexpr (std::is_integral_v<Color_T>) {
+                        rescaledColorDouble = std::round(rescaledColorDouble);
+                    }
+                    if (rescaledColorDouble >= maxWhiteLevelReturn_d) { // due to precision loss for uint64/int64
+                        return TypesManipulations::defaultWhiteLevel<Color_T>();
+                    } else {
+                        return static_cast<Color_T>(rescaledColorDouble);
+                    }
+                } else { // empty parameter (for alpha channel). return max white level
+                    return TypesManipulations::defaultWhiteLevel<Color_T>();
+                }          
+            }, colorVariant);
+        };
+    
+        ret.r = convertColor(raw.r);
+        ret.g = convertColor(raw.g);
+        ret.b = convertColor(raw.b);
+        ret.a = convertColor(raw.a);
+        
         return ret;
     }
-
 };
 
 /*!

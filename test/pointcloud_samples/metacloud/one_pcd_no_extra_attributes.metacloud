@@ -1,0 +1,10 @@
+# This is a comment about the metacloud descriptor file
+
+POINTS_FILES
+../pcd/xyz_red_green_blue_alpha_ascii.pcd
+
+METACLOUD_ATTRIBUTES
+
+creator "simple metacloud based on one las file"
+
+description "This is a sample metacloud."
