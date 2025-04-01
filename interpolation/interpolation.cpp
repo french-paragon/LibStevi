@@ -24,6 +24,7 @@ namespace Interpolation {
 ImageArray interpolateImage(ImageArray const& imInput,
 							ImageArray const& coordinates) {
 
+    constexpr BorderCondition bCond = Constant;
 	auto s = imInput.shape();
 
 	if (s[2] == 3) {
@@ -41,7 +42,7 @@ ImageArray interpolateImage(ImageArray const& imInput,
 																  Multidim::DimSlice(),
 																  Multidim::DimIndex(i));
 
-			outChannel.copyData(interpolate<2, 2, float, pyramidFunction<float, 2>, 0>(inChannel, coordinates));
+            outChannel.copyData(interpolate<2, 2, float, pyramidFunction<float, 2>, 0, bCond>(inChannel, coordinates));
 
 		}
 
@@ -61,7 +62,7 @@ ImageArray interpolateImage(ImageArray const& imInput,
 															  Multidim::DimSlice(),
 															  Multidim::DimIndex(0));
 
-		outChannel.copyData(interpolate<2, 2, float, pyramidFunction<float, 2>, 0>(inChannel, coordinates));
+        outChannel.copyData(interpolate<2, 2, float, pyramidFunction<float, 2>, 0, bCond>(inChannel, coordinates));
 
 
 		return imgOut;
