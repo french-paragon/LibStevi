@@ -13,6 +13,7 @@
  add_subdirectory(optical_flow_refine_test/)
  add_subdirectory(generic_ray_alignement_evaluation)
  add_subdirectory(points_cloud2depth_map)
+ add_subdirectory(detrend_terrain_in_pt_cloud)
 
  if (buildGui)
      add_subdirectory(stevimg_viewer)
