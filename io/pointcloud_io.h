@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <map>
 #include <string>
 #include <cstring>
+#include <cmath>
 #include <sstream>
 #include <tuple>
 #include <variant>
@@ -615,6 +616,11 @@ public:
     inline virtual ~GenericPointCloudPointAccessInterface() {};
 
     virtual PtGeometry<PointCloudGenericAttribute> getPointPosition() const override {
+
+        if (_iterator == _point_cloud->end()) {
+            return PtGeometry<PointCloudGenericAttribute>{std::nanf(""), std::nanf(""), std::nanf("")};
+        }
+
         PtGeometry<PointCloudGenericAttribute> ret;
         ret.x = _iterator->xyz.x;
         ret.y = _iterator->xyz.y;
@@ -622,6 +628,10 @@ public:
         return ret;
     }
     virtual std::optional<PtColor<PointCloudGenericAttribute>> getPointColor() const override {
+
+        if (_iterator == _point_cloud->end()) {
+            return std::nullopt;
+        }
 
         if (std::is_same_v<Color_T, void>) {
             return std::nullopt;
@@ -647,6 +657,11 @@ public:
         return GenericPointCloudPointAccessInterface<Geometry_T, Color_T>::getAttributeByName(attributeName.c_str());
     }
     virtual std::optional<PointCloudGenericAttribute> getAttributeByName(const char* attributeName) const override {
+
+        if (_iterator == _point_cloud->end()) {
+            return std::nullopt;
+        }
+
         if (_iterator->attributes.count(attributeName) <= 0) {
             return std::nullopt;
         }
@@ -657,7 +672,16 @@ public:
         return _point_cloud->attributes();
     }
 
+    void reset() {
+        _iterator = _point_cloud->begin();
+    }
+
     virtual bool gotoNext() override {
+
+        if (_iterator == _point_cloud->end()) {
+            return false;
+        }
+
         _iterator++;
 
         if (_iterator == _point_cloud->end()) {
