@@ -1495,35 +1495,32 @@ bool PcdPointCloudPoint::writePointBinary(std::ostream &writer, const PcdPointCl
 
 bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointCloudPoint &point)
 {
-    std::ostringstream buffer; // Accumulate output to a buffer for the point
-    // copy the formatting:
-    buffer.copyfmt(writer);
 
     // Visitor for handling each field type
-    auto visitor = [&buffer](auto &&attr) {
+    auto visitor = [&writer](auto &&attr) {
         using T = std::decay_t<decltype(attr)>;
         if constexpr (std::is_same_v<T, std::string> || std::is_floating_point_v<T>) {
-            buffer << attr;
+            writer << attr;
         } else if constexpr (std::is_integral_v<T>) {
             if constexpr (std::is_signed_v<T>) {
-                buffer << static_cast<intmax_t>(attr);
+                writer << static_cast<intmax_t>(attr);
             } else {
-                buffer << static_cast<uintmax_t>(attr);
+                writer << static_cast<uintmax_t>(attr);
             }
         } else if constexpr (is_vector_v<T>) {
             for (size_t i = 0; i < attr.size(); ++i) {
                 if constexpr (std::is_same_v<typename T::value_type, std::string> || 
                               std::is_floating_point_v<typename T::value_type>) {
-                    buffer << attr[i];
+                    writer << attr[i];
                 } else if constexpr (std::is_integral_v<typename T::value_type>) {
                     if constexpr (std::is_signed_v<typename T::value_type>) {
-                        buffer << static_cast<intmax_t>(attr[i]);
+                        writer << static_cast<intmax_t>(attr[i]);
                     } else {
-                        buffer << static_cast<uintmax_t>(attr[i]);
+                        writer << static_cast<uintmax_t>(attr[i]);
                     }
                 }
                 if (i < attr.size() - 1) { 
-                    buffer << " "; // Add space after all but the last element
+                    writer << " "; // Add space after all but the last element
                 }
             }
         } else {
@@ -1548,14 +1545,13 @@ bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointClo
 
         std::visit(visitor, attrOpt.value());
         if (i < fieldCount - 1) {
-            buffer << " "; // Add space between fields
+            writer << " "; // Add space between fields
         }
     }
 
-    buffer << std::endl;
+    writer << "\n"; //write a new line
 
     // Write accumulated output to writer
-    writer << buffer.str();
     return !writer.fail();
 }
 
