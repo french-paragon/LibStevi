@@ -162,6 +162,10 @@ public:
         return _point_cloud->gotoNext();
     }
 
+    virtual bool hasData() const override {
+        return _point_cloud->hasData();
+    }
+
 protected:
 
     std::unique_ptr<StereoVision::IO::PointCloudPointAccessInterface> _point_cloud;

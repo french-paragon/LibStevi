@@ -78,6 +78,7 @@ public:
     std::vector<std::string> attributeList() const override;
     
     bool gotoNext() override;
+    bool hasData() const override;
 
 protected:
     PcdPointCloudPointBasicAdapter(std::unique_ptr<PointCloudPointAccessInterface> pointCloudPointAccessInterfaceUniquePtr,
@@ -111,6 +112,7 @@ public:
         SdcPointCloudPoint* castedSdcPointCloudPoint);
 
     bool gotoNext() override;
+    bool hasData() const override;
 
     PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;
 
@@ -490,6 +492,11 @@ bool PcdPointCloudPointReader::gotoNextBinary() {
 
 bool PcdPointCloudPointReader::gotoNextBinaryCompressed() {
     return false;
+}
+
+
+bool PcdPointCloudPointReader::hasData() const {
+    return reader->good();
 }
 
 std::unique_ptr<PointCloudPointAccessInterface> PcdPointCloudPoint::createAdapter(
@@ -1311,6 +1318,9 @@ std::vector<std::string> PcdPointCloudPointBasicAdapter::attributeList() const {
 bool PcdPointCloudPointBasicAdapter::gotoNext() {
     return pointCloudPointAccessInterface->gotoNext() ? adaptInternalState() : false;
 }
+bool PcdPointCloudPointBasicAdapter::hasData() const {
+    return pointCloudPointAccessInterface->hasData();
+}
 
 bool PcdPointCloudPointBasicAdapter::adaptInternalState() {
     static_assert(sizeof(float) == 4 && sizeof(double) == 8);
@@ -1563,6 +1573,9 @@ PcdPointCloudPointFromSdcAdapter::PcdPointCloudPointFromSdcAdapter(
 
 bool PcdPointCloudPointFromSdcAdapter::gotoNext() {
    return castedSdcPointCloudPoint->gotoNext();
+}
+bool PcdPointCloudPointFromSdcAdapter::hasData() const {
+    return castedSdcPointCloudPoint->hasData();
 }
 
 PtGeometry<PointCloudGenericAttribute> PcdPointCloudPointFromSdcAdapter::getPointPosition() const {

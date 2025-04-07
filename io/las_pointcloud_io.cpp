@@ -211,6 +211,7 @@ public:
     std::vector<std::string> attributeList() const override;
 
     bool gotoNext() override;
+    virtual bool hasData() const override;
 
     size_t getFormat() const override { return recordFormatNumber; }
 
@@ -647,6 +648,7 @@ public:
     LasExtraAttributesInfos getExtraAttributesInfos() const override;
 
     bool gotoNext() override;
+    bool hasData() const override;
 
     /**
      * @brief Function that return the format number suiteable for the given pointCloudPointAccessInterface
@@ -1209,6 +1211,11 @@ bool LasPointCloudPoint_Base<Derived>::gotoNext() {
     if (nbPoints == 0 || currentPointIdOneBased >= nbPoints) return false;
     currentPointIdOneBased++;
     reader->read(dataBuffer, recordByteSize);
+    return reader->good();
+}
+template <class Derived>
+bool LasPointCloudPoint_Base<Derived>::hasData() const {
+    if (nbPoints == 0 || currentPointIdOneBased >= nbPoints) return false;
     return reader->good();
 }
 
@@ -1820,6 +1827,9 @@ LasExtraAttributesInfos LasPointCloudPointBasicAdapter::getExtraAttributesInfos(
 bool LasPointCloudPointBasicAdapter::gotoNext()
 {
     return pointCloudPointAccessInterface->gotoNext() ? adaptInternalState() : false;
+}
+bool LasPointCloudPointBasicAdapter::hasData() const {
+    return pointCloudPointAccessInterface->hasData();
 }
 
 size_t LasPointCloudPointBasicAdapter::getSuitableFormat(const PointCloudPointAccessInterface &pointCloudPointAccessInterface,

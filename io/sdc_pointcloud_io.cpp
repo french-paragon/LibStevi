@@ -112,6 +112,9 @@ bool SdcPointCloudPoint::gotoNext() {
     }
     return true;
 }
+bool SdcPointCloudPoint::hasData() const {
+    return reader->good();
+}
 
 bool SdcPointCloudPoint::write(std::ostream &stream) const {
     stream.write(getRecordDataBuffer(), recordByteSize);

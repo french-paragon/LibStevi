@@ -76,6 +76,11 @@ public:
     bool gotoNext() override {
         return mapperImplementation.getAccessInterface().gotoNext();
     }
+
+
+    virtual bool hasData() const override {
+        return mapperImplementation.getAccessInterface().hasData();
+    }
 };
 
 class PointCloudHeaderAttributeMapper : public PointCloudHeaderInterface {

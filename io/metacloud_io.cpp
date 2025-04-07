@@ -538,6 +538,10 @@ bool MetaCloudExtraAttributeReader::gotoNext() {
     }
 }
 
+bool MetaCloudExtraAttributeReader::hasData() const {
+    if (reader == nullptr) return false;
+    return reader->good();
+}
 
 MetaCloudPoint::MetaCloudPoint(std::vector<std::unique_ptr<FullPointCloudAccessInterface>> && pointCloudInterfaces_,
         std::vector<std::unique_ptr<MetaCloudExtraAttributeReader>> && extraAttributeAccessors_) :
@@ -654,6 +658,19 @@ bool MetaCloudPoint::gotoNext() {
         if (extraAttributeAccessors[i] == nullptr || !extraAttributeAccessors[i]->gotoNext()) {
             return false;
         }
+    }
+
+    return true;
+}
+bool MetaCloudPoint::hasData() const {
+
+    if (currentPointCloud >= pointCloudInterfaces.size() || pointCloudInterfaces[currentPointCloud] == nullptr
+        || pointCloudInterfaces[currentPointCloud]->pointAccess == nullptr) {
+        return false;
+    }
+
+    if (currentPointCloud == pointCloudInterfaces.size() - 1) {
+        return pointCloudInterfaces[currentPointCloud]->pointAccess->hasData();
     }
 
     return true;

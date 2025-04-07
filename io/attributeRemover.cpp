@@ -86,6 +86,10 @@ public:
         return accessInterface->gotoNext();
     }
 
+    virtual bool hasData() const override {
+        return accessInterface->hasData();
+    }
+
 protected:
     virtual bool doesRemovePointColor() const override {
         return removePointColor;

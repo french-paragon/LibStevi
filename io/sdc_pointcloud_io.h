@@ -144,6 +144,7 @@ public:
     std::vector<std::string> attributeList() const override;
 
     bool gotoNext() override;
+    bool hasData() const override;
     
     inline auto getRecordByteSize() const { return recordByteSize; }
     inline auto* getRecordDataBuffer() const { return dataBufferPtr; }

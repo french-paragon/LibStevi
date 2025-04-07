@@ -371,6 +371,11 @@ public:
      * \return true if data is still available, false if the end of the data is reached.
      */
     virtual bool gotoNext() = 0;
+    /*!
+     * \brief hasData indicate if there is still data to query, or if the underlying datastream is over.
+     * \return false if no more points can be queried, at which point all data queried is garbage, true otherwise
+     */
+    virtual bool hasData() const = 0;
 
     template<typename Geometry_T>
     PtGeometry<Geometry_T> castedPointGeometry() const {
@@ -698,6 +703,10 @@ public:
         }
 
         return true;
+    }
+
+    virtual bool hasData() const override {
+        return _iterator != _point_cloud->end();
     }
 
 protected:

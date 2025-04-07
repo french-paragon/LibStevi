@@ -104,6 +104,7 @@ public:
     std::vector<std::string> attributeList() const override { return attributeNames; }
 
     bool gotoNext() override;
+    bool hasData() const override;
 
     static std::unique_ptr<MetaCloudExtraAttributeReader> create(std::unique_ptr<std::istream> reader,
         const std::vector<std::string>& attributeNames, const std::vector<MetaCloudSimpleType>& attributeTypes);
@@ -137,6 +138,7 @@ public:
     std::vector<std::string> attributeList() const override { return attributeNames; }
 
     bool gotoNext() override;
+    bool hasData() const override;
 };
 
 /**

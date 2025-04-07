@@ -151,6 +151,7 @@ public:
         }
         return false;
     }
+    virtual bool hasData() const override;
 
 private:
     bool gotoNextAscii();
