@@ -125,10 +125,15 @@ inline constexpr bool is_vector_v = is_vector<T>::value;
 template<typename T_>
 T_ castedPointCloudAttribute(PointCloudGenericAttribute const& val) {
     using T = std::decay_t<T_>;
+    constexpr bool isGenericAttribute = std::is_same_v<T, PointCloudGenericAttribute>;
     constexpr bool isSimpleReturnType = std::is_integral_v<T> || std::is_floating_point_v<T> || std::is_same_v<std::string, T>;
     constexpr bool isVectorReturnType = is_vector_v<T>;
 
-    static_assert(isSimpleReturnType or isVectorReturnType, "Target type must be a supported type!");
+    static_assert(isGenericAttribute or isSimpleReturnType or isVectorReturnType, "Target type must be a supported type!");
+
+    if constexpr (isGenericAttribute) {
+        return val;
+    }
 
     if (std::holds_alternative<EmptyParam>(val)) {
         return T();
@@ -369,7 +374,9 @@ public:
 
     template<typename Geometry_T>
     PtGeometry<Geometry_T> castedPointGeometry() const {
-        static_assert (std::is_integral_v<Geometry_T> or std::is_floating_point_v<Geometry_T>, "Geometry type needs to be an integral or floating point type");
+        static_assert (std::is_same_v<Geometry_T, PointCloudGenericAttribute> or
+                std::is_integral_v<Geometry_T> or
+                std::is_floating_point_v<Geometry_T>, "Geometry type needs to be an integral or floating point type");
         PtGeometry<Geometry_T> ret;
         PtGeometry<PointCloudGenericAttribute> raw = getPointPosition();
 
@@ -382,7 +389,9 @@ public:
 
     template<typename Color_T>
     std::optional<PtColor<Color_T>> castedPointColor() const {
-        static_assert (std::is_integral_v<Color_T> or std::is_floating_point_v<Color_T>, "Color type needs to be an integral or floating point type");
+        static_assert (std::is_same_v<Color_T, PointCloudGenericAttribute> or
+                std::is_integral_v<Color_T> or
+                std::is_floating_point_v<Color_T>, "Color type needs to be an integral or floating point type");
 
         std::optional<PtColor<PointCloudGenericAttribute>> raw_opt = getPointColor();
 
