@@ -559,8 +559,12 @@ public:
         return iterator->first;
     }
 
-    inline bool hasGlobalAttribute(std::string const& name) {
+    inline bool hasGlobalAttribute(std::string const& name) const {
         return _global_attributes.count(name) > 0;
+    }
+
+    inline int nGlobalAttribute() const {
+        return _global_attributes.size();
     }
 
     inline void clearGlobalAttribute(std::string const& name) {
@@ -601,9 +605,15 @@ public:
     virtual ~GenericPointCloudHeaderInterface() {};
 
     virtual std::optional<PointCloudGenericAttribute> getAttributeById(int id) const override {
+        if (id < 0 or id >= _point_cloud->nGlobalAttribute()) {
+            return std::nullopt;
+        }
         return _point_cloud->nthGlobalAttribute(id);
     }
     virtual std::optional<PointCloudGenericAttribute> getAttributeByName(const char* attributeName) const override {
+        if (!_point_cloud->hasGlobalAttribute(attributeName)) {
+            return std::nullopt;
+        }
         return _point_cloud->globalAttribute(attributeName);
     }
 
