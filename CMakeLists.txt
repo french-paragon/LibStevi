@@ -82,7 +82,6 @@ set(LIB_SRC
         geometry/alignement.h
         geometry/imagecoordinates.h
         geometry/lensdistortion.h
-        geometry/pointcloudalignment.cpp
         geometry/pointcloudalignment.h
         geometry/genericraysalignement.h
         geometry/rotations.h
@@ -189,6 +188,7 @@ endif(buildGui)
 
 add_library(
     ${STEREOVISION_LIB}
+    SHARED
     ${LIB_SRC}
 )
 
