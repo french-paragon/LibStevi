@@ -52,6 +52,8 @@ private Q_SLOTS:
 
     void testSensorFrameConversions();
 
+    void testRigidBodyTransformInterpolationOnManifold();
+
 private:
 	std::default_random_engine re;
 };
@@ -837,6 +839,68 @@ void TestGeometryLibRotation::testSensorFrameConversions() {
     QCOMPARE(frame1toframe2(2,2),1);
 
     QCOMPARE(frame1toframe2.determinant(),1);
+
+}
+
+void TestGeometryLibRotation::testRigidBodyTransformInterpolationOnManifold() {
+
+    constexpr int nRuns = 10;
+
+    std::uniform_real_distribution<float> dataGen(-2, 2);
+
+    for (int i = 0; i < nRuns; i++) {
+
+        Eigen::Vector3d r1;
+        r1 << dataGen(re), dataGen(re), dataGen(re);
+        Eigen::Vector3d r2;
+        r2 << dataGen(re), dataGen(re), dataGen(re);
+
+        Eigen::Vector3d t1;
+        t1 << dataGen(re), dataGen(re), dataGen(re);
+        Eigen::Vector3d t2;
+        t2 << dataGen(re), dataGen(re), dataGen(re);
+
+        RigidBodyTransform<double> T1(r1,t1);
+        RigidBodyTransform<double> T2(r2,t2);
+
+        RigidBodyTransform<double> T0(Eigen::Vector3d::Zero(),Eigen::Vector3d::Zero());
+
+        RigidBodyTransform<double> interpolated1 = interpolateRigidBodyTransformOnManifold<double>(1, T1, 0, T2);
+        RigidBodyTransform<double> interpolated2 = interpolateRigidBodyTransformOnManifold<double>(0, T1, 1, T2);
+
+        for (int i = 0; i < 3; i++) {
+
+            QCOMPARE(interpolated1.r[i], T1.r[i]);
+            QCOMPARE(interpolated1.t[i], T1.t[i]);
+
+            QCOMPARE(interpolated2.r[i], T2.r[i]);
+            QCOMPARE(interpolated2.t[i], T2.t[i]);
+        }
+
+        RigidBodyTransform<double> interpolated025 = interpolateRigidBodyTransformOnManifold<double>(0.25, T1, 0.75, T2);
+        RigidBodyTransform<double> interpolated050 = interpolateRigidBodyTransformOnManifold<double>(0.5, T1, 0.5, T2);
+        RigidBodyTransform<double> interpolated075 = interpolateRigidBodyTransformOnManifold<double>(0.75, T1, 0.25, T2);
+
+        RigidBodyTransform<double> interpolated025d = interpolateRigidBodyTransformOnManifold<double>(0.25, T0, 0.75, T2*T1.inverse());
+        RigidBodyTransform<double> interpolated050d = interpolateRigidBodyTransformOnManifold<double>(0.5, T0, 0.5, T2*T1.inverse());
+        RigidBodyTransform<double> interpolated075d = interpolateRigidBodyTransformOnManifold<double>(0.75, T0, 0.25, T2*T1.inverse());
+
+        RigidBodyTransform<double> interpolated025e = interpolated025d*T1;
+        RigidBodyTransform<double> interpolated050e = interpolated050d*T1;
+        RigidBodyTransform<double> interpolated075e = interpolated075d*T1;
+
+        for (int i = 0; i < 3; i++) {
+
+            QCOMPARE(interpolated025e.r[i], interpolated025.r[i]);
+            QCOMPARE(interpolated050e.r[i], interpolated050.r[i]);
+            QCOMPARE(interpolated075e.r[i], interpolated075.r[i]);
+
+            QCOMPARE(interpolated025e.t[i], interpolated025.t[i]);
+            QCOMPARE(interpolated050e.t[i], interpolated050.t[i]);
+            QCOMPARE(interpolated075e.t[i], interpolated075.t[i]);
+        }
+
+    }
 
 }
 
