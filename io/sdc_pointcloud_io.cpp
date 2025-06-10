@@ -32,6 +32,14 @@ SdcPointCloudPoint::SdcPointCloudPoint(std::unique_ptr<std::istream> reader, uin
     }
 }
 
+int SdcPointCloudPoint::expectedNumberOfPoints() const {
+    return -1;
+}
+
+int SdcPointCloudPoint::processedNumberOfPoints() const {
+    return -1;
+}
+
 PtGeometry<PointCloudGenericAttribute> SdcPointCloudPoint::getPointPosition() const {
     return PtGeometry<PointCloudGenericAttribute>{
             fromBytes<float>(dataBufferPtr + fieldOffset[x_id]),

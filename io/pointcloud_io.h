@@ -323,6 +323,11 @@ public:
 
     inline PointCloudHeaderInterface() {};
     inline virtual ~PointCloudHeaderInterface() {};
+    /*!
+     * \brief expectedNumberOfPoints expected number of points in the associated cloud
+     * \return the expected number of points in the cloud, or a nagative number if it cannot be estimated.
+     */
+    virtual int expectedNumberOfPoints() const;
 
     virtual std::optional<PointCloudGenericAttribute> getAttributeById(int id) const = 0;
     virtual std::optional<PointCloudGenericAttribute> getAttributeByName(const char* attributeName) const = 0;
@@ -349,6 +354,21 @@ public:
 
     inline PointCloudPointAccessInterface() {};
     inline virtual ~PointCloudPointAccessInterface() {};
+
+    /*!
+     * \brief expectedNumberOfPoints gives the expected number of points, if available
+     * \return the expected number of points in the point cloud, or a nagative value if this cannot be evaluated.
+     *
+     * The default implementation return -1
+     */
+    virtual int expectedNumberOfPoints() const;
+    /*!
+     * \brief processedNumberOfPoints return the number of points that have been processed
+     * \return the number of points that have been processed, or a negative value if it cannot be evaluated.
+     *
+     * the default implementation return -1
+     */
+    virtual int processedNumberOfPoints() const;
 
     virtual PtGeometry<PointCloudGenericAttribute> getPointPosition() const = 0;
     virtual std::optional<PtColor<PointCloudGenericAttribute>> getPointColor() const = 0;

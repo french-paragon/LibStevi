@@ -589,6 +589,9 @@ PcdPointCloudHeader::PcdPointCloudHeader(const double version, const std::vector
         viewpoint{viewpoint}, points{points}, data{data}
 { }
 
+int PcdPointCloudHeader::expectedNumberOfPoints() const {
+    return points;
+}
 std::optional<PointCloudGenericAttribute> PcdPointCloudHeader::getAttributeById(int id) const {
     switch (id) {
         case 0:
@@ -1509,25 +1512,17 @@ bool PcdPointCloudPoint::writePointAscii(std::ostream &writer, const PcdPointClo
     // Visitor for handling each field type
     auto visitor = [&writer](auto &&attr) {
         using T = std::decay_t<decltype(attr)>;
-        if constexpr (std::is_same_v<T, std::string> || std::is_floating_point_v<T>) {
+        if constexpr (std::is_same_v<T, std::string>) {
             writer << attr;
-        } else if constexpr (std::is_integral_v<T>) {
-            if constexpr (std::is_signed_v<T>) {
-                writer << static_cast<intmax_t>(attr);
-            } else {
-                writer << static_cast<uintmax_t>(attr);
-            }
+        } else if constexpr (std::is_floating_point_v<T> || std::is_integral_v<T>) {
+            writer << std::to_string(attr);
         } else if constexpr (is_vector_v<T>) {
             for (size_t i = 0; i < attr.size(); ++i) {
-                if constexpr (std::is_same_v<typename T::value_type, std::string> || 
-                              std::is_floating_point_v<typename T::value_type>) {
+                if constexpr (std::is_same_v<typename T::value_type, std::string>) {
                     writer << attr[i];
-                } else if constexpr (std::is_integral_v<typename T::value_type>) {
-                    if constexpr (std::is_signed_v<typename T::value_type>) {
-                        writer << static_cast<intmax_t>(attr[i]);
-                    } else {
-                        writer << static_cast<uintmax_t>(attr[i]);
-                    }
+                } else if constexpr (std::is_floating_point_v<typename T::value_type> ||
+                                     std::is_integral_v<typename T::value_type>) {
+                    writer << std::to_string(attr[i]);
                 }
                 if (i < attr.size() - 1) { 
                     writer << " "; // Add space after all but the last element

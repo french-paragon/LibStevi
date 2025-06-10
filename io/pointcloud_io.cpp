@@ -54,5 +54,16 @@ std::optional<FullPointCloudAccessInterface> openPointCloud(const std::filesyste
     }
 }
 
+int PointCloudHeaderInterface::expectedNumberOfPoints() const {
+    return -1;
+}
+
+int PointCloudPointAccessInterface::expectedNumberOfPoints() const {
+    return -1;
+}
+int PointCloudPointAccessInterface::processedNumberOfPoints() const {
+    return -1;
+}
+
 } // namespace IO
 } // namespace StereoVision

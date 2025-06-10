@@ -129,7 +129,7 @@ public:
     PcdPointCloudPointReader(std::unique_ptr<std::istream> reader, const std::vector<std::string>& attributeNames,
         const std::vector<size_t>& fieldByteSize, const std::vector<uint8_t>& fieldType,
         const std::vector<size_t>& fieldCount, PcdDataStorageType dataStorageType, bool hideColorAndGeometricAttributes);
-    
+
     PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;
 
     std::optional<PtColor<PointCloudGenericAttribute>> getPointColor() const override;
@@ -186,6 +186,9 @@ public:
         const std::vector<size_t>& size, const std::vector<uint8_t>& type, const std::vector<size_t>& count,
         const size_t width, const size_t height, const std::vector<double>& viewpoint, const size_t points,
         const PcdDataStorageType dataStorageType);
+
+
+    virtual int expectedNumberOfPoints() const override;
 
     std::optional<PointCloudGenericAttribute> getAttributeById(int id) const override;
 
