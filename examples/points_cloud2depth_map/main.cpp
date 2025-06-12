@@ -21,8 +21,6 @@
 
 #include <tclap/CmdLine.h>
 
-#include <omp.h>
-
 using PointType = Eigen::Vector4d;
 using BinaryTree = StereoVision::Geometry::GenericBSP<PointType, 2, StereoVision::Geometry::BSPObjectWrapper<PointType,double>>;
 

@@ -24,8 +24,6 @@
 
 #include <tclap/CmdLine.h>
 
-#include <omp.h>
-
 using PointType = Eigen::Vector3f;
 using PointsContainer = std::vector<PointType>;
 
