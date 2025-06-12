@@ -109,13 +109,31 @@ inline bool matchdescr(std::string descr) {
 template<typename T>
 constexpr T defaultWhiteLevel() {
 
-	return (std::is_integral_v<T>) ? std::numeric_limits<T>::max() : 1.0;
+    return (std::is_integral_v<T>) ? std::numeric_limits<T>::max() : static_cast<T>(1.0);
 }
 
 template<typename T>
 constexpr T defaultBlackLevel() {
 
-	return (std::is_integral_v<T>) ? 0 : 0.0;
+    return static_cast<T>(0.0);
+}
+
+/*!
+ * \brief typeExceedFloat32Precision check if the type T exceed the expected precision of a float32
+ * \return true if the function detect that the type T is more accurate than a float32
+ *
+ * This function work by checking if some double, close to one another but sligthly different, are still different after being casted to type T.
+ * This is potentially less accurate than using std::is_same or other form of direct type comparison,
+ * but this accomodate arbitrary types (e.g. ceres Jets) without prior knowledge of said type.
+ *
+ * If type T is not a floating point type, then behavior is undefined.
+ */
+template<typename T>
+constexpr bool typeExceedFloat32Precision() {
+    T val = T(1.00000001);
+    T test = T(1);
+
+    return val > test;
 }
 
 } // namespace TypesManipulations

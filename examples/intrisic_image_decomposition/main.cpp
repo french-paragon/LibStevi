@@ -117,32 +117,7 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	out << "Image max val = " << maxVal << Qt::endl;
-
-	/*Multidim::Array<float, 3> intensityNormalized = StereoVision::ImageProcessing::normalizedIntensityRGBImage<float, float>(img, 128);
-
-	bool ok = StereoVision::IO::writeImage<uint8_t>((outDir.filePath(info.baseName() + "_int_norm") + ".bmp" ).toStdString(), intensityNormalized);
-
-	if (ok) {
-		out << "\t" << "Intensity normalized file succesfully written to disk" << Qt::endl;
-	} else {
-		out << "\t" << "Failed to write intensity normalized file to disk" << Qt::endl;
-		return 1;
-	}
-
-	std::function<float(std::vector<float> const&,std::vector<float> const&)> kernel = StereoVision::ImageProcessing::RadiusKernel<float>(5);
-
-	Multidim::Array<float, 3> flat_approx = StereoVision::ImageProcessing::meanShiftClustering<float, 3, float>
-			(intensityNormalized, kernel, 2, std::nullopt, 10);
-
-	ok = StereoVision::IO::writeImage<uint8_t>((outDir.filePath(info.baseName() + "_flat_approx") + ".bmp" ).toStdString(), flat_approx);
-
-	if (ok) {
-		out << "\t" << "mean shift clustered file succesfully written to disk" << Qt::endl;
-	} else {
-		out << "\t" << "Failed to write mean shift clustered file to disk" << Qt::endl;
-		return 1;
-	}*/
+    out << "Image max val = " << maxVal << Qt::endl;
 
 	IntrinsicImageDecomposition<float, 3> decomposition = autoRetinexWithNonLocalTextureConstraint<float, float>(img);
 
@@ -205,27 +180,18 @@ int main(int argc, char** argv) {
     outputFiles = options.contains("-o") or options.contains("--outputfiles");
     #endif
 
-    if (outputFiles) {
-        ok = StereoVision::IO::writeImage<float>((outDir.filePath(info.baseName() + "_reflectance") + ".stevimg" ).toStdString(), decomposition.reflectance);
-
-        if (ok) {
-            out << "\t" << "Reflectance file succesfully written to disk" << Qt::endl;
-        } else {
-            out << "\t" << "Failed to write reflectance file to disk" << Qt::endl;
-            return 1;
-        }
-    }
 
     #ifdef WITH_GUI
-	StereoVision::Gui::ArrayDisplayAdapter<float> reflectanceAdapter(&decomposition.reflectance, 0, maxS);
+    StereoVision::Gui::ArrayDisplayAdapter<float> reflectanceAdapter(&decomposition.reflectance, 0, maxS);
     reflectanceAdapter.configureOriginalChannelDisplay(channelsNames);
     QImageDisplay::ImageWindow reflectanceWindow;
     reflectanceWindow.setImage(&reflectanceAdapter);
     reflectanceWindow.setWindowTitle("Reflectance image");
     #endif
 
-	#ifdef WITH_GUI
-	StereoVision::Gui::ArrayDisplayAdapter<float> shadingAdapter(&decomposition.shading, 0, maxS);
+
+    #ifdef WITH_GUI
+    StereoVision::Gui::ArrayDisplayAdapter<float> shadingAdapter(&decomposition.shading, 0, maxS);
 	shadingAdapter.configureOriginalChannelDisplay(channelsNames);
 	QImageDisplay::ImageWindow shadingWindow;
 	shadingWindow.setImage(&shadingAdapter);
@@ -241,6 +207,29 @@ int main(int argc, char** argv) {
 	#endif
 
     if (outputFiles) {
+
+        #ifdef WITH_GUI //TODO: look if we can do that without GUI
+        QImage reflectancePreview = reflectanceAdapter.getImage();
+        reflectancePreview.save(outDir.filePath(info.baseName() + "_reflectance") + ".jpg" );
+        #endif
+
+        ok = StereoVision::IO::writeImage<float>((outDir.filePath(info.baseName() + "_reflectance") + ".stevimg" ).toStdString(), decomposition.reflectance);
+
+        if (ok) {
+            out << "\t" << "Reflectance file succesfully written to disk" << Qt::endl;
+        } else {
+            out << "\t" << "Failed to write reflectance file to disk" << Qt::endl;
+            return 1;
+        }
+    }
+
+    if (outputFiles) {
+
+        #ifdef WITH_GUI //TODO: look if we can do that without GUI
+        QImage shadingPreview = shadingAdapter.getImage();
+        shadingPreview.save(outDir.filePath(info.baseName() + "_shading") + ".jpg" );
+        #endif
+
         ok = StereoVision::IO::writeImage<float>((outDir.filePath(info.baseName() + "_shading") + ".stevimg" ).toStdString(), decomposition.shading);
 
         if (ok) {

@@ -29,6 +29,8 @@ const std::string MatchingFunctionTraits<matchingFunctions::ZCC>::Name = "ZCC";
 const std::string MatchingFunctionTraits<matchingFunctions::ZNCC>::Name = "ZNCC";
 const std::string MatchingFunctionTraits<matchingFunctions::ZSSD>::Name = "ZSSD";
 const std::string MatchingFunctionTraits<matchingFunctions::ZSAD>::Name = "ZSAD";
+const std::string MatchingFunctionTraits<matchingFunctions::MEDAD>::Name = "MEDAD";
+const std::string MatchingFunctionTraits<matchingFunctions::ZMEDAD>::Name = "ZMEDAD";
 const std::string MatchingFunctionTraits<matchingFunctions::HAMMING>::Name = "HAMMING";
 const std::string MatchingFunctionTraits<matchingFunctions::CENSUS>::Name = "CENSUS";
 

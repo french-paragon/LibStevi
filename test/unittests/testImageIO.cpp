@@ -36,6 +36,8 @@ private Q_SLOTS:
 	void testSetvimageSaving_data();
 	void testSetvimageSaving();
 
+    void testMultispectralTiffSaving();
+
 private:
 	std::default_random_engine re;
 
@@ -154,6 +156,31 @@ void TestImageIO::testSetvimageSaving() {
 		}
 	}
 
+}
+
+
+
+void TestImageIO::testMultispectralTiffSaving() {
+
+#ifndef STEVI_IO_USE_TIFF
+    QSKIP("Not using native tiff library");
+#endif
+
+    QString filename = "hyperspectral_tiff_test.tiff";
+
+    QString filepath = QDir::current().filePath(filename);
+    std::string fname = filepath.toStdString();
+
+    QFile f(filepath);
+    if (f.exists()) {
+        f.remove(); //remove the file, in case it already exist.
+    }
+
+    Multidim::Array<float, 3> pseudotiff(6,33,42);
+
+    bool ok = StereoVision::IO::writeImage<float>(fname, pseudotiff);
+
+    QVERIFY2(ok, "could not save tiff with more than 3 channels");
 }
 
 QTEST_MAIN(TestImageIO)

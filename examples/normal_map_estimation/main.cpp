@@ -24,6 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <QApplication>
 
 #include <qImageDisplayWidget/imagewindow.h>
+#define LIBSTEREOVISION_BUILDING //get the QImageWidgets headers from the right place at build time
 #include "gui/arraydisplayadapter.h"
 
 #endif
@@ -58,6 +59,9 @@ int main(int argc, char** argv) {
         }
     }
 
+    bool autoLightDirection = options.contains("-d");
+    bool invertConvexity = options.contains("-i");
+
 	QTextStream out(stdout);
 
 	if (arguments.size() < 2) { //no input image decomposition
@@ -70,8 +74,11 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-    Multidim::Array<float, 3> shading = StereoVision::IO::readStevimg<float, 3>(arguments[0].toStdString());
-    Multidim::Array<float, 3> reflectance = StereoVision::IO::readStevimg<float, 3>(arguments[1].toStdString());
+    QString& shading_src = arguments[0];
+    QString& reflectance_src = arguments[1];
+
+    Multidim::Array<float, 3> shading = StereoVision::IO::readStevimg<float, 3>(shading_src.toStdString());
+    Multidim::Array<float, 3> reflectance = StereoVision::IO::readStevimg<float, 3>(reflectance_src.toStdString());
 
     if (shading.empty()) {
         out << "impossible to read shading image: " << arguments[0] << Qt::endl;
@@ -155,7 +162,12 @@ int main(int argc, char** argv) {
     #endif
 
     Eigen::Matrix<float, 3, 1> lightDirection;
-    lightDirection << 0.0, 1, 1;
+    lightDirection << 0, 1, 1;
+
+    if (autoLightDirection) {
+        lightDirection = estimateLightDirection(shading.sliceView(2,0));
+        std::cout << "Estimate of light direction: " << lightDirection[0] << " " << lightDirection[1] << " " << lightDirection[2] << std::endl;
+    }
 
 	float lambdaNorm = 9.0;
     float lambdaDiff = 4.0;
@@ -204,7 +216,34 @@ int main(int argc, char** argv) {
 
 	out << "Raw height map processing finished -> height shape = " << rawHeightMap.shape()[0] << " x " << rawHeightMap.shape()[1] << Qt::endl;
 
-	Multidim::Array<float, 2> flatHeightMap = flattenHeightMapInAreaOfInterest(rawHeightMap, areaOfInterest);
+    constexpr bool ensureConvex = true;
+    Multidim::Array<float, 2> flatHeightMap = flattenHeightMapInAreaOfInterest(rawHeightMap, areaOfInterest, ensureConvex);
+
+    float minVal = std::numeric_limits<float>::infinity();
+
+    if (invertConvexity) {
+        for (int i = 0; i < flatHeightMap.shape()[0]; i++) {
+            for (int j = 0; j < flatHeightMap.shape()[1]; j++) {
+
+                if (areaOfInterest.valueUnchecked(i,j)) {
+                    float val = flatHeightMap.atUnchecked(i,j);
+                    flatHeightMap.atUnchecked(i,j) = -val;
+
+                    if (minVal > -val) {
+                        minVal = -val;
+                    }
+                }
+            }
+        }
+        for (int i = 0; i < flatHeightMap.shape()[0]; i++) {
+            for (int j = 0; j < flatHeightMap.shape()[1]; j++) {
+
+                if (areaOfInterest.valueUnchecked(i,j)) {
+                    flatHeightMap.atUnchecked(i,j) -= minVal;
+                }
+            }
+        }
+    }
 
 	out << "Flat height map processing finished -> height shape = " << flatHeightMap.shape()[0] << " x " << flatHeightMap.shape()[1] << Qt::endl;
 
@@ -256,6 +295,21 @@ int main(int argc, char** argv) {
 	QImageDisplay::ImageWindow heightWindow;
 	heightWindow.setImage(&heightAdapter);
 	heightWindow.setWindowTitle("height map");
+
+    QFileInfo inputInfo(shading_src);
+    QString baseName = inputInfo.baseName();
+    baseName.replace("_shading", "");
+
+    QDir outDir = inputInfo.absoluteDir();
+
+    QString normal_path = outDir.filePath(baseName + "_normal") + ".jpg";
+    QString height_path = outDir.filePath(baseName + "_height") + ".jpg";
+
+    QImage normalPreviewImg = normalAdapter.getImage();
+    normalPreviewImg.save(normal_path);
+    QImage heightPreviewImg = heightAdapter.getImage();
+    heightPreviewImg.save(height_path);
+
     #endif
 
     #ifdef WITH_GUI

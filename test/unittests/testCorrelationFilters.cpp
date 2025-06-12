@@ -64,6 +64,8 @@ private Q_SLOTS:
 	void testBarycentricSymmetricSadRefinement_data();
 	void testBarycentricSymmetricSadRefinement();
 
+    void testGenericInterpolationBasedRefinement();
+
 	void testInputImagesTypes();
 
 private:
@@ -1101,6 +1103,145 @@ void TestCorrelationFilters::testBarycentricSymmetricSadRefinement() {
 
 	float missalignement = disparity.value<Nc>(0) - posWeigthed;
 	QVERIFY2(std::fabs(missalignement) < 1e-4, qPrintable(QString("Matching not done properly (subpixel position of first feature vector = %1, expected = %2)").arg(disparity.value<Nc>(0)).arg(posWeigthed)));
+}
+
+
+
+void TestCorrelationFilters::testGenericInterpolationBasedRefinement() {
+
+    constexpr int n = 10;
+    std::uniform_real_distribution<float> uniformDist(2, n-3);
+
+    //run simple 1D example for SSD and SAD cost functions
+    //bilinear
+    for (int i = 0; i < n; i++) {
+
+        float fineDisp = uniformDist(re);
+
+        Multidim::Array<float,3> sourceFeatureVolume(1,1,1);
+        sourceFeatureVolume.atUnchecked(0,0,0) = fineDisp;
+
+
+        Multidim::Array<float,3> targetFeatureVolume(1,n,1);
+
+        for (int i = 0; i < n; i++) {
+            targetFeatureVolume.atUnchecked(0,i,0) = i;
+        }
+
+        Multidim::Array<StereoVision::Correlation::disp_t,2> disp(1,1);
+        disp.atUnchecked(0,0) = std::round(fineDisp);
+
+        constexpr StereoVision::Correlation::matchingFunctions matchFunc = StereoVision::Correlation::matchingFunctions::SAD; //take a function that is not whitened
+        constexpr StereoVision::Correlation::dispDirection direction = StereoVision::Correlation::dispDirection::RightToLeft;
+        constexpr int nPixelsCut = 300;
+        auto refinedBilinear =
+                StereoVision::Correlation::refineArbitraryInterpolationDisp
+                <matchFunc,
+                StereoVision::Interpolation::pyramidFunction<float,1>,
+                1,
+                direction>
+                (targetFeatureVolume,
+                 sourceFeatureVolume,
+                 disp,
+                 nPixelsCut);
+
+        QCOMPARE(refinedBilinear.shape()[0], disp.shape()[0]);
+        QCOMPARE(refinedBilinear.shape()[1], disp.shape()[1]);
+
+        QVERIFY2(std::abs(refinedBilinear.valueUnchecked(0,0) - fineDisp) <= 1./nPixelsCut, "Wrong fine disparity found");
+
+    }
+
+    //bicubic
+    for (int i = 0; i < n; i++) {
+
+        constexpr StereoVision::Correlation::matchingFunctions matchFunc = StereoVision::Correlation::matchingFunctions::SAD; //take a function that is not whitened
+        constexpr StereoVision::Correlation::dispDirection direction = StereoVision::Correlation::dispDirection::RightToLeft;
+        constexpr int kernelRadius = 2;
+        constexpr int nPixelsCut = 300;
+        constexpr int bicubicNumerator = 1;
+        constexpr int bicubicDenominator = 2;
+
+        float fineDisp = uniformDist(re);
+
+        Multidim::Array<float,3> sourceFeatureVolume(1,1,1);
+
+        Multidim::Array<float,3> targetFeatureVolume(1,n,1);
+
+        for (int i = 0; i < n; i++) {
+            targetFeatureVolume.atUnchecked(0,i,0) = i;
+        }
+
+        sourceFeatureVolume.atUnchecked(0,0,0) =
+                StereoVision::Interpolation::interpolateValue<3,
+                float,
+                StereoVision::Interpolation::bicubicKernel<float,3,bicubicNumerator,bicubicDenominator>,
+                kernelRadius>
+                (targetFeatureVolume, {0,fineDisp,0});
+
+        Multidim::Array<StereoVision::Correlation::disp_t,2> disp(1,1);
+        disp.atUnchecked(0,0) = std::round(fineDisp);
+        auto refinedBicubicSplines =
+                StereoVision::Correlation::refineArbitraryInterpolationDisp
+                <matchFunc,
+                StereoVision::Interpolation::bicubicKernel<float,1,bicubicNumerator,bicubicDenominator>,
+                kernelRadius,
+                direction>
+                (targetFeatureVolume,
+                 sourceFeatureVolume,
+                 disp,
+                 nPixelsCut);
+
+        QCOMPARE(refinedBicubicSplines.shape()[0], disp.shape()[0]);
+        QCOMPARE(refinedBicubicSplines.shape()[1], disp.shape()[1]);
+
+        QVERIFY2(std::abs(refinedBicubicSplines.valueUnchecked(0,0) - fineDisp) <= 1./nPixelsCut, "Wrong fine disparity found");
+
+    }
+
+    //run sligthly more complex 2D example for NCC
+    //bilinear
+    for (int i = 0; i < n; i++) {
+
+        constexpr StereoVision::Correlation::matchingFunctions matchFunc = StereoVision::Correlation::matchingFunctions::NCC; //take a function that is not whitened
+        constexpr StereoVision::Correlation::dispDirection direction = StereoVision::Correlation::dispDirection::RightToLeft;
+        constexpr int nPixelsCut = 300;
+
+        float fineDisp = uniformDist(re);
+
+        Multidim::Array<float,3> sourceFeatureVolume(1,1,2);
+        sourceFeatureVolume.atUnchecked(0,0,0) = fineDisp;
+        sourceFeatureVolume.atUnchecked(0,0,1) = n - fineDisp - 1;
+
+
+        Multidim::Array<float,3> targetFeatureVolume(1,n,2);
+
+        for (int i = 0; i < n; i++) {
+            targetFeatureVolume.atUnchecked(0,i,0) = i;
+            targetFeatureVolume.atUnchecked(0,i,1) = n - i - 1;
+        }
+
+        Multidim::Array<StereoVision::Correlation::disp_t,2> disp(1,1);
+        disp.atUnchecked(0,0) = std::round(fineDisp);
+
+        auto refinedBilinear =
+                StereoVision::Correlation::refineArbitraryInterpolationDisp
+                <matchFunc,
+                StereoVision::Interpolation::pyramidFunction<float,1>,
+                1,
+                direction>
+                (targetFeatureVolume,
+                 sourceFeatureVolume,
+                 disp,
+                 nPixelsCut);
+
+        QCOMPARE(refinedBilinear.shape()[0], disp.shape()[0]);
+        QCOMPARE(refinedBilinear.shape()[1], disp.shape()[1]);
+
+        QVERIFY2(std::abs(refinedBilinear.valueUnchecked(0,0) - fineDisp) <= 1./nPixelsCut, "Wrong fine disparity found");
+
+    }
+
 }
 
 void TestCorrelationFilters::testInputImagesTypes() {

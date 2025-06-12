@@ -1,6 +1,7 @@
 #include <QtTest/QtTest>
 
 #include "geometry/rotations.h"
+#include "geometry/sensorframesconvention.h"
 
 #include <random>
 
@@ -24,8 +25,14 @@ private Q_SLOTS:
 
     void testDiffAngleAxisRotate();
 
-	void testInverseRodriguez_data();
-	void testInverseRodriguez();
+    void testInverseRodriguez_data();
+    void testInverseRodriguez();
+
+    void testInverseRodriguezNumStable_data();
+    void testInverseRodriguezNumStable();
+
+    void testJacobianSO3_data();
+    void testJacobianSO3();
 
 	void testDiffRodriguez_data();
 	void testDiffRodriguez();
@@ -43,13 +50,17 @@ private Q_SLOTS:
 
     void testRAxis2QuatDiff();
 
+    void testSensorFrameConversions();
+
+    void testRigidBodyTransformInterpolationOnManifold();
+
 private:
 	std::default_random_engine re;
 };
 
 
 void TestGeometryLibRotation::initTestCase() {
-	//srand((unsigned int) time(nullptr));
+    srand((unsigned int) time(nullptr));
 	std::random_device rd;
 	re.seed(rd());
 }
@@ -95,6 +106,19 @@ void TestGeometryLibRotation::testRodriguez_data() {
 		 0,-1, 0,
 		 0, 0, 1;
 	QTest::newRow("180deg z axis") << 0.0f << 0.0f << static_cast<float>(M_PI) << M;
+
+
+    //failure cases that have been encountered during devellopement
+    //TODO: check if we want to use a different test protocol for these ones
+
+    /*Eigen::Matrix3d Md;
+    Md << 0.55796742,  0.82778577,  0.05867651,
+            0.82778694, -0.56017673,  0.03115715,
+            0.05866066,  0.03118697, -0.99779071;
+    M = Md.cast<float>();
+    Eigen::Vector3f axis = inverseRodriguezFormula<double>(Md).cast<float>();
+
+    QTest::newRow("Failure case 1") << axis.x() << axis.y() << axis.z() << M;*/
 }
 
 void TestGeometryLibRotation::testRodriguez() {
@@ -219,6 +243,106 @@ void TestGeometryLibRotation::testInverseRodriguez() {
 
 }
 
+void TestGeometryLibRotation::testInverseRodriguezNumStable_data() {
+
+    QTest::addColumn<double>("r00");
+    QTest::addColumn<double>("r01");
+    QTest::addColumn<double>("r02");
+    QTest::addColumn<double>("r10");
+    QTest::addColumn<double>("r11");
+    QTest::addColumn<double>("r12");
+    QTest::addColumn<double>("r20");
+    QTest::addColumn<double>("r21");
+    QTest::addColumn<double>("r22");
+
+    QTest::newRow("Case 1") << 0.9976515596006329 << 0.0001402027638521819 << 0.0684932807438838 <<
+                               0.00012947832197639572 << -0.9999999694524941 << 0.00016091083470215484 <<
+                               0.06849330024634 << -0.00015174534422002228 << -0.9976515280311443;
+
+}
+void TestGeometryLibRotation::testInverseRodriguezNumStable() {
+
+    QFETCH(double, r00);
+    QFETCH(double, r01);
+    QFETCH(double, r02);
+    QFETCH(double, r10);
+    QFETCH(double, r11);
+    QFETCH(double, r12);
+    QFETCH(double, r20);
+    QFETCH(double, r21);
+    QFETCH(double, r22);
+
+    Eigen::Matrix3d R;
+    R << r00, r01, r02, r10, r11, r12, r20, r21, r22;
+
+    Eigen::Vector3d r = inverseRodriguezFormula(R);
+
+    bool allFinite = r.array().allFinite();
+
+    QVERIFY2(allFinite, "Expected coefficients are all supposed to be finite");
+
+}
+
+void TestGeometryLibRotation::testJacobianSO3_data() {
+
+    QTest::addColumn<float>("rx");
+    QTest::addColumn<float>("ry");
+    QTest::addColumn<float>("rz");
+
+    QTest::newRow("Identity") << 0.0f << 0.0f << 0.0f;
+
+    QTest::newRow("x axis one") << 1.0f << 0.0f << 0.0f;
+    QTest::newRow("y axis one") << 0.0f << 1.0f << 0.0f;
+    QTest::newRow("z axis one") << 0.0f << 0.0f << 1.0f;
+
+    QTest::newRow("x axis pi") << static_cast<float>(M_PI) << 0.0f << 0.0f;
+    QTest::newRow("y axis pi") << 0.0f << static_cast<float>(M_PI) << 0.0f;
+    QTest::newRow("z axis pi") << 0.0f << 0.0f << static_cast<float>(M_PI);
+
+    Eigen::Vector3f random = Eigen::Vector3f::Random();
+    QTest::newRow("Random 1") << random.x() << random.y() << random.z();
+    random = Eigen::Vector3f::Random();
+    QTest::newRow("Random 2") << random.x() << random.y() << random.z();
+    random = Eigen::Vector3f::Random();
+    QTest::newRow("Random 3") << random.x() << random.y() << random.z();
+
+}
+
+void TestGeometryLibRotation::testJacobianSO3() {
+
+    QFETCH(float, rx);
+    QFETCH(float, ry);
+    QFETCH(float, rz);
+
+    Eigen::Vector3f r(rx, ry, rz);
+
+    Eigen::Matrix3f R = rodriguezFormula<float>(r);
+    Eigen::Matrix3f Jr = diffRodriguezLieAlgebra<float>(r);
+
+    constexpr int nRuns = 100;
+
+    constexpr float epsilon = 1e-4;
+
+    for (int i = 0; i < nRuns; i++) {
+
+        Eigen::Vector3f dr = Eigen::Vector3f::Random();
+        dr *= epsilon;
+
+        Eigen::Matrix3f RJrdr = R * rodriguezFormula<float>(Jr*dr);
+
+        Eigen::Matrix3f Rdr = rodriguezFormula<float>(r + dr);
+
+        Eigen::Matrix3f delta = Rdr.transpose() * RJrdr;
+
+        Eigen::Vector3f logDelta = inverseRodriguezFormula(delta);
+
+        float error = logDelta.norm();
+
+        QVERIFY2( error < epsilon*1e-2, qPrintable(QString("Large error (%1) detected").arg(error)));
+    }
+
+}
+
 void TestGeometryLibRotation::testDiffRodriguez_data() {
 
 	QTest::addColumn<float>("rx");
@@ -280,7 +404,8 @@ void TestGeometryLibRotation::testDiffRigidBodyTransform() {
 
     for (int i = 0; i < nRepeats; i++) {
         Eigen::Vector3d vec(rd(re), rd(re), rd(re));
-        Eigen::Matrix<double,6,1> randomTransform(rd(re), rd(re), rd(re), rd(re), rd(re), rd(re));
+		Eigen::Matrix<double,6,1> randomTransform;
+		randomTransform << rd(re), rd(re), rd(re), rd(re), rd(re), rd(re);
 
         RigidBodyTransform transform(randomTransform);
         Eigen::Matrix<double,3,6> Jac = transform.Jacobian(vec);
@@ -315,7 +440,8 @@ void TestGeometryLibRotation::testDiffShapePreservingTransform() {
     for (int i = 0; i < nRepeats; i++) {
 
         Eigen::Vector3d vec(rd(re), rd(re), rd(re));
-        Eigen::Matrix<double,7,1> randomTransform(rd(re), rd(re), rd(re), rd(re), rd(re), rd(re), rd(re));
+		Eigen::Matrix<double,7,1> randomTransform;
+		randomTransform << rd(re), rd(re), rd(re), rd(re), rd(re), rd(re), rd(re);
 
         ShapePreservingTransform transform(randomTransform);
         Eigen::Matrix<double,3,7> Jac = transform.Jacobian(vec);
@@ -458,7 +584,8 @@ void TestGeometryLibRotation::testEulerRad2RMat() {
 
 void TestGeometryLibRotation::testRMat2EulerRad() {
 
-    Eigen::Vector3d r0 = rMat2eulerRadxyz<double>(Eigen::Matrix3d::Identity());
+    Eigen::Vector3d r0xyz = rMat2eulerRadxyz<double>(Eigen::Matrix3d::Identity());
+    Eigen::Vector3d r0zyx = rMat2eulerRadzyx<double>(Eigen::Matrix3d::Identity());
 
     float epsilon = 1e-5;
 
@@ -466,42 +593,86 @@ void TestGeometryLibRotation::testRMat2EulerRad() {
 
         float target = 0;
 
-        float mismatch = std::abs(r0(i) - target);
-        QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 0 angle rotation (mismatch = %1)").arg(mismatch)));
+        float mismatch = std::abs(r0xyz(i) - target);
+        QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 0 angle rotation order xyz (mismatch = %1)").arg(mismatch)));
+
+        mismatch = std::abs(r0zyx(i) - target);
+        QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 0 angle rotation order zyx (mismatch = %1)").arg(mismatch)));
     }
 
-    Eigen::Matrix3d RX = eulerRadXYZToRotation<double>(M_PI_2,0,0);
-    Eigen::Matrix3d RY = eulerRadXYZToRotation<double>(0,M_PI_2,0);
-    Eigen::Matrix3d RZ = eulerRadXYZToRotation<double>(0,0,M_PI_2);
-
-    std::array<Eigen::Matrix3d, 3> axisMatrices = {RX, RY, RZ};
-
     for (int axis = 0; axis < 3; axis++) {
-        Eigen::Matrix3d& R = axisMatrices[axis];
+        std::array<double,3> angles = {0,0,0};
+        angles[axis] = M_PI_2;
+        Eigen::Matrix3d R = eulerRadXYZToRotation<double>(angles[0],angles[1],angles[2]);
 
-        Eigen::Vector3d r = rMat2eulerRadxyz<double>(R);
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                QVERIFY2(std::isfinite(R(i,j)), "Error in input rotation matrix");
+            }
+        }
+
+        Eigen::Vector3d rxyz = rMat2eulerRadxyz<double>(R);
+        Eigen::Vector3d rzyx = rMat2eulerRadzyx<double>(R);
 
         for (int i = 0; i < 3; i++) {
 
-            float target = (i == axis) ? M_PI_2 : 0;
+            float target = angles[i];
 
-            float mismatch = std::abs(r(i) - target);
-            QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a PI/2 angle rotation (mismatch = %1)").arg(mismatch)));
+            float mismatch = std::abs(rxyz(i) - target);
+            QVERIFY2(mismatch <= epsilon,
+                     qPrintable(QString("Error when reconstructing a PI/2 angle rotation order xyz (axis = %1, mismatch = %2)").arg(axis).arg(mismatch)));
+
+            mismatch = std::abs(rzyx(i) - target);
+            QVERIFY2(mismatch <= epsilon,
+                     qPrintable(QString("Error when reconstructing a PI/2 angle rotation order zxy (axis = %1, mismatch = %2)").arg(axis).arg(mismatch)));
         }
 
     }
 
     std::array<double, 3> targets{M_PI_2/4,M_PI_2/3,M_PI_2/2};
-    Eigen::Matrix3d RStrange = eulerRadXYZToRotation<double>(targets[0], targets[1], targets[2]);
+    Eigen::Matrix3d RStrangeXYZ = eulerRadXYZToRotation<double>(targets[0], targets[1], targets[2]);
+    Eigen::Matrix3d RStrangeZYX = eulerRadZYXToRotation<double>(targets[0], targets[1], targets[2]);
 
-    Eigen::Vector3d rStrange = rMat2eulerRadxyz<double>(RStrange);
+    Eigen::Vector3d rStrangeXYZ = rMat2eulerRadxyz<double>(RStrangeXYZ);
+    Eigen::Vector3d rStrangeZYX = rMat2eulerRadzyx<double>(RStrangeZYX);
 
     for (int i = 0; i < 3; i++) {
 
         float target = targets[i];
 
-        float mismatch = std::abs(rStrange(i) - target);
-        QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 0 angle rotation (mismatch = %1)").arg(mismatch)));
+        float mismatch = std::abs(rStrangeXYZ(i) - target);
+        QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 0 angle rotation order xyz (mismatch = %1)").arg(mismatch)));
+
+        mismatch = std::abs(rStrangeZYX(i) - target);
+        QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a 0 angle rotation order zyx (mismatch = %1)").arg(mismatch)));
+    }
+
+    constexpr int nRepeats = 100;
+
+    std::uniform_real_distribution<double> rd(-M_PI, M_PI);
+
+    for (int i = 0; i < nRepeats; i++) {
+
+        Eigen::Matrix3d Rinitial = eulerRadXYZToRotation<double>(rd(re), rd(re), rd(re));
+
+        Eigen::Vector3d rXYZ = rMat2eulerRadxyz<double>(Rinitial);
+        Eigen::Vector3d rZYX = rMat2eulerRadzyx<double>(Rinitial);
+
+        Eigen::Matrix3d Rxyz = eulerRadXYZToRotation<double>(rXYZ[0],rXYZ[1],rXYZ[2]);
+        Eigen::Matrix3d Rzyx = eulerRadZYXToRotation<double>(rZYX[0],rZYX[1],rZYX[2]);
+
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+
+
+                float mismatch = std::abs(Rxyz(i,j) - Rinitial(i,j));
+                QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a random rotation order xyz (mismatch = %1)").arg(mismatch)));
+
+                mismatch = std::abs(Rzyx(i,j) - Rinitial(i,j));
+                QVERIFY2(mismatch <= epsilon, qPrintable(QString("Error when reconstructing a random rotation order zyx (mismatch = %1)").arg(mismatch)));
+            }
+        }
+
     }
 }
 
@@ -631,6 +802,103 @@ void TestGeometryLibRotation::testRAxis2QuatDiff() {
         double maxError = error.maxCoeff();
 
         QVERIFY(maxError < smoltol);
+
+    }
+
+}
+
+void TestGeometryLibRotation::testSensorFrameConversions() {
+
+    using FRD = AxisSystemDefintion<Front, Right, Down>;
+    using LFD = AxisSystemDefintion<Left, Front, Down>;
+
+    Eigen::Matrix3i frame1toframe2 = getSensorFrameConversion<FRD,LFD>();
+
+    QCOMPARE(frame1toframe2(0,0),0);
+    QCOMPARE(frame1toframe2(1,0),1);
+    QCOMPARE(frame1toframe2(2,0),0);
+    QCOMPARE(frame1toframe2(0,1),-1);
+    QCOMPARE(frame1toframe2(1,1),0);
+    QCOMPARE(frame1toframe2(2,1),0);
+    QCOMPARE(frame1toframe2(0,2),0);
+    QCOMPARE(frame1toframe2(1,2),0);
+    QCOMPARE(frame1toframe2(2,2),1);
+
+    QCOMPARE(frame1toframe2.determinant(),1);
+
+    frame1toframe2 = getSensorFrameConversion<LFD,FRD>();
+
+    QCOMPARE(frame1toframe2(0,0),0);
+    QCOMPARE(frame1toframe2(1,0),-1);
+    QCOMPARE(frame1toframe2(2,0),0);
+    QCOMPARE(frame1toframe2(0,1),1);
+    QCOMPARE(frame1toframe2(1,1),0);
+    QCOMPARE(frame1toframe2(2,1),0);
+    QCOMPARE(frame1toframe2(0,2),0);
+    QCOMPARE(frame1toframe2(1,2),0);
+    QCOMPARE(frame1toframe2(2,2),1);
+
+    QCOMPARE(frame1toframe2.determinant(),1);
+
+}
+
+void TestGeometryLibRotation::testRigidBodyTransformInterpolationOnManifold() {
+
+    constexpr int nRuns = 10;
+
+    std::uniform_real_distribution<float> dataGen(-2, 2);
+
+    for (int i = 0; i < nRuns; i++) {
+
+        Eigen::Vector3d r1;
+        r1 << dataGen(re), dataGen(re), dataGen(re);
+        Eigen::Vector3d r2;
+        r2 << dataGen(re), dataGen(re), dataGen(re);
+
+        Eigen::Vector3d t1;
+        t1 << dataGen(re), dataGen(re), dataGen(re);
+        Eigen::Vector3d t2;
+        t2 << dataGen(re), dataGen(re), dataGen(re);
+
+        RigidBodyTransform<double> T1(r1,t1);
+        RigidBodyTransform<double> T2(r2,t2);
+
+        RigidBodyTransform<double> T0(Eigen::Vector3d::Zero(),Eigen::Vector3d::Zero());
+
+        RigidBodyTransform<double> interpolated1 = interpolateRigidBodyTransformOnManifold<double>(1, T1, 0, T2);
+        RigidBodyTransform<double> interpolated2 = interpolateRigidBodyTransformOnManifold<double>(0, T1, 1, T2);
+
+        for (int i = 0; i < 3; i++) {
+
+            QCOMPARE(interpolated1.r[i], T1.r[i]);
+            QCOMPARE(interpolated1.t[i], T1.t[i]);
+
+            QCOMPARE(interpolated2.r[i], T2.r[i]);
+            QCOMPARE(interpolated2.t[i], T2.t[i]);
+        }
+
+        RigidBodyTransform<double> interpolated025 = interpolateRigidBodyTransformOnManifold<double>(0.25, T1, 0.75, T2);
+        RigidBodyTransform<double> interpolated050 = interpolateRigidBodyTransformOnManifold<double>(0.5, T1, 0.5, T2);
+        RigidBodyTransform<double> interpolated075 = interpolateRigidBodyTransformOnManifold<double>(0.75, T1, 0.25, T2);
+
+        RigidBodyTransform<double> interpolated025d = interpolateRigidBodyTransformOnManifold<double>(0.25, T0, 0.75, T2*T1.inverse());
+        RigidBodyTransform<double> interpolated050d = interpolateRigidBodyTransformOnManifold<double>(0.5, T0, 0.5, T2*T1.inverse());
+        RigidBodyTransform<double> interpolated075d = interpolateRigidBodyTransformOnManifold<double>(0.75, T0, 0.25, T2*T1.inverse());
+
+        RigidBodyTransform<double> interpolated025e = interpolated025d*T1;
+        RigidBodyTransform<double> interpolated050e = interpolated050d*T1;
+        RigidBodyTransform<double> interpolated075e = interpolated075d*T1;
+
+        for (int i = 0; i < 3; i++) {
+
+            QCOMPARE(interpolated025e.r[i], interpolated025.r[i]);
+            QCOMPARE(interpolated050e.r[i], interpolated050.r[i]);
+            QCOMPARE(interpolated075e.r[i], interpolated075.r[i]);
+
+            QCOMPARE(interpolated025e.t[i], interpolated025.t[i]);
+            QCOMPARE(interpolated050e.t[i], interpolated050.t[i]);
+            QCOMPARE(interpolated075e.t[i], interpolated075.t[i]);
+        }
 
     }
 

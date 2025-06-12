@@ -12,6 +12,7 @@
 #include <Eigen/QR>
 
 #include "./convolutions.h"
+#include "./standardConvolutionFilters.h"
 #include "./edgesDetection.h"
 
 #include "../geometry/rotations.h"
@@ -529,11 +530,11 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 
 	//Constraint Gradient N = 0
     MatrixAType Dx;
-    Dx.resize(2*VectorNlen, VectorNlen);
+    Dx.resize(VectorNlen, VectorNlen);
     Dx.reserve(Eigen::VectorXi::Constant(VectorNlen, 4));
 
     MatrixAType Dy;
-    Dy.resize(2*VectorNlen, VectorNlen);
+    Dy.resize(VectorNlen, VectorNlen);
     Dy.reserve(Eigen::VectorXi::Constant(VectorNlen, 4));
 
     for (int i = 0; i < idxConverterOut.numberOfPossibleIndices(); i++) {
@@ -552,7 +553,7 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
             Dx.coeffRef(i,j) += 1;
         }
 
-        if (idxOut[0]+1 < outSize[0]) {
+        /*if (idxOut[0]+1 < outSize[0]) {
             idxOutP1[0] += 1;
 
             int j = idxConverterOut.getPseudoFlatIdFromIndex(idxOut);
@@ -560,7 +561,7 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 
             j = idxConverterOut.getPseudoFlatIdFromIndex(idxOutP1);
             Dx.coeffRef(i+VectorNlen,j) += 1;
-        }
+        }*/
 
         idxOutM1 = idxOut;
         idxOutP1 = idxOut;
@@ -575,7 +576,7 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
             Dy.coeffRef(i,j) += 1;
         }
 
-        if (idxOut[1]+1 < outSize[1]) {
+        /*if (idxOut[1]+1 < outSize[1]) {
             idxOutP1[1] += 1;
 
             int j = idxConverterOut.getPseudoFlatIdFromIndex(idxOut);
@@ -583,7 +584,7 @@ Multidim::Array<ComputeType, 3> normalMapFromIntrinsicDecomposition(Multidim::Ar
 
             j = idxConverterOut.getPseudoFlatIdFromIndex(idxOutP1);
             Dy.coeffRef(i+VectorNlen,j) += 1;
-        }
+        }*/
     }
 
     //Constraint H(||\nabla R||-c)\dotprod{S\nabla R}{N} = 0
@@ -839,7 +840,9 @@ Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType,
 	using VectorBType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
 	using VectorSolType = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
 
-	using SolverType = Eigen::LeastSquaresConjugateGradient<MatrixAType, Eigen::LeastSquareDiagonalPreconditioner<ComputeType>>;
+    //TODO: check why CG takes so long...
+    //using SolverType = Eigen::LeastSquaresConjugateGradient<MatrixAType, Eigen::LeastSquareDiagonalPreconditioner<ComputeType>>;
+    using SolverType = Eigen::SparseLU<MatrixAType, Eigen::COLAMDOrdering<int> >;
 
 	if (normalmap.shape()[2] != 3) {
 		return Multidim::Array<ComputeType, 2>();
@@ -855,8 +858,8 @@ Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType,
 			ComputeType ny = normalmap.valueUnchecked(i,j,1);
 			ComputeType nz = normalmap.valueUnchecked(i,j,2);
 
-			ComputeType sx = (nx > 0) ? 1 : (sx < 0) ? -1 : 0;
-			ComputeType sy = (ny > 0) ? 1 : (sx < 0) ? -1 : 0;
+            ComputeType sx = (nx > 0) ? 1 : (nx < 0) ? -1 : 0;
+            ComputeType sy = (ny > 0) ? 1 : (nx < 0) ? -1 : 0;
 
 			ComputeType dx = nx/nz;
 
@@ -876,10 +879,17 @@ Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType,
 	}
 
 	Multidim::IndexConverter<2> outIdxs(shape);
-	Multidim::IndexConverter<3> inIdxs(diffMap.shape());
+    std::array<int,2> obsXMapShape = {diffMap.shape()[0], diffMap.shape()[1]};
+    std::array<int,2> obsYMapShape = {diffMap.shape()[0], diffMap.shape()[1]};
+    obsXMapShape[1] -= 1;
+    obsYMapShape[0] -= 1;
+    Multidim::IndexConverter<2> obsXIdxs(obsXMapShape);
+    Multidim::IndexConverter<2> obsYIdxs(obsYMapShape);
 
-	int nObs = inIdxs.numberOfPossibleIndices() + 1;
-	int nVars = outIdxs.numberOfPossibleIndices();
+    int xObsDelta = obsXIdxs.numberOfPossibleIndices();
+
+    int nObs = xObsDelta + obsYIdxs.numberOfPossibleIndices() + 1; //2 observations (forward and backward) per obs idx, and one observation to fix the integration constant.
+    int nVars = outIdxs.numberOfPossibleIndices();
 
 	MatrixAType A;
 
@@ -889,47 +899,64 @@ Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType,
 	VectorBType b;
 	b.resize(nObs);
 
-	for (int i = 0; i < inIdxs.numberOfPossibleIndices(); i++) {
+    for (int i = 0; i < obsXIdxs.numberOfPossibleIndices(); i++) {
 
-		std::array<int,3> idxIn = inIdxs.getIndexFromPseudoFlatId(i);
-		std::array<int,2> outCenterIdx = {idxIn[0], idxIn[1]};
+        std::array<int,2> outCenterIdx = obsXIdxs.getIndexFromPseudoFlatId(i);;
+        std::array<int,3> idxObs = {outCenterIdx[0], outCenterIdx[1], 0};
+        std::array<int,3> idxInBack = idxObs;
+        std::array<int,3> idxInFront = idxObs;
 
-		if (idxIn[2] == 0) { //xDiff
-			int xPosM1 = (outCenterIdx[1] > 0) ? outCenterIdx[1]-1 : 0;
-			int xPosP1 = (outCenterIdx[1] < shape[1]-1) ? outCenterIdx[1]+1 : shape[1]-1;
+        int xPosBack = outCenterIdx[1];
+        int xPosFront = outCenterIdx[1]+1;
 
-			int jM1 = outIdxs.getPseudoFlatIdFromIndex({outCenterIdx[0], xPosM1});
-			int jP1 = outIdxs.getPseudoFlatIdFromIndex({outCenterIdx[0], xPosP1});
+        idxInFront[1] += 1;
 
-			A.coeffRef(i,jM1) += -1;
-			A.coeffRef(i,jP1) += 1;
+        int jBack = outIdxs.getPseudoFlatIdFromIndex({outCenterIdx[0], xPosBack});
+        int jFront = outIdxs.getPseudoFlatIdFromIndex({outCenterIdx[0], xPosFront});
 
-		} else if (idxIn[2] == 1) { //yDiff
-			int yPosM1 = (outCenterIdx[0] < shape[0]-1) ? outCenterIdx[0]+1 : shape[0]-1;
-			int yPosP1 = (outCenterIdx[0] > 0) ? outCenterIdx[0]-1 : 0;
+        A.coeffRef(i,jBack) += -1;
+        A.coeffRef(i,jFront) += 1;
 
-			int jM1 = outIdxs.getPseudoFlatIdFromIndex({yPosM1, outCenterIdx[1]});
-			int jP1 = outIdxs.getPseudoFlatIdFromIndex({yPosP1, outCenterIdx[1]});
-
-			A.coeffRef(i,jM1) += -1;
-			A.coeffRef(i,jP1) += 1;
-		}
-
-		b[i] = diffMap.valueUnchecked(idxIn);
-
+        b[i] = (diffMap.valueUnchecked(idxInBack) + diffMap.valueUnchecked(idxInFront))/2; //mean gradient
 	}
 
-	int zeroPosIdx = outIdxs.getPseudoFlatIdFromIndex({0,0});
+    for (int i = 0; i < obsYIdxs.numberOfPossibleIndices(); i++) {
+
+        std::array<int,2> outCenterIdx = obsYIdxs.getIndexFromPseudoFlatId(i);
+        std::array<int,3> idxObs = {outCenterIdx[0], outCenterIdx[1], 1};
+        std::array<int,3> idxInBack = idxObs;
+        std::array<int,3> idxInFront = idxObs;
+
+        int yPosBack = outCenterIdx[0];
+        int yPosFront = outCenterIdx[0]+1;
+
+        idxInFront[0] += 1;
+
+        int jBack = outIdxs.getPseudoFlatIdFromIndex({yPosBack, outCenterIdx[1]});
+        int jFront = outIdxs.getPseudoFlatIdFromIndex({yPosFront, outCenterIdx[1]});
+
+        A.coeffRef(i+xObsDelta,jBack) += -1;
+        A.coeffRef(i+xObsDelta,jFront) += 1;
+
+        b[i+xObsDelta] = (diffMap.valueUnchecked(idxInBack) + diffMap.valueUnchecked(idxInFront))/2; //mean gradient
+    }
+
+    int zeroPosIdx = outIdxs.getPseudoFlatIdFromIndex({0,0});
 
 	A.coeffRef(nObs-1,zeroPosIdx) = 1;
 	b[nObs-1] = 0;
 
-	A.makeCompressed();
+    MatrixAType AtA = A.transpose()*A;
+
+    AtA.makeCompressed();
 
 	SolverType solver;
-	solver.compute(A);
 
-	VectorSolType solution = solver.solve(b);
+    solver.analyzePattern(AtA);
+    solver.factorize(AtA);
+    //solver.compute(AtA);
+
+    VectorSolType solution = solver.solve(A.transpose()*b);
 
 	Multidim::Array<ComputeType, 2> ret(shape);
 
@@ -943,11 +970,17 @@ Multidim::Array<ComputeType, 2> heightFromNormalMap(Multidim::Array<ComputeType,
 }
 
 template<typename ComputeType>
-Multidim::Array<ComputeType, 2> flattenHeightMapInAreaOfInterest(Multidim::Array<ComputeType, 2> const& baseHeightMap, Multidim::Array<bool, 2> const& mask) {
+Multidim::Array<ComputeType, 2> flattenHeightMapInAreaOfInterest(Multidim::Array<ComputeType, 2> const& baseHeightMap,
+                                                                 Multidim::Array<bool, 2> const& mask,
+                                                                 bool ensureConvex = false) {
 
 	using MatAT = Eigen::Matrix<ComputeType, Eigen::Dynamic, 3>;
 	using VecbT = Eigen::Matrix<ComputeType, Eigen::Dynamic, 1>;
 	using VecSolT = Eigen::Matrix<ComputeType, 3, 1>;
+
+    using MovingAxis = ImageProcessing::Convolution::MovingWindowAxis;
+    using Padding = ImageProcessing::Convolution::PaddingInfos;
+    using FiltType = Convolution::Filter<ComputeType, MovingAxis, MovingAxis>;
 
 	auto shape = baseHeightMap.shape();
 
@@ -1014,6 +1047,52 @@ Multidim::Array<ComputeType, 2> flattenHeightMapInAreaOfInterest(Multidim::Array
 		}
 	}
 
+    if (ensureConvex) {
+
+        Multidim::Array<ComputeType,2> array(3,3);
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                array.atUnchecked(i,j) = 1;
+            }
+        }
+        array.atUnchecked(1,1) = 8;
+
+        Padding diff_pad(1, ImageProcessing::Convolution::PaddingType::Mirror);
+        FiltType convDetector(array, MovingAxis(diff_pad), MovingAxis(diff_pad));
+
+        Multidim::Array<ComputeType,2> convex = convDetector.convolve(ret);
+
+        ComputeType mean = 0;
+
+        for (int i = 0; i < mask.shape()[0]; i++) {
+            for (int j = 0; j < mask.shape()[1]; j++) {
+
+                if (mask.valueUnchecked(i,j)) {
+                    mean += (convex.atUnchecked(i,j) >= 0) ? 1 : -1;
+                }
+            }
+        }
+
+        if (mean < 0) {
+            minVal = std::numeric_limits<ComputeType>::max();
+
+            for (int i = 0; i < mask.shape()[0]; i++) {
+                for (int j = 0; j < mask.shape()[1]; j++) {
+
+                    if (mask.valueUnchecked(i,j)) {
+                        ComputeType val = ret.atUnchecked(i,j);
+                        ret.atUnchecked(i,j) = -val;
+
+                        if (minVal > val) {
+                            minVal = val;
+                        }
+                    }
+                }
+            }
+        }
+
+    }
+
 	for (int i = 0; i < mask.shape()[0]; i++) {
 		for (int j = 0; j < mask.shape()[1]; j++) {
 
@@ -1028,6 +1107,106 @@ Multidim::Array<ComputeType, 2> flattenHeightMapInAreaOfInterest(Multidim::Array
 
 	return ret;
 
+}
+
+template<typename ComputeType>
+Eigen::Matrix<ComputeType, 3, 1> estimateLightDirection(Multidim::Array<ComputeType, 2> const& shading, int lowPassRadius = 3) {
+
+    using MovingAxis = ImageProcessing::Convolution::MovingWindowAxis;
+    using Padding = ImageProcessing::Convolution::PaddingInfos;
+    using FiltType = Convolution::Filter<ComputeType, MovingAxis, MovingAxis>;
+
+    auto shape = shading.shape();
+
+    Padding diff_pad(1, ImageProcessing::Convolution::PaddingType::Mirror);
+
+    std::array<FiltType, 2> finiteDifferencesFilters =
+            ImageProcessing::Convolution::finiteDifferencesKernels<ComputeType>(MovingAxis(diff_pad), MovingAxis(diff_pad));
+
+    std::array<FiltType, 2> extendingKernels =
+            ImageProcessing::Convolution::extendLinearKernels<ComputeType>(MovingAxis(diff_pad), MovingAxis(diff_pad));
+
+
+    Multidim::Array<ComputeType, 2> lp_filtered;
+
+    if (lowPassRadius >= 1) {
+
+        Padding pad(lowPassRadius, ImageProcessing::Convolution::PaddingType::Mirror);
+
+        constexpr bool normalize = false;
+        float sigma = static_cast<float>(lowPassRadius+1)/2;
+
+        std::array<FiltType, 2> separatedGaussianFilter =
+                ImageProcessing::Convolution::separatedGaussianFilters(sigma, lowPassRadius, normalize, MovingAxis(pad), MovingAxis(pad));
+
+        lp_filtered = separatedGaussianFilter[0].convolve(shading);
+
+        for (int i = 1; i < separatedGaussianFilter.size(); i++) {
+            lp_filtered = separatedGaussianFilter[i].convolve(lp_filtered);
+        }
+
+    } else {
+        lp_filtered = shading;
+    }
+
+    std::array<Multidim::Array<ComputeType, 2>, 2> diffs;
+
+    for (int diff = 0; diff < 2; diff++) {
+
+        FiltType filt1 = (diff == 0) ? finiteDifferencesFilters[0] : extendingKernels[0];
+
+        diffs[diff] = filt1.convolve(lp_filtered);
+
+        FiltType filt2 = (diff == 1) ? finiteDifferencesFilters[1] : extendingKernels[1];
+
+        diffs[diff] = filt2.convolve(diffs[diff]);
+    }
+
+    Eigen::Vector2d centroid(0,0);
+    Eigen::Matrix<double,Eigen::Dynamic,2> directions;
+
+    int nDir = shape[0]*shape[1];
+    directions.resize(nDir,2);
+
+    double wMeasurements = 0;
+    int id = 0;
+
+    for (int i = 0; i < shape[0]; i++) {
+        for (int j = 0; j < shape[1]; j++) {
+
+            double val = lp_filtered.atUnchecked(i,j);
+
+            wMeasurements += val;
+            centroid[0] += i*val;
+            centroid[1] += j*val;
+
+            directions(id,0) = diffs[0].atUnchecked(i,j);
+            directions(id,1) = diffs[1].atUnchecked(i,j);
+            id++;
+
+        }
+    }
+
+    centroid /= wMeasurements;
+    centroid -= Eigen::Vector2d(shape[0], shape[1])/2;
+
+    Eigen::JacobiSVD<Eigen::Matrix<double,Eigen::Dynamic,2>> svd(directions, Eigen::ComputeFullV);
+    Eigen::Vector2d direction = svd.matrixV().col(0);
+
+    direction.normalize();
+
+    if (direction.dot(centroid) < 0) {
+        direction = -direction;
+    }
+
+    double norm = direction.norm();
+
+    Eigen::Matrix<ComputeType, 3, 1> ret;
+    ret[0] = -direction[1]; //light comes from oppossite directions.
+    ret[1] = direction[0]; //first image axis is y geometrically
+    ret[2] = norm; //assume 45° light
+
+    return ret;
 }
 
 } // namespace ImageProcessing

@@ -17,14 +17,14 @@ int main() {
 	QDir out_data_dir(exec_dir);
 
 	if (!test_data_dir.exists()) {
-		out << "Unable to find source folder ! Abort example running" << endl;
+		out << "Unable to find source folder ! Abort example running" << Qt::endl;
 		return -1;
 	}
 
 	bool found = test_data_dir.cd("test/test_data/stereo_images");
 
 	if (!found) {
-		out << "Unable to find test data folder ! Abort example running" << endl;
+		out << "Unable to find test data folder ! Abort example running" << Qt::endl;
 		return -1;
 	}
 
@@ -33,7 +33,7 @@ int main() {
 	while (it.hasNext()) {
 		QString path = it.next();
 
-		out << "Processing file: " << path << endl;
+		out << "Processing file: " << path << Qt::endl;
 		QFileInfo info(path);
 
 		if (path.toLower().endsWith(".bmp") or
@@ -46,9 +46,9 @@ int main() {
 			bool ok = StereoVision::IO::writeImage<uint8_t>(out_data_dir.filePath(info.fileName()).toStdString(), img);
 
 			if (ok) {
-				out << "\t" << "File succesfully written to disk" << endl;
+				out << "\t" << "File succesfully written to disk" << Qt::endl;
 			} else {
-				out << "\t" << "Failed to write file to disk" << endl;
+				out << "\t" << "Failed to write file to disk" << Qt::endl;
 			}
 
 		} else if (path.toLower().endsWith(".pfm")) {
@@ -80,14 +80,14 @@ int main() {
 			bool ok = StereoVision::IO::writeImage<uint8_t>((out_data_dir.filePath(info.baseName()) + ".bmp" ).toStdString(), img);
 
 			if (ok) {
-				out << "\t" << "File succesfully written to disk" << endl;
+				out << "\t" << "File succesfully written to disk" << Qt::endl;
 			} else {
-				out << "\t" << "Failed to write file to disk" << endl;
+				out << "\t" << "Failed to write file to disk" << Qt::endl;
 			}
 		}
 	}
 
-	out << "Finished processing files" << endl;
+	out << "Finished processing files" << Qt::endl;
 
 	return 0;
 }

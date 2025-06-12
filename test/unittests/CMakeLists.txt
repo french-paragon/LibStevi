@@ -81,6 +81,10 @@ add_test(TestImageClustering testImageClustering)
 
 add_executable(testImageIO testImageIO.cpp)
 target_link_libraries(testImageIO ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test Threads::Threads)
+if (TIFF_FOUND)
+        target_compile_definitions(testImageIO PRIVATE STEVI_IO_USE_TIFF)
+endif (TIFF_FOUND)
+
 add_test(TestImageIO testImageIO)
 
 add_executable(testFiniteDifferences testFiniteDifferences.cpp)
@@ -138,6 +142,23 @@ add_test(TestAssignementProblems testAssignementProblems)
 add_executable(testInterpolation testInterpolation.cpp)
 target_link_libraries(testInterpolation ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestInterpolation testInterpolation)
+
+add_executable(testPartitionTrees testPartitionTrees.cpp)
+target_link_libraries(testPartitionTrees ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestPartitionTrees testPartitionTrees)
+
+add_executable(testTypesUtils testTypesUtils.cpp)
+target_link_libraries(testTypesUtils ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestTypesUtils testTypesUtils)
+
+configure_file(testPointCloudIO.cpp testPointCloudIO.cpp)
+add_executable(testPointCloudIO ${CMAKE_CURRENT_BINARY_DIR}/testPointCloudIO.cpp)
+target_link_libraries(testPointCloudIO ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Core)
+add_test(TestPointCloudIO testPointCloudIO)
+
+add_executable(testInpaintingAlgorithms testInpaintingAlgorithms.cpp)
+target_link_libraries(testInpaintingAlgorithms ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestInpaintingAlgorithms testInpaintingAlgorithms)
 
 
 

@@ -29,6 +29,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace StereoVision {
 namespace Interpolation {
 
+enum BorderCondition {
+    Zero,
+    Constant
+};
+
 template<typename T>
 T unidimensionalPyramidFunction(T const& v) {
     T out = -std::abs(v) + 1;
@@ -36,6 +41,23 @@ T unidimensionalPyramidFunction(T const& v) {
         out = 0;
     }
     return out;
+}
+
+/*!
+ * \brief unidimensionalBicubicKernel represent the unidimensional version of the bi-cubic interpolation kernel with unit nodes
+ * \param v the parameter of the function
+ * \return the kernel value
+ */
+template<typename T, int ratioNumerator = 1, int ratioDenominator = 2>
+T unidimensionalBicubicKernel(T const& v) {
+    T a = -T(ratioNumerator)/T(ratioDenominator);
+    T x = std::abs(v);
+    if (x < 1) {
+        return (a+2)*x*x*x - (a+3)*x*x + 1;
+    } else if (x < 2) {
+        return a*x*x*x - 5*a*x*x + 8*a*x - 4*a;
+    }
+    return 0;
 }
 
 template<typename T, int inDIM>
@@ -47,7 +69,16 @@ T pyramidFunction(std::array<T,inDIM> const& pos) {
     return out;
 }
 
-template <int inDIM, typename T, T(kernel)(std::array<T,inDIM> const&), int kernelRadius>
+template<typename T, int inDIM, int ratioNumerator = 1, int ratioDenominator = 2>
+T bicubicKernel(std::array<T,inDIM> const& pos) {
+    T out = 1;
+    for (int i = 0; i < inDIM; i++) {
+        out *= unidimensionalBicubicKernel<T,ratioNumerator,ratioDenominator>(pos[i]);
+    }
+    return out;
+}
+
+template <int inDIM, typename T, T(kernel)(std::array<T,inDIM> const&), int kernelRadius, BorderCondition bCond = Constant>
 inline T interpolateValue(Multidim::Array<T, inDIM> const& input,
                           std::array<T,inDIM> const& fractionalCoord) {
 
@@ -91,8 +122,10 @@ inline T interpolateValue(Multidim::Array<T, inDIM> const& input,
         IndexIn filterCoordinate = gridIdxConverter.getIndexFromPseudoFlatId(j);
         IndexIn imgCoordinate = w_min + filterCoordinate;
 
-        if (!imgCoordinate.isInLimit(imgShape)) {
-            continue;
+        if (bCond == Zero) {
+            if (!imgCoordinate.isInLimit(imgShape)) {
+                continue;
+            }
         }
 
         CoordIn kernelCoordinate;
@@ -100,7 +133,15 @@ inline T interpolateValue(Multidim::Array<T, inDIM> const& input,
             kernelCoordinate[i] = imgCoordinate[i] - c[i];
         }
 
-        v += kernel(kernelCoordinate) * input.valueUnchecked(imgCoordinate);
+        if (bCond != Zero) {
+            if (!imgCoordinate.isInLimit(imgShape)) {
+                imgCoordinate.clip(imgShape);
+            }
+        }
+
+        T kerVal = kernel(kernelCoordinate);
+        T arrayVal = input.valueUnchecked(imgCoordinate);
+        v += kerVal * arrayVal;
 
     }
 
@@ -108,7 +149,7 @@ inline T interpolateValue(Multidim::Array<T, inDIM> const& input,
 
 }
 
-template <int inDIM, int outDIM, typename T, T(kernel)(std::array<T,inDIM> const&), int kernelRadius>
+template <int inDIM, int outDIM, typename T, T(kernel)(std::array<T,inDIM> const&), int kernelRadius, BorderCondition bCond = Constant>
 Multidim::Array<T, outDIM> interpolate(Multidim::Array<T, inDIM> const& input,
                                        Multidim::Array<T, outDIM + 1> const& coordinates) {
 
@@ -163,7 +204,7 @@ Multidim::Array<T, outDIM> interpolate(Multidim::Array<T, inDIM> const& input,
             c[i] = coordinates.valueUnchecked(pos);
         }
 
-        T v = interpolateValue<2,T,kernel,kernelRadius>(input, c);
+        T v = interpolateValue<2,T,kernel,kernelRadius,bCond>(input, c);
 
         out.atUnchecked(b_o) = v;
     }

@@ -22,6 +22,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../geometry/core.h"
 #include <Eigen/Geometry>
 
+#include "../utils/types_manipulations.h"
+
 namespace StereoVision {
 namespace Geometry {
 
@@ -58,12 +60,21 @@ Eigen::Matrix<T,3,1> angleAxisRotate(Eigen::Matrix<T,3,1> const& r, Eigen::Matri
 template<typename T>
 Eigen::Matrix<T,3,1> inverseRodriguezFormula(Eigen::Matrix<T,3,3> const& R) {
 
-    T d =  0.5*(R(0,0) + R(1,1) + R(2,2) - T(1));
+    T trace = R(0,0) + R(1,1) + R(2,2);
+    T d =  0.5*(trace - T(1));
+
+    if (d < T(-1)) { //necessary for numerical stability.
+        d = T(-1);
+    }
+
     Eigen::Matrix<T,3,1> omega;
 
     Eigen::Matrix<T,3,1> dR = unskew<T>(R - R.transpose());
 
     T nDr = dR.norm();
+
+    double d_threshold = (TypesManipulations::typeExceedFloat32Precision<T>()) ? 0.999999 : 0.999;
+    double nDr_threshold = (TypesManipulations::typeExceedFloat32Precision<T>()) ? 1e-6 : 1e-3;
 
     if (d>0.999)
     {
@@ -71,8 +82,29 @@ Eigen::Matrix<T,3,1> inverseRodriguezFormula(Eigen::Matrix<T,3,3> const& R) {
     }
     else if (nDr < 1e-3) {
         T theta = acos(d);
-        Eigen::Matrix<T,3,1> d = R.diagonal();
-        omega = theta*(d - Eigen::Matrix<T,3,1>::Ones()*d.minCoeff())/(T(1) - d.minCoeff());
+        Eigen::Matrix<T,3,3> S = R + R.transpose() + (T(1) - trace)*Eigen::Matrix<T,3,3>::Identity();
+        Eigen::Matrix<T,3,1> n;
+
+        for (int i = 0; i < 3; i++) {
+            n[i] = sqrt(std::max<T>(S(i,i)/(T(3) - trace), T(0))); //compute the values, up to sign
+        }
+
+        if (n[0] > n[1] and n[0] > n[2]) {
+            n[1] = (S(0,1)/(T(3) - trace))/n[0];
+            n[2] = (S(0,2)/(T(3) - trace))/n[0];
+        }
+
+        if (n[1] > n[0] and n[1] > n[2]) {
+            n[0] = (S(1,0)/(T(3) - trace))/n[1];
+            n[2] = (S(1,2)/(T(3) - trace))/n[1];
+        }
+
+        if (n[2] > n[0] and n[2] > n[1]) {
+            n[0] = (S(2,0)/(T(3) - trace))/n[2];
+            n[1] = (S(2,1)/(T(3) - trace))/n[2];
+        }
+
+        omega = theta*n;
     }
     else
     {
@@ -83,6 +115,14 @@ Eigen::Matrix<T,3,1> inverseRodriguezFormula(Eigen::Matrix<T,3,3> const& R) {
     return omega;
 }
 
+/*!
+ * \brief diffRodriguezLieAlgebra gives the right Jacobian of SO(3) for a given axis angle vector
+ * \param r the rotation axis
+ * \return J_{so(3)}(r), the right Jacobian of SO(3)
+ *
+ * J_{so(3)}(r) relate additional increments in so(3) and multiplicative increments in SO(3) such that:
+ * Exp(r + dr) = Exp(r)Exp(J_{so(3)}(r)dr) and Log(Exp(r)Exp(dr)) = r + J_{so(3)}(r)^-1 dr  for small dr
+ */
 template<typename T>
 Eigen::Matrix<T,3,3> diffRodriguezLieAlgebra(Eigen::Matrix<T,3,1> const& r) {
 
@@ -97,15 +137,15 @@ Eigen::Matrix<T,3,3> diffRodriguezLieAlgebra(Eigen::Matrix<T,3,1> const& r) {
 
     if (theta > 1e-6) {
         a = sin(theta)/theta;
-        b = (1 - cos(theta))/(theta*theta);
+        b = -(1 - cos(theta))/(theta*theta);
         c = (1 - a)/(theta*theta);
     } else {
         a = 1;
-        b = 1./2.;
+        b = -1./2.;
         c = 1./6.;
     }
 
-    dR = a*Eigen::Matrix<T,3,3>::Identity() + b*m + c*(r*r.transpose());
+    dR = Eigen::Matrix<T,3,3>::Identity() + b*m + c*(m*m);
 
     return dR;
 }
@@ -153,7 +193,7 @@ Eigen::Matrix<T,3,1> diffAngleAxisRotate(Eigen::Matrix<T,3,1> const& r, Eigen::M
     Eigen::Matrix<T,3,1> diffRcrossRxv = r.cross(diffRxv) + diffR.cross(rxv);
 
     if (theta < 1e-3) {
-        -r[axis]/3 * rxv + (1-theta*theta/6)*diffRxv +
+        return -r[axis]/3 * rxv + (1-theta*theta/6)*diffRxv +
                -r[axis]/12 * rxv + (0.5 - theta*theta/24)*diffRcrossRxv;
     } //Taylor approximation for small values of theta
 
@@ -324,7 +364,7 @@ public:
     }
 
     template <typename Tc>
-    RigidBodyTransform<Tc> cast() {
+    RigidBodyTransform<Tc> cast() const {
         return RigidBodyTransform<Tc>(r.template cast<Tc>(), t.template cast<Tc>());
     }
 
@@ -370,6 +410,29 @@ protected:
 template<typename T>
 RigidBodyTransform<T> operator*(T scale, RigidBodyTransform<T> transform) {
     return transform.operator*(scale);
+}
+
+/*!
+ * \brief interpolateRigidBodyTransformOnManifold interpolate between two RigidBodyTransform on the manifold
+ * \param w1 weight for t1
+ * \param t1 transformation 1
+ * \param w2 weight for t2
+ * \param t2 transformation 2
+ * \return the linear interpolation between t1 and t2, using weights w1 and w2 and done on the manifold (se(3)).
+ */
+template<typename T>
+RigidBodyTransform<T> interpolateRigidBodyTransformOnManifold(
+        T w1,
+        RigidBodyTransform<T> const& t1,
+        T w2,
+        RigidBodyTransform<T> const& t2) {
+
+    RigidBodyTransform<T> transform = t2*t1.inverse();
+
+    T w = w2 / (w1 + w2);
+
+    return (w*transform)*t1;
+
 }
 
 template<typename T>
@@ -422,7 +485,7 @@ public:
     }
 
     template <typename Tc>
-    ShapePreservingTransform<Tc> cast() {
+    ShapePreservingTransform<Tc> cast() const {
         return ShapePreservingTransform<Tc>(r.template cast<Tc>(), t.template cast<Tc>(), static_cast<Tc>(s));
     }
 
@@ -491,6 +554,24 @@ Eigen::Matrix<Scalar, 3, 3> eulerDegXYZToRotation(Scalar eulerX,
 }
 
 template <typename Scalar>
+Eigen::Matrix<Scalar, 3, 3> eulerRadZYXToRotation(Scalar eulerX,
+                                                  Scalar eulerY,
+                                                  Scalar eulerZ) {
+
+    return (Eigen::AngleAxis<Scalar>(eulerZ, Eigen::Matrix<Scalar,3,1>::UnitZ())*
+            Eigen::AngleAxis<Scalar>(eulerY, Eigen::Matrix<Scalar,3,1>::UnitY())*
+            Eigen::AngleAxis<Scalar>(eulerX, Eigen::Matrix<Scalar,3,1>::UnitX())).toRotationMatrix();
+
+}
+
+template <typename Scalar>
+Eigen::Matrix<Scalar, 3, 3> eulerDegZYXToRotation(Scalar eulerX,
+                                                  Scalar eulerY,
+                                                  Scalar eulerZ) {
+    return eulerRadZYXToRotation(Scalar(eulerX/180*M_PI), Scalar(eulerY/180*M_PI), Scalar(eulerZ/180*M_PI));
+}
+
+template <typename Scalar>
 Eigen::Matrix<Scalar, 3, 1> rMat2eulerRadxyz(Eigen::Matrix<Scalar, 3, 3> const& RMat) {
     // assuming RMat = RMatx RMaty RMatz; Solution is:
     //        [      cy cz            - cy sz         sy    ]
@@ -499,13 +580,21 @@ Eigen::Matrix<Scalar, 3, 1> rMat2eulerRadxyz(Eigen::Matrix<Scalar, 3, 3> const& 
     //        [                                             ]
     //        [ sx sz - cx cz sy  cx sy sz + cz sx   cx cy  ]
 
-    double sinY = RMat(0,2);
-    double cosY = sqrt(1 - sinY*sinY);
+    double sinX;
+    double cosX;
 
-    double sinZ = -RMat(0,1)/cosY;
-    double sinX = -RMat(1,2)/cosY;
+    double sinY;
+    double cosY;
 
-    if (!std::isfinite(sinZ) or ! std::isfinite(sinX)) {
+    double sinZ;
+    double cosZ;
+
+    sinY = RMat(0,2);
+    cosY = sqrt(1 - sinY*sinY); //absolute value, but should yield euler angles that matches the matrix
+
+    double scale = 1./cosY;
+
+    if (!std::isfinite(scale)) {
         //we have RMat =
         //        [       0               0         +/-1]
         //        [                                     ]
@@ -518,17 +607,87 @@ Eigen::Matrix<Scalar, 3, 1> rMat2eulerRadxyz(Eigen::Matrix<Scalar, 3, 3> const& 
         } else {
             sinY = -1;
         }
+        cosY = 0;
 
-        double cosZ = RMat(1,1); //valid, if we assume X = 0, which we can
+        cosZ = RMat(1,1); //valid, if we assume X = 0, which we can
+        sinZ = RMat(1,2);
 
         //acceptable, as any
         sinX = 0;
-        sinZ = sqrt(1 - cosZ*cosZ);
+        cosX = 1;
+    } else {
+
+        cosX = scale*RMat(2,2);
+        sinX = -scale*RMat(1,2);
+
+        cosZ = scale*RMat(0,0);
+        sinZ = -scale*RMat(0,1);
     }
 
-    double X = std::asin(sinX);
-    double Y = std::asin(sinY);
-    double Z = std::asin(sinZ);
+    double X = std::atan2(sinX, cosX);
+    double Y = std::atan2(sinY, cosY);
+    double Z = std::atan2(sinZ, cosZ);
+
+    return Eigen::Matrix<Scalar, 3, 1>(X,Y,Z);
+}
+
+template <typename Scalar>
+Eigen::Matrix<Scalar, 3, 1> rMat2eulerRadzyx(Eigen::Matrix<Scalar, 3, 3> const& RMat) {
+    // assuming RMat = RMatz RMaty RMatx; Solution is:
+    //        [ cy cz    cz sy sx - cx sz    sz sx + cz cx sy ]
+    //        [                                               ]
+    //        [ cy sz    cx cz + sx sy sz    cx sz sy - cz sx ]
+    //        [                                               ]
+    //        [  -sy            cy sx              cx cy      ]
+
+    double sinX;
+    double cosX;
+
+    double sinY;
+    double cosY;
+
+    double sinZ;
+    double cosZ;
+
+    sinY = -RMat(2,0);
+    cosY = sqrt(1 - sinY*sinY); //absolute value, but should yield euler angles that matches the matrix
+
+    double scale = 1./cosY;
+
+    if (!std::isfinite(scale)) {
+        //we have RMat =
+        //        [   0    +/- cz sx - cx sz    sz sx +/- cz cx ]
+        //        [                                             ]
+        //        [   0    cx cz +/- sx sz    +/- cx sz - cz sx ]
+        //        [                                             ]
+        //        [ +/- 1         0                     0       ]
+        if (sinY > 0) {
+            sinY = 1;
+        } else {
+            sinY = -1;
+        }
+        cosY = 0;
+
+        cosZ = RMat(1,1); //valid, if we assume X = 0, which we can
+        sinZ = -RMat(0,1); //valid, if we assume X = 0, which we can
+
+        //acceptable, as any
+        sinX = 0;
+        cosX = 1;
+
+    } else {
+
+        cosX = scale*RMat(2,2);
+        sinX = scale*RMat(2,1);
+
+        cosZ = scale*RMat(0,0);
+        sinZ = scale*RMat(1,0);
+    }
+
+    double X = std::atan2(sinX, cosX);
+    double Y = std::atan2(sinY, cosY);
+    double Z = std::atan2(sinZ, cosZ);
+
 
     return Eigen::Matrix<Scalar, 3, 1>(X,Y,Z);
 }

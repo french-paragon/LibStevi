@@ -32,6 +32,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DMULTIDIMARRAYS_STRONG_BOUND_CHECK")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -DMULTIDIMARRAYS_STRONG_BOUND_CHECK")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fopenmp -march=native -ftree-vectorize")
 
 #SIMD for x86
@@ -62,6 +64,7 @@ include_directories(${EIGEN3_INCLUDE_DIR})
 find_package(JPEG)
 find_package(PNG)
 find_package(TIFF)
+find_package(OpenEXR)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -71,19 +74,22 @@ add_subdirectory(submodules)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/submodules)
 include_directories(${MODULES_INCLUDE_DIRECTORIES})
 
-set(LIB_SRC 
+set(LIB_SRC
         stevi_global.h
-	geometry/core.h
-	geometry/geometricexception.cpp
+        geometry/core.h
+        geometry/geometricexception.cpp
         geometry/geometricexception.h
         geometry/alignement.h
         geometry/imagecoordinates.h
-	geometry/lensdistortion.h
-	geometry/pointcloudalignment.cpp
+        geometry/lensdistortion.h
         geometry/pointcloudalignment.h
+        geometry/genericraysalignement.h
         geometry/rotations.h
+        geometry/posesmath.h
         geometry/stereorigrectifier.cpp
         geometry/stereorigrectifier.h
+        geometry/genericbinarypartitioningtree.h
+        geometry/sensorframesconvention.h
         graphs/graphs.h
         graphs/doublyConnectedEdgeLists.h
         graphs/graph_flow.h
@@ -115,10 +121,12 @@ set(LIB_SRC
         optimization/l0optimization.h
         optimization/l1optimization.h
         optimization/l2optimization.h
+        optimization/huber_kernel.h
         optimization/leastmedianoptimization.h
         optimization/sphericaloptimization.h
         optimization/affine_utils.h
         optimization/principalComponentsAnalysis.h
+        optimization/gaussnewtownproblem.h
         utils/contiguity.h
         utils/margins.h
         utils/indexers.h
@@ -129,6 +137,7 @@ set(LIB_SRC
         utils/array_utils.h
         utils/stevimath.h
         utils/hash_utils.h
+        utils/iterative_numerical_algorithm_output.h
         statistics/stereo_covering.h
         imageProcessing/colorConversions.h
         imageProcessing/histogram.h
@@ -147,8 +156,26 @@ set(LIB_SRC
         imageProcessing/pixelsLines.h
         imageProcessing/pixelsTriangles.h
         imageProcessing/edgesDetection.h
+        imageProcessing/inpainting.h
         io/image_io.h
         io/image_io.cpp
+        io/read_exr.h
+        io/pointcloud_io.h
+        io/pointcloud_io.cpp
+        io/sdc_pointcloud_io.h
+        io/sdc_pointcloud_io.cpp
+		io/read_flo.h
+        io/pcd_pointcloud_io.h
+        io/pcd_pointcloud_io.cpp
+        io/las_pointcloud_io.h
+        io/las_pointcloud_io.cpp
+        io/metacloud_io.h
+        io/metacloud_io.cpp
+        io/attributeMapper.h
+        io/attributeRemover.h
+        io/attributeRemover.cpp
+        io/fstreamCustomBuffer.h
+        io/bit_manipulations.h
         sparseMatching/cornerDetectors.h
         sparseMatching/nonLocalMaximumPointSelection.h
         sparseMatching/pointsOrientation.h
@@ -161,33 +188,45 @@ endif(buildGui)
 
 add_library(
     ${STEREOVISION_LIB}
+    SHARED
     ${LIB_SRC}
 )
 
 target_compile_definitions(${STEREOVISION_LIB} PRIVATE LIBSTEREOVISION_BUILDING)
+target_link_libraries(${STEREOVISION_LIB} PUBLIC Threads::Threads)
 
 if (JPEG_FOUND)
     message("Using native jpg library")
     target_link_libraries(${STEREOVISION_LIB} PUBLIC JPEG::JPEG)
-    target_compile_definitions(stevi PRIVATE STEVI_IO_USE_JPEG)
+	target_compile_definitions(${STEREOVISION_LIB} PRIVATE STEVI_IO_USE_JPEG)
 endif (JPEG_FOUND)
 
 if (PNG_FOUND)
     message("Using native png library")
     target_link_libraries(${STEREOVISION_LIB} PUBLIC PNG::PNG)
-    target_compile_definitions(stevi PRIVATE STEVI_IO_USE_PNG)
+	target_compile_definitions(${STEREOVISION_LIB} PRIVATE STEVI_IO_USE_PNG)
 endif (PNG_FOUND)
 
 if (TIFF_FOUND)
     message("Using native tiff library")
     target_link_libraries(${STEREOVISION_LIB} PUBLIC TIFF::TIFF)
-    target_compile_definitions(stevi PRIVATE STEVI_IO_USE_TIFF)
+	target_compile_definitions(${STEREOVISION_LIB} PRIVATE STEVI_IO_USE_TIFF)
 endif (TIFF_FOUND)
+
+if(OpenEXR_FOUND)
+    message("Using native openEXR library")
+    if (TARGET OpenEXR::IlmImf)
+        target_link_libraries(${STEREOVISION_LIB} PUBLIC OpenEXR::IlmImf)
+    else()
+        target_link_libraries(${STEREOVISION_LIB} PUBLIC OpenEXR::OpenEXR)
+    endif()
+    target_compile_definitions(stevi PRIVATE STEVI_IO_USE_OPENEXR)
+endif(OpenEXR_FOUND)
 
 if (buildGui)
     find_package(QT NAMES Qt5 COMPONENTS Widgets REQUIRED)
     find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets REQUIRED)
-    target_link_libraries(stevi PUBLIC Qt${QT_VERSION_MAJOR}::Widgets)
+	target_link_libraries(${STEREOVISION_LIB} PUBLIC Qt${QT_VERSION_MAJOR}::Widgets)
 endif(buildGui)
 
 if (buildTests)
