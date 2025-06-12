@@ -24,8 +24,10 @@ private Q_SLOTS:
 	void testZNCCMatching_data();
 	void testZNCCMatching();
 
-	void testSSDMatching_data();
-	void testSSDMatching();
+    void testSSDMatching_data();
+    void testSSDMatching();
+
+    void testMutualInformationCost();
 private:
 
 	std::default_random_engine re;
@@ -153,6 +155,58 @@ void TestMatchPattern::testSSDMatching_data() {
 }
 void TestMatchPattern::testSSDMatching() {
 	testMatching<matchingFunctions::SSD>();
+}
+
+void TestMatchPattern::testMutualInformationCost() {
+
+    int side = 5;
+    int sideSqr = side*side;
+
+    Multidim::Array<float,1> referenceInformation(sideSqr);
+    Multidim::Array<float,1> targetInformation(sideSqr);
+    Multidim::Array<float,1> referenceRandom(sideSqr);
+    Multidim::Array<float,1> targetRandom(sideSqr);
+
+    std::uniform_real_distribution<float> uniformDist(-1, 1);
+
+    std::vector<float> randomSamples1(side);
+    std::vector<float> randomSamples2(side);
+
+    for (int i = 0; i < side; i++) {
+        randomSamples1[i] = uniformDist(re);
+        randomSamples2[i] = uniformDist(re);
+    }
+
+    for (int i = 0; i < side; i++) {
+        for (int j = 0; j < side; j++) {
+
+            int idx = i*side + j;
+
+            referenceRandom.atUnchecked(idx) = randomSamples1[i];
+            targetRandom.atUnchecked(idx) = randomSamples2[j];
+        }
+    }
+
+    for (int i = 0; i < sideSqr; i++) {
+        float x = uniformDist(re);
+        float y = std::sqrt(1 - x*x);
+
+        float sign = uniformDist(re);
+        if (sign < 0) {
+            y *= -1;
+        }
+
+        referenceInformation.atUnchecked(i) = x;
+        targetInformation.atUnchecked(i) = y;
+    }
+
+    constexpr matchingFunctions matchFunc = matchingFunctions::KERMI;
+
+    float valRandom = MatchingFunctionTraits<matchFunc>::featureComparison(referenceRandom, targetRandom);
+    float valInformation = MatchingFunctionTraits<matchFunc>::featureComparison(referenceInformation, targetInformation);
+
+    QVERIFY2(valRandom < valInformation, "Unexpected cost value");
+
 }
 
 QTEST_MAIN(TestMatchPattern)
