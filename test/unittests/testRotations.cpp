@@ -40,7 +40,7 @@ private Q_SLOTS:
     void testDiffRigidBodyTransform();
     void testDiffShapePreservingTransform();
 
-	void testDiffRigidTransformInverse();
+    void testRigidTransformInverse();
 
     void testEulerRad2RMat();
     void testRMat2EulerRad();
@@ -465,7 +465,7 @@ void TestGeometryLibRotation::testDiffShapePreservingTransform() {
     }
 }
 
-void TestGeometryLibRotation::testDiffRigidTransformInverse() {
+void TestGeometryLibRotation::testRigidTransformInverse() {
 
 	constexpr int nTest = 100;
 
@@ -483,24 +483,41 @@ void TestGeometryLibRotation::testDiffRigidTransformInverse() {
 		float s = scaleGen(re);
 		if (scaleSign(re)) {
 			s = -s;
-		}
+        }
 
-		ShapePreservingTransform direct(r, t, s);
-		ShapePreservingTransform inverse = direct.inverse();
+        ShapePreservingTransform direct(r, t, s);
+        ShapePreservingTransform inverse = direct.inverse();
 
-		for (int j = 0; j < nTest; j++) {
-			Eigen::Vector3f v(dataGen(re),dataGen(re),dataGen(re));
-			Eigen::Vector3f tmp = direct*v;
+        for (int j = 0; j < nTest; j++) {
+            Eigen::Vector3f v(dataGen(re),dataGen(re),dataGen(re));
+            Eigen::Vector3f tmp = direct*v;
 
-			if (tmp.array().isInf().any() or tmp.array().isNaN().any()) {
-				continue;
-			}
+            if (tmp.array().isInf().any() or tmp.array().isNaN().any()) {
+                continue;
+            }
 
-			Eigen::Vector3f t = inverse*(tmp);
+            Eigen::Vector3f t = inverse*(tmp);
 
-			float mismatch = (v - t).norm();
-			QVERIFY2(mismatch <= epsilon, qPrintable(QString("Reconstructed vector is too different from original (mismatch = %1)").arg(mismatch)));
-		}
+            float mismatch = (v - t).norm();
+            QVERIFY2(mismatch <= epsilon, qPrintable(QString("Reconstructed vector is too different from original (mismatch = %1)").arg(mismatch)));
+        }
+
+        RigidBodyTransform directRigid(r, t);
+        RigidBodyTransform inverseRigid = directRigid.inverse();
+
+        for (int j = 0; j < nTest; j++) {
+            Eigen::Vector3f v(dataGen(re),dataGen(re),dataGen(re));
+            Eigen::Vector3f tmp = directRigid*v;
+
+            if (tmp.array().isInf().any() or tmp.array().isNaN().any()) {
+                continue;
+            }
+
+            Eigen::Vector3f t = inverseRigid*(tmp);
+
+            float mismatch = (v - t).norm();
+            QVERIFY2(mismatch <= epsilon, qPrintable(QString("Reconstructed vector is too different from original (mismatch = %1)").arg(mismatch)));
+        }
 	}
 
 }
@@ -891,13 +908,13 @@ void TestGeometryLibRotation::testRigidBodyTransformInterpolationOnManifold() {
 
         for (int i = 0; i < 3; i++) {
 
-            QCOMPARE(interpolated025e.r[i], interpolated025.r[i]);
-            QCOMPARE(interpolated050e.r[i], interpolated050.r[i]);
-            QCOMPARE(interpolated075e.r[i], interpolated075.r[i]);
+            QVERIFY(std::fabs(interpolated025e.r[i] - interpolated025.r[i]) < 1e-8);
+            QVERIFY(std::fabs(interpolated050e.r[i] - interpolated050.r[i]) < 1e-8);
+            QVERIFY(std::fabs(interpolated075e.r[i] - interpolated075.r[i]) < 1e-8);
 
-            QCOMPARE(interpolated025e.t[i], interpolated025.t[i]);
-            QCOMPARE(interpolated050e.t[i], interpolated050.t[i]);
-            QCOMPARE(interpolated075e.t[i], interpolated075.t[i]);
+            QVERIFY(std::fabs(interpolated025e.t[i] - interpolated025.t[i]) < 1e-8);
+            QVERIFY(std::fabs(interpolated050e.t[i] - interpolated050.t[i]) < 1e-8);
+            QVERIFY(std::fabs(interpolated075e.t[i] - interpolated075.t[i]) < 1e-8);
         }
 
     }
