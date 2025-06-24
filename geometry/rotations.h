@@ -329,9 +329,9 @@ public:
      * \return the composed transform (equivalent to applying other, followed by this)
      */
     RigidBodyTransform<T> operator*(RigidBodyTransform<T> const& other) const {
-        Eigen::Matrix<T,3,3> R = rodriguezFormula(r);
-        Eigen::Matrix<T,3,3> Rc = R*rodriguezFormula(other.r);
-        return RigidBodyTransform(inverseRodriguezFormula(Rc), R*other.t + t);
+        Eigen::Quaternion<T> R = axisAngleToQuaternion(r);
+        Eigen::Quaternion<T> Rc = R*axisAngleToQuaternion(other.r);
+        return RigidBodyTransform(quaternionToAxisAngle(Rc), R*other.t + t);
     }
 
     /*!
