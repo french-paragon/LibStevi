@@ -49,6 +49,7 @@ enum class matchingFunctions{
     ZMEDAD = 9, //zero mean median absolute difference
     HAMMING = 10, //Hamming distance (to used with census and other binary features)
     CENSUS = 11, //Hamming distance (but make some intermediate functions to transform your features into census features)
+    KERMI = 12, //kernel based mututal information estimation
 };
 
 template<matchingFunctions func>
@@ -272,6 +273,71 @@ inline hamming_cv_t hammingDistance(std::vector<T_S> const& source,
     }
 
     return score;
+}
+
+template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+inline T_O KernelBasedMututalInformation(
+    Multidim::Array<T_S,1, viewConstness> const& source,
+    Multidim::Array<T_T,1, viewConstness> const& target) {
+
+    int nElements = source.flatLenght();
+
+    double computed = 0;
+
+    T_S minSource = source.valueUnchecked(0);
+    T_S maxSource = source.valueUnchecked(0);
+
+    T_T minTarget = target.valueUnchecked(0);
+    T_T maxTarget = target.valueUnchecked(0);
+
+    for (int i = 1; i < nElements; i++) {
+        T_S sourceVal = source.valueUnchecked(i);
+        T_S targetVal = target.valueUnchecked(i);
+
+        minSource = std::min(minSource, sourceVal);
+        maxSource = std::max(maxSource, sourceVal);
+
+        minTarget = std::min(minTarget, targetVal);
+        maxTarget = std::max(maxTarget, targetVal);
+    }
+
+    double sourceStd = double(maxSource - minSource)/nElements;
+    double targetStd = double(maxTarget - minTarget)/nElements;
+
+    auto kernelSource = [sourceStd] (double val) {
+        double tmp = val / sourceStd;
+        return std::exp(-tmp*tmp);
+    };
+
+    auto kernelTarget = [targetStd] (double val) {
+        double tmp = val / targetStd;
+        return std::exp(-tmp*tmp);
+    };
+
+    double score = 0;
+
+    for (int i = 0; i < nElements; i++) {
+        double pSource = 0;
+        double pTarget = 0;
+        double pJoint = 0;
+
+        for (int j = 0; j < nElements; j++) {
+            double sourceP = kernelSource(source.valueUnchecked(i) - source.valueUnchecked(j));
+            double targetP = kernelTarget(target.valueUnchecked(i) - target.valueUnchecked(j));
+
+            pSource += sourceP;
+            pTarget += targetP;
+
+            pJoint += targetP*sourceP;
+        }
+
+        double pJointInd = pSource*pTarget/nElements;
+
+        score += pJoint*std::log(pJoint/pJointInd);
+    }
+
+    return score;
+
 }
 
 template<>
@@ -614,6 +680,23 @@ public:
     inline static float featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
                                    Multidim::Array<T_T,1, viewConstness> const& target) {
         return hammingDistance(source, target);
+    }
+};
+
+template<>
+class MatchingFunctionTraits<matchingFunctions::KERMI>{
+public:
+    static const std::string Name;
+    static constexpr bool ZeroMean = false;
+    static constexpr bool Normalized = false;
+    static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Score;
+
+    static constexpr bool isCensusBased = false;
+
+    template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
+    inline static float featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
+                                          Multidim::Array<T_T,1, viewConstness> const& target) {
+        return KernelBasedMututalInformation(source, target);
     }
 };
 
