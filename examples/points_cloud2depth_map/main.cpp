@@ -153,6 +153,12 @@ Multidim::Array<float,3> generateDepthMapWithBinaryTree(std::array<int,2> shape,
 
 }
 
+enum ProjType {
+    Orthographic,
+    Pinhole
+};
+
+template<ProjType pType = Orthographic>
 std::tuple<Multidim::Array<float,3>,Multidim::Array<float,2>> generateDepthMapDirect(std::array<int,2> shape,
                                                 BinaryTree::ContainerT & points,
                                                 StereoVision::Geometry::AffineTransform<double> const& img2ptcloud,
@@ -189,8 +195,21 @@ std::tuple<Multidim::Array<float,3>,Multidim::Array<float,2>> generateDepthMapDi
 
         Eigen::Vector3d imgCoord = ptcloud2img*ptCoords.block<3,1>(0,0);
 
+        if constexpr (pType == Pinhole) {
+            imgCoord.x() /= imgCoord.z();
+            imgCoord.y() /= imgCoord.z();
+
+            Eigen::Vector3d ppShift(double(shape[0])/2,double(shape[1])/2,0);
+            imgCoord += ppShift;
+        }
+
         size_t i = std::round(imgCoord.x());
         size_t j = std::round(imgCoord.y());
+
+        if constexpr (pType == Pinhole) {
+            j = std::round(imgCoord.x());
+            i = std::round(imgCoord.y());
+        }
 
         if (i < 0 or j < 0) {
             continue;
@@ -328,6 +347,14 @@ Multidim::Array<uint32_t,2> getClustersMask(std::array<int,2> shape,
 
 }
 
+struct CamDef {
+    Eigen::Vector3d rAxis;
+    Eigen::Vector3d t;
+    double f;
+    int h;
+    int w;
+};
+
 int main(int argc, char** argv) {
 
     QTextStream out(stdout);
@@ -337,6 +364,8 @@ int main(int argc, char** argv) {
     int resolution;
     int bufferDepth = 1;
     int inPaintingRadius = 5;
+
+    std::optional<CamDef> cameraDef = std::nullopt;
 
     QVector<QString> clustersFileList;
     QVector<QString> validClustersFileList;
@@ -348,12 +377,14 @@ int main(int argc, char** argv) {
 
         TCLAP::ValueArg<int> resArg("r","resolution", "resolution to use for export", true, 1, "int");
         TCLAP::ValueArg<int> bufferDepthArg("b","bufferDepth", "buffer depth of the depth map", false, bufferDepth, "int");
+        TCLAP::ValueArg<std::string> cameraArg("", "camera", "camera definition, with the pose a axis angle and position, the focal length and sensor dimension", false, "", "rx,ry,rz,x,y,z,f,w,h");
         TCLAP::ValueArg<std::string> clustersArg("", "clusters", "clusters definition file", false, "", "filepath");
         TCLAP::ValueArg<std::string> vclustersArg("", "vclusters", "valid clusters definition file", false, "", "filepath");
 
         cmd.add(cloudFilePathArg);
         cmd.add(resArg);
         cmd.add(bufferDepthArg);
+        cmd.add(cameraArg);
         cmd.add(clustersArg);
         cmd.add(vclustersArg);
 
@@ -375,6 +406,23 @@ int main(int argc, char** argv) {
             validClustersFileList = getFileList(vclustersArg.getValue().c_str());
         }
 
+        if (cameraArg.isSet()) {
+            CamDef cam;
+            QString str = QString::fromStdString(cameraArg.getValue());
+            QStringList splitted = str.split(",");
+
+            if (splitted.size() < 9) {
+                throw TCLAP::ArgException("Error in camera definition argument");
+            }
+
+            cam.rAxis = Eigen::Vector3d(splitted[0].toDouble(),splitted[1].toDouble(),splitted[2].toDouble());
+            cam.t = Eigen::Vector3d(splitted[3].toDouble(),splitted[4].toDouble(),splitted[5].toDouble());
+            cam.f = splitted[6].toDouble();
+            cam.w = splitted[7].toDouble();
+            cam.h = splitted[8].toDouble();
+
+            cameraDef = cam;
+        }
 
     } catch (TCLAP::ArgException &e) {
         err << "Argument error:" << e.error().c_str() << " for arg " << e.argId().c_str() << Qt::endl;
@@ -391,130 +439,169 @@ int main(int argc, char** argv) {
 
     out << "Point data loaded!" << Qt::endl;
 
-    float minX = points[0].x();
-    float maxX = points[0].x();
-    float minY = points[0].y();
-    float maxY = points[0].y();
-    float minZ = points[0].z();
-
-    for (int i = 1; i < points.size(); i++) {
-
-        if (points[i].x() < minX) {
-            minX = points[i].x();
-        }
-        if (points[i].x() > maxX) {
-            maxX = points[i].x();
-        }
-
-        if (points[i].y() < minY) {
-            minY = points[i].y();
-        }
-        if (points[i].y() > maxY) {
-            maxY = points[i].y();
-        }
-
-        if (points[i].z() < minZ) {
-            minZ = points[i].z();
-        }
-    }
-
-    float rangeX = maxX - minX;
-    float rangeY = maxY - minY;
-
-    if (!std::isfinite(rangeX) or !std::isfinite(rangeY)) {
-        err << "Invalid point data" << Qt::endl;
-        return 1;
-    }
-
-    float rangeMax = std::max(rangeX, rangeY);
-    float scale = resolution/rangeMax;
-    float invScale = rangeMax/resolution;
-
-    StereoVision::Geometry::AffineTransform<double> img2ptcloud;
-    img2ptcloud.t.x() = minX;
-    img2ptcloud.t.y() = maxY;
-    img2ptcloud.t.z() = minZ;
-
-    img2ptcloud.R = Eigen::Matrix3d::Identity();
-    img2ptcloud.R(0,0) = 0;
-    img2ptcloud.R(1,1) = 0;
-    img2ptcloud.R(1,0) = -invScale;
-    img2ptcloud.R(0,1) = invScale;
-
-    StereoVision::Geometry::AffineTransform<double> ptcloud2img;
-
-    ptcloud2img.R = Eigen::Matrix3d::Identity();
-    ptcloud2img.R(0,0) = 0;
-    ptcloud2img.R(1,1) = 0;
-    ptcloud2img.R(1,0) = scale;
-    ptcloud2img.R(0,1) = -scale;
-
-    ptcloud2img.t = -ptcloud2img.R*img2ptcloud.t;
-
-    StereoVision::Geometry::AffineTransform<float> check = ptcloud2img.cast<float>()*img2ptcloud.cast<float>();
-
-    auto oldNotation = out.realNumberNotation();
-    out.setRealNumberNotation(QTextStream::RealNumberNotation::FixedNotation);
-
-    out << "Image to point cloud coordinates transform: " << Qt::endl;
-    out << img2ptcloud.R(0,0) << " " << img2ptcloud.R(0,1) << " " << img2ptcloud.R(0,2) << " " << img2ptcloud.t[0] << "\n";
-    out << img2ptcloud.R(1,0) << " " << img2ptcloud.R(1,1) << " " << img2ptcloud.R(1,2) << " " << img2ptcloud.t[1] << "\n";
-    out << img2ptcloud.R(2,0) << " " << img2ptcloud.R(2,1) << " " << img2ptcloud.R(2,2) << " " << img2ptcloud.t[2] << Qt::endl;
-
-    out << "Point cloud to Image coordinates transform: " << Qt::endl;
-    out << ptcloud2img.R(0,0) << " " << ptcloud2img.R(0,1) << " " << ptcloud2img.R(0,2) << " " << ptcloud2img.t[0] << "\n";
-    out << ptcloud2img.R(1,0) << " " << ptcloud2img.R(1,1) << " " << ptcloud2img.R(1,2) << " " << ptcloud2img.t[1] << "\n";
-    out << ptcloud2img.R(2,0) << " " << ptcloud2img.R(2,1) << " " << ptcloud2img.R(2,2) << " " << ptcloud2img.t[2] << Qt::endl;
-
-    out << "Check: " << Qt::endl;
-    out << check.R(0,0) << " " << check.R(0,1) << " " << check.R(0,2) << " " << check.t[0] << "\n";
-    out << check.R(1,0) << " " << check.R(1,1) << " " << check.R(1,2) << " " << check.t[1] << "\n";
-    out << check.R(2,0) << " " << check.R(2,1) << " " << check.R(2,2) << " " << check.t[2] << Qt::endl;
-
-    out.setRealNumberNotation(oldNotation);
-
-    int sX = std::floor(rangeX*scale);
-    int sY = std::floor(rangeY*scale);
-
-    double nPixels = static_cast<size_t>(sX)*static_cast<size_t>(sY);
-
-    std::array<int,2> shape = {sY, sX};
-
-
-    double nPts = points.size();
-
-    out << "NPoints: " << nPts << " nPixels: " << nPixels << " Pixel size: " << invScale << "x" << invScale << " lunit" << Qt::endl;
-
-    bool useBinaryTree = false;
-
     Multidim::Array<float,3> raster;
     Multidim::Array<float,2> intensityRaster;
 
-    if (useBinaryTree) {
-        Multidim::Array<float,3> data = generateDepthMapWithBinaryTree(shape,
-                                                     points,
-                                                     img2ptcloud,
-                                                     ptcloud2img,
-                                                     minZ,
-                                                     out);
-        raster = Multidim::Array<float,3>(data.shape()[0], data.shape()[1],1);
-        intensityRaster = Multidim::Array<float,2>(data.shape()[0], data.shape()[1]);
+    bool useInpainting = false;
 
-        for (int i = 0; i < data.shape()[0]; i++) {
-            for (int j = 0; j < data.shape()[1]; j++) {
-                raster.atUnchecked(i,j,0) = data.valueUnchecked(i,j,0);
-                intensityRaster.atUnchecked(i,j) = data.valueUnchecked(i,j,1);
+    StereoVision::Geometry::AffineTransform<double> ptcloud2img;
+
+    if (cameraDef.has_value()) {
+        CamDef& cam = cameraDef.value();
+
+        StereoVision::Geometry::AffineTransform<double> world2cam =
+            StereoVision::Geometry::RigidBodyTransform<double>(cam.rAxis, cam.t).inverse().toAffineTransform();
+
+        Eigen::Matrix3d fLenScale = Eigen::Matrix3d::Zero();
+        fLenScale(0,0) = cam.f;
+        fLenScale(1,1) = cam.f;
+        fLenScale(2,2) = 1;
+
+        world2cam = StereoVision::Geometry::AffineTransform<double>(fLenScale,Eigen::Vector3d::Zero())*world2cam;
+        StereoVision::Geometry::AffineTransform<double> cam2world = StereoVision::Geometry::AffineTransform<double>(); //will not be used
+
+        std::array<int,2> shape = {cam.h, cam.w};
+        double minZ = 0;
+
+        std::tie(raster, intensityRaster) = generateDepthMapDirect(shape,
+                                                                   points,
+                                                                   cam2world,
+                                                                   world2cam,
+                                                                   minZ,
+                                                                   bufferDepth,
+                                                                   out);
+        useInpainting = true;
+
+        ptcloud2img = world2cam;
+
+    } else {
+
+        float minX = points[0].x();
+        float maxX = points[0].x();
+        float minY = points[0].y();
+        float maxY = points[0].y();
+        float minZ = points[0].z();
+
+        for (int i = 1; i < points.size(); i++) {
+
+            if (points[i].x() < minX) {
+                minX = points[i].x();
+            }
+            if (points[i].x() > maxX) {
+                maxX = points[i].x();
+            }
+
+            if (points[i].y() < minY) {
+                minY = points[i].y();
+            }
+            if (points[i].y() > maxY) {
+                maxY = points[i].y();
+            }
+
+            if (points[i].z() < minZ) {
+                minZ = points[i].z();
             }
         }
 
-    } else {
-        std::tie(raster, intensityRaster) = generateDepthMapDirect(shape,
-                                     points,
-                                     img2ptcloud,
-                                     ptcloud2img,
-                                     minZ,
-                                     bufferDepth,
-                                     out);
+        float rangeX = maxX - minX;
+        float rangeY = maxY - minY;
+
+        if (!std::isfinite(rangeX) or !std::isfinite(rangeY)) {
+            err << "Invalid point data" << Qt::endl;
+            return 1;
+        }
+
+        float rangeMax = std::max(rangeX, rangeY);
+        float scale = resolution/rangeMax;
+        float invScale = rangeMax/resolution;
+
+        StereoVision::Geometry::AffineTransform<double> img2ptcloud;
+        img2ptcloud.t.x() = minX;
+        img2ptcloud.t.y() = maxY;
+        img2ptcloud.t.z() = minZ;
+
+        img2ptcloud.R = Eigen::Matrix3d::Identity();
+        img2ptcloud.R(0,0) = 0;
+        img2ptcloud.R(1,1) = 0;
+        img2ptcloud.R(1,0) = -invScale;
+        img2ptcloud.R(0,1) = invScale;
+
+        ptcloud2img.R = Eigen::Matrix3d::Identity();
+        ptcloud2img.R(0,0) = 0;
+        ptcloud2img.R(1,1) = 0;
+        ptcloud2img.R(1,0) = scale;
+        ptcloud2img.R(0,1) = -scale;
+
+        ptcloud2img.t = -ptcloud2img.R*img2ptcloud.t;
+
+        StereoVision::Geometry::AffineTransform<float> check = ptcloud2img.cast<float>()*img2ptcloud.cast<float>();
+
+        auto oldNotation = out.realNumberNotation();
+        out.setRealNumberNotation(QTextStream::RealNumberNotation::FixedNotation);
+
+        out << "Image to point cloud coordinates transform: " << Qt::endl;
+        out << img2ptcloud.R(0,0) << " " << img2ptcloud.R(0,1) << " " << img2ptcloud.R(0,2) << " " << img2ptcloud.t[0] << "\n";
+        out << img2ptcloud.R(1,0) << " " << img2ptcloud.R(1,1) << " " << img2ptcloud.R(1,2) << " " << img2ptcloud.t[1] << "\n";
+        out << img2ptcloud.R(2,0) << " " << img2ptcloud.R(2,1) << " " << img2ptcloud.R(2,2) << " " << img2ptcloud.t[2] << Qt::endl;
+
+        out << "Point cloud to Image coordinates transform: " << Qt::endl;
+        out << ptcloud2img.R(0,0) << " " << ptcloud2img.R(0,1) << " " << ptcloud2img.R(0,2) << " " << ptcloud2img.t[0] << "\n";
+        out << ptcloud2img.R(1,0) << " " << ptcloud2img.R(1,1) << " " << ptcloud2img.R(1,2) << " " << ptcloud2img.t[1] << "\n";
+        out << ptcloud2img.R(2,0) << " " << ptcloud2img.R(2,1) << " " << ptcloud2img.R(2,2) << " " << ptcloud2img.t[2] << Qt::endl;
+
+        out << "Check: " << Qt::endl;
+        out << check.R(0,0) << " " << check.R(0,1) << " " << check.R(0,2) << " " << check.t[0] << "\n";
+        out << check.R(1,0) << " " << check.R(1,1) << " " << check.R(1,2) << " " << check.t[1] << "\n";
+        out << check.R(2,0) << " " << check.R(2,1) << " " << check.R(2,2) << " " << check.t[2] << Qt::endl;
+
+        out.setRealNumberNotation(oldNotation);
+
+        int sX = std::floor(rangeX*scale);
+        int sY = std::floor(rangeY*scale);
+
+        double nPixels = static_cast<size_t>(sX)*static_cast<size_t>(sY);
+
+        std::array<int,2> shape = {sY, sX};
+
+
+        double nPts = points.size();
+
+        out << "NPoints: " << nPts << " nPixels: " << nPixels << " Pixel size: " << invScale << "x" << invScale << " lunit" << Qt::endl;
+
+        bool useBinaryTree = false;
+
+        if (useBinaryTree) {
+            Multidim::Array<float,3> data = generateDepthMapWithBinaryTree(shape,
+                                                         points,
+                                                         img2ptcloud,
+                                                         ptcloud2img,
+                                                         minZ,
+                                                         out);
+            raster = Multidim::Array<float,3>(data.shape()[0], data.shape()[1],1);
+            intensityRaster = Multidim::Array<float,2>(data.shape()[0], data.shape()[1]);
+
+            for (int i = 0; i < data.shape()[0]; i++) {
+                for (int j = 0; j < data.shape()[1]; j++) {
+                    raster.atUnchecked(i,j,0) = data.valueUnchecked(i,j,0);
+                    intensityRaster.atUnchecked(i,j) = data.valueUnchecked(i,j,1);
+                }
+            }
+
+        } else {
+            std::tie(raster, intensityRaster) = generateDepthMapDirect(shape,
+                                         points,
+                                         img2ptcloud,
+                                         ptcloud2img,
+                                         minZ,
+                                         bufferDepth,
+                                         out);
+            useInpainting = true;
+        }
+    }
+
+    std::array<int,2> shape = {raster.shape()[0], raster.shape()[1]};
+
+    if (useInpainting) {
 
         Multidim::Array<bool,2> coverMask(shape[0], shape[1]);
 
@@ -525,9 +612,9 @@ int main(int argc, char** argv) {
         }
 
         Multidim::Array<bool,2> inpaintingMask =
-                StereoVision::ImageProcessing::erosion(inPaintingRadius+2,inPaintingRadius+2,
-                    StereoVision::ImageProcessing::dilation(inPaintingRadius,inPaintingRadius,coverMask)
-                );
+            StereoVision::ImageProcessing::erosion(inPaintingRadius+2,inPaintingRadius+2,
+                                                   StereoVision::ImageProcessing::dilation(inPaintingRadius,inPaintingRadius,coverMask)
+                                                   );
 
         for (int i = 0; i < shape[0]; i++) {
             for (int j = 0; j < shape[1]; j++) {
@@ -538,7 +625,6 @@ int main(int argc, char** argv) {
         raster = StereoVision::ImageProcessing::nearestInPaintingBatched<float,3,1>(raster,inpaintingMask,{2});
         intensityRaster = StereoVision::ImageProcessing::nearestInPaintingMonochannel(intensityRaster, inpaintingMask);
     }
-
 
     out << "Computed raster (shape: " << raster.shape()[0] << "x" << raster.shape()[1] << "x" << raster.shape()[2] << ")" << Qt::endl;
 
