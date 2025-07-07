@@ -504,7 +504,7 @@ public:
         int pointsCount = -1;
 
         if (pointAccess.get() != nullptr) {
-            headerCount = pointAccess->expectedNumberOfPoints();
+            pointsCount = pointAccess->expectedNumberOfPoints();
         }
 
         if (headerCount >= 0) {
