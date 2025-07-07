@@ -1106,8 +1106,9 @@ std::optional<FullPointCloudAccessInterface> openPointCloudPcd(std::unique_ptr<s
     }
 
     // create a point cloud
-    auto pointCloud = std::make_unique<PcdPointCloudPointReader>(std::move(reader), header->fields, header->size, header->type,
-                                                           header->count, header->data, true);
+    auto pointCloud = std::make_unique<AutoProcessCounterPointAccessInterface<PcdPointCloudPointReader>>(
+        std::move(reader), header->fields, header->size, header->type,
+        header->count, header->data, true);
 
     // return the point cloud
     if (pointCloud->gotoNext()) {

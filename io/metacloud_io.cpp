@@ -130,7 +130,7 @@ std::optional<FullPointCloudAccessInterface> openPointCloudMetacloud(std::unique
     }
 
     // create a point cloud
-    auto pointCloud = std::make_unique<MetaCloudPoint>(std::move(pointCloudInterfaces),
+    auto pointCloud = std::make_unique<AutoProcessCounterPointAccessInterface<MetaCloudPoint>>(std::move(pointCloudInterfaces),
         std::move(extraAttributeAccessors));
 
     if (pointCloud == nullptr) {
@@ -635,6 +635,30 @@ std::optional<PointCloudGenericAttribute> MetaCloudPoint::getAttributeByName(con
     auto it = std::find(attributeNames.begin(), attributeNames.end(), attributeName);
     if (it == attributeNames.end()) return std::nullopt;
     return getAttributeById(std::distance(attributeNames.begin(), it));
+}
+
+int MetaCloudPoint::expectedNumberOfPoints() const {
+
+    int count = 0;
+
+    for (std::unique_ptr<FullPointCloudAccessInterface> const& pointsAccessInterfaces : pointCloudInterfaces) {
+
+        if (pointsAccessInterfaces.get() == nullptr) {
+            return -1;
+        }
+
+        int expectedCount = pointsAccessInterfaces->expectedNumberOfPoints();
+
+        if (expectedCount < 0) {
+            return -1;
+        }
+
+        count += expectedCount;
+
+    }
+
+    return count;
+
 }
 
 bool MetaCloudPoint::gotoNext() {

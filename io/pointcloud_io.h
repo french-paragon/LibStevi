@@ -443,6 +443,38 @@ public:
 };
 
 /*!
+ * \brief The AutoProcessCounterPointAccessInterface class is a decorator which autocount the number of points loaded from an interface
+ */
+template <typename BaseAccessInterface>
+class AutoProcessCounterPointAccessInterface : public BaseAccessInterface {
+public:
+
+    template<typename ... T>
+    AutoProcessCounterPointAccessInterface(T ... args) :
+        BaseAccessInterface(std::forward<T>(args) ...),
+        _auto_points_counter(0)
+    {
+
+    }
+
+    virtual int processedNumberOfPoints() const override {
+        return _auto_points_counter;
+    }
+
+    virtual bool gotoNext() override {
+        bool ok = BaseAccessInterface::gotoNext();
+        if (ok) {
+            _auto_points_counter++;
+        }
+        return ok;
+    }
+
+protected:
+
+    int _auto_points_counter;
+};
+
+/*!
  * \brief The FullPointCloudAccessInterface struct represent the access interface for a full point cloud.
  *
  * This struct holds a points to the header interface and a pointer to the points interface.
@@ -460,6 +492,29 @@ public:
 
     std::unique_ptr<PointCloudHeaderInterface> headerAccess;
     std::unique_ptr<PointCloudPointAccessInterface> pointAccess;
+
+    inline int expectedNumberOfPoints() const {
+
+        int headerCount = -1;
+
+        if (headerAccess.get() != nullptr) {
+            headerCount = headerAccess->expectedNumberOfPoints();
+        }
+
+        int pointsCount = -1;
+
+        if (pointAccess.get() != nullptr) {
+            headerCount = pointAccess->expectedNumberOfPoints();
+        }
+
+        if (headerCount >= 0) {
+            return headerCount;
+        } else if (pointsCount >= 0) {
+            return pointsCount;
+        }
+
+        return -1;
+    }
 };
 
 /*!

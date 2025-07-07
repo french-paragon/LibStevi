@@ -722,6 +722,10 @@ std::vector<std::string> LasPointCloudHeader::attributeList() const {
     // TODO: add support for VLRs and EVLRs
     return publicHeaderBlock.publicHeaderAttributeList();
 }
+
+int LasPointCloudHeader::expectedNumberOfPoints() const {
+    return publicHeaderBlock.numberOfPointRecords;
+}
 LasExtraAttributesInfos LasPointCloudHeader::getPointwiseExtraAttributesInfos(bool ignoreUndocumentedExtraBytes) const {
     // generate the list of extra bytes descriptors
     auto extraBytesDescriptors = extraBytesDescriptorsFromVlrs(variableLengthRecords, extendedVariableLengthRecords);
@@ -1324,7 +1328,7 @@ std::unique_ptr<PointCloudPointAccessInterface> LasPointCloudPoint::createAdapte
     }
     // create adapter
     auto pointPtr = pointCloudPointAccessInterface.get();
-    return std::make_unique<LasPointCloudPointBasicAdapter>(std::move(pointCloudPointAccessInterface), pointPtr,
+    return std::make_unique<AutoProcessCounterPointAccessInterface<LasPointCloudPointBasicAdapter>>(std::move(pointCloudPointAccessInterface), pointPtr,
         xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset);
 }
 

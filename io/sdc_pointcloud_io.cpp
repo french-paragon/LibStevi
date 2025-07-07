@@ -204,7 +204,7 @@ std::optional<FullPointCloudAccessInterface> openPointCloudSdc(std::unique_ptr<s
     auto headerInformation = vectorFromBytes<std::byte>(bufferHeader.data() + 4, headerSize - 8);
 
     auto header = std::make_unique<SdcPointCloudHeader>(headerSize, majorVersion, minorVersion, headerInformation);
-    auto cloudpoint = std::make_unique<SdcPointCloudPoint>(std::move(stream), majorVersion, minorVersion);
+    auto cloudpoint = std::make_unique<AutoProcessCounterPointAccessInterface<SdcPointCloudPoint>>(std::move(stream), majorVersion, minorVersion);
     
     FullPointCloudAccessInterface fullPointInterface;
     // read the first point

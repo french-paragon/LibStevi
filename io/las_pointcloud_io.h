@@ -319,6 +319,8 @@ public:
 
     std::vector<std::string> attributeList() const override;
 
+    virtual int expectedNumberOfPoints() const override;
+
     /**
      * @brief Get the pointwise extra attributes names, data types, sizes and offsets
      * 
