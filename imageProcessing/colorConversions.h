@@ -485,6 +485,84 @@ Multidim::Array<O, 2> img2gray(Multidim::Array<T, 3> const& img, std::vector<flo
 	return grayImg;
 }
 
+/*!
+ * \brief normalizeImageChannels
+ * \param img
+ * \param blackLevelQuantile the quantile of an image channel used to compute the input corresponding to the black level
+ * \param whiteLevelQuantile the quantile of an image channel used to compute the input corresponding to the white level
+ * \return the normalized image, so that everychannel
+ */
+template<typename T, typename O = T>
+Multidim::Array<O, 3> normalizeImageChannels(Multidim::Array<T, 3> const& img,
+                                             O blackLevel = TypesManipulations::defaultBlackLevel<O>(),
+                                             O whiteLevel = TypesManipulations::defaultWhiteLevel<O>(),
+                                             float blackLevelQuantile = 0.05,
+                                             float whiteLevelQuantile = 0.95) {
+
+    int imgSize = img.shape()[0] * img.shape()[1];
+    int nChannels = img.shape()[2];
+
+    std::vector<T> blackLevels(nChannels);
+    std::vector<T> whiteLevels(nChannels);
+
+    for (int c = 0; c < nChannels; c++) {
+        std::vector<float> values;
+        values.reserve(imgSize);
+
+        for (int i = 0; i < img.shape()[0]; i++) {
+            for (int j = 0; j < img.shape()[1]; j++) {
+                values.push_back(img.valueUnchecked(i,j,c));
+            }
+        }
+
+        int bLevelId = 0.05*imgSize;
+        int wLevelId = 0.95*imgSize;
+
+        if (wLevelId >= imgSize) {
+            wLevelId = imgSize-1;
+        }
+
+        if (bLevelId == wLevelId) {
+            bLevelId = 0;
+            wLevelId = imgSize-1;
+        }
+
+        auto bLevelElement = values.begin();
+        std::advance(bLevelElement, bLevelId);
+        auto wLevelElement = values.begin();
+        std::advance(wLevelElement, wLevelId);
+
+        std::nth_element(values.begin(), bLevelElement, values.end());
+        std::nth_element(values.begin(), wLevelElement, values.end());
+
+        blackLevels[c] = *bLevelElement;
+        whiteLevels[c] = *wLevelElement;
+    }
+
+    Multidim::Array<O, 3> out(img.shape(), img.strides());
+
+    #pragma omp parallel for
+    for (int i = 0; i < img.shape()[0]; i++) {
+        for (int j = 0; j < img.shape()[1]; j++) {
+            for (int c = 0; c < nChannels; c++) {
+
+                T inVal = img.valueUnchecked(i,j,c);
+                double converted = double(inVal - blackLevels[c])/double(whiteLevels[c] - blackLevels[c]);
+                converted = (whiteLevel - blackLevel)*converted + blackLevel;
+                O val = std::max<O>(blackLevel, std::min<O>(whiteLevel, converted));
+
+                if (!std::isfinite(converted)) {
+                    val = blackLevel;
+                }
+
+                out.atUnchecked(i,j,c) = val;
+
+            }
+        }
+    }
+
+    return out;
+}
 
 } // namespace StereoVision
 } //namespace ImageProcessing
