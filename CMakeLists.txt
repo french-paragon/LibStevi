@@ -200,6 +200,7 @@ set(LIB_SRC
         sparseMatching/nonLocalMaximumPointSelection.h
         sparseMatching/pointsOrientation.h
         sparseMatching/pointsDescriptors.h
+        statistics/covarianceKernels.h
 )
 
 if (buildGui)

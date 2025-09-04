@@ -160,5 +160,9 @@ add_executable(testInpaintingAlgorithms testInpaintingAlgorithms.cpp)
 target_link_libraries(testInpaintingAlgorithms ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestInpaintingAlgorithms testInpaintingAlgorithms)
 
+add_executable(testCovarianceKernels testCovarianceKernels.cpp)
+target_link_libraries(testCovarianceKernels ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestCovarianceKernels testCovarianceKernels)
+
 
 
