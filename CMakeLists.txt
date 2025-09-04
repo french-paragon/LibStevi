@@ -212,6 +212,7 @@ add_library(
     SHARED
     ${LIB_SRC}
 )
+add_library(${STEREOVISION_NAME}::${STEREOVISION_LIB} ALIAS ${STEREOVISION_LIB})
 
 #copy all header files for build time headers availability
 foreach(FILE IN LISTS LIB_SRC)
@@ -219,6 +220,16 @@ foreach(FILE IN LISTS LIB_SRC)
                 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/${FILE} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/include/${STEREOVISION_NAME}/${CMAKE_MATCH_2})
         endif()
 endforeach()
+
+if (buildGui)
+    get_target_property(QDISPLAYWIDGET_SRC_LIST ${QIMAGEDISPLAYWIDGET_LIB} SOURCES)
+    get_target_property(QDISPLAYWIDGET_SOURCE_DIR ${QIMAGEDISPLAYWIDGET_LIB} SOURCE_DIR)
+    foreach(FILE IN LISTS QDISPLAYWIDGET_SRC_LIST)
+            if(FILE MATCHES "^((.*)/)?([^/]+)\\.h$")
+                    file(COPY ${QDISPLAYWIDGET_SOURCE_DIR}/${FILE} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/include/${STEREOVISION_NAME}/QImageDisplayWidget)
+            endif()
+    endforeach()
+endif()
 
 target_compile_definitions(${STEREOVISION_LIB} PRIVATE LIBSTEREOVISION_BUILDING)
 target_link_libraries(${STEREOVISION_LIB} PUBLIC Threads::Threads MultidimArrays::MultidimArrays)
