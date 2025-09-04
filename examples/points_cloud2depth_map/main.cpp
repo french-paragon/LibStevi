@@ -21,7 +21,21 @@
 
 #include <tclap/CmdLine.h>
 
-using PointType = Eigen::Vector4d;
+struct PointType
+{
+    PointType() {}
+    Eigen::Vector3d point;
+    double intensity;
+    int classId;
+
+    inline double& operator[](int i) {
+        return point[i];
+    }
+
+    inline double const& operator[](int i) const {
+        return point[i];
+    }
+};
 using BinaryTree = StereoVision::Geometry::GenericBSP<PointType, 2, StereoVision::Geometry::BSPObjectWrapper<PointType,double>>;
 
 BinaryTree::ContainerT loadPoints(QString const& fileName) {
@@ -43,14 +57,19 @@ BinaryTree::ContainerT loadPoints(QString const& fileName) {
         PointType point;
         auto geom = ptCloud.pointAccess->castedPointGeometry<double>();
 
-        point.x() = geom.x;
-        point.y() = geom.y;
-        point.z() = geom.z;
+        point.point.x() = geom.x;
+        point.point.y() = geom.y;
+        point.point.z() = geom.z;
 
         double intensity = StereoVision::IO::castedPointCloudAttribute<double>(
                     ptCloud.pointAccess->getAttributeByName("intensity").value_or(0.0));
 
-        point[3] = intensity;
+        point.intensity = intensity;
+
+        int classId = StereoVision::IO::castedPointCloudAttribute<int>(
+            ptCloud.pointAccess->getAttributeByName("classification").value_or(-1));
+
+        point.classId = classId;
 
         ret.push_back(point);
 
@@ -109,12 +128,12 @@ Multidim::Array<float,3> generateDepthMapWithBinaryTree(std::array<int,2> shape,
             Eigen::Vector3d minImg(i-distTol,j-distTol,0);
             Eigen::Vector3d maxImg(i+distTol,j+distTol,0);
 
-            Eigen::Vector4d ptCoords;
-            ptCoords.block<3,1>(0,0) = img2ptcloud*imgCoord;
-            Eigen::Vector4d min;
-            min.block<3,1>(0,0) = img2ptcloud*minImg;
-            Eigen::Vector4d max;
-            max.block<3,1>(0,0) = img2ptcloud*maxImg;
+            PointType ptCoords;
+            ptCoords.point.block<3,1>(0,0) = img2ptcloud*imgCoord;
+            PointType min;
+            min.point.block<3,1>(0,0) = img2ptcloud*minImg;
+            PointType max;
+            max.point.block<3,1>(0,0) = img2ptcloud*maxImg;
 
             for (int d = 0; d < 2; d++) {
                 if (min[d] > max[d]) {
@@ -134,7 +153,7 @@ Multidim::Array<float,3> generateDepthMapWithBinaryTree(std::array<int,2> shape,
 
             PointType& point = tree[pointIdx];
 
-            Eigen::Vector3d imgPoint = ptcloud2img*point.block<3,1>(0,0);
+            Eigen::Vector3d imgPoint = ptcloud2img*point.point.block<3,1>(0,0);
             imgPoint.z() = 0;
 
             float dist = (imgPoint - imgCoord).norm();
@@ -191,9 +210,9 @@ std::tuple<Multidim::Array<float,3>,Multidim::Array<float,2>> generateDepthMapDi
     #pragma omp parallel for
     for (int idx = 0; idx < points.size(); idx++) {
 
-        Eigen::Vector4d const& ptCoords = points[idx];
+        PointType const& ptCoords = points[idx];
 
-        Eigen::Vector3d imgCoord = ptcloud2img*ptCoords.block<3,1>(0,0);
+        Eigen::Vector3d imgCoord = ptcloud2img*ptCoords.point;
 
         if constexpr (pType == Pinhole) {
             imgCoord.x() /= imgCoord.z();
@@ -219,7 +238,7 @@ std::tuple<Multidim::Array<float,3>,Multidim::Array<float,2>> generateDepthMapDi
             continue;
         }
 
-        double z = ptCoords.z() - minZ;
+        double z = ptCoords.point.z() - minZ;
 
         double currentZ = z;
 
@@ -277,7 +296,7 @@ Multidim::Array<uint8_t,3> getCoverMask(std::array<int,2> shape,
         #pragma omp parallel for
         for (PointType const& pt : clusterPoints) {
 
-            Eigen::Vector3d imgPoint = ptcloud2img*pt.block<3,1>(0,0);
+            Eigen::Vector3d imgPoint = ptcloud2img*pt.point;
 
             int i = std::round(imgPoint.x());
             int j = std::round(imgPoint.y());
@@ -326,7 +345,7 @@ Multidim::Array<uint32_t,2> getClustersMask(std::array<int,2> shape,
         #pragma omp parallel for
         for (PointType const& pt : clusterPoints) {
 
-            Eigen::Vector3d imgPoint = ptcloud2img*pt.block<3,1>(0,0);
+            Eigen::Vector3d imgPoint = ptcloud2img*pt.point;
 
             int i = std::round(imgPoint.x());
             int j = std::round(imgPoint.y());
@@ -347,6 +366,51 @@ Multidim::Array<uint32_t,2> getClustersMask(std::array<int,2> shape,
 
 }
 
+Multidim::Array<uint8_t,2> generateClassMask(std::array<int,2> shape,
+                                              BinaryTree::ContainerT & points,
+                                              QVector<int> const& classIdxs,
+                                              StereoVision::Geometry::AffineTransform<double> const& ptcloud2img,
+                                              QTextStream & out) {
+
+
+    Multidim::Array<uint8_t,2> raster(shape);
+
+    out << "Start creating class mask!" << Qt::endl;
+
+    #pragma omp parallel for
+    for (int i = 0; i < shape[0]; i++) {
+
+        for (int j = 0; j < shape[1]; j++) {
+            raster.atUnchecked(i,j) = 0;
+        }
+    }
+
+    for (int ptI = 0; ptI < points.size(); ptI++) {
+        if (!classIdxs.contains(points[ptI].classId)) {
+            continue;
+        }
+
+
+        Eigen::Vector3d imgPoint = ptcloud2img*points[ptI].point;
+
+        int i = std::round(imgPoint.x());
+        int j = std::round(imgPoint.y());
+
+        if (i < 0 or j < 0) {
+            continue;
+        }
+
+        if (i >= shape[0] or j >= shape[1]) {
+            continue;
+        }
+
+        raster.atUnchecked(i,j) = 255;
+
+    }
+
+    return raster;
+}
+
 struct CamDef {
     Eigen::Vector3d rAxis;
     Eigen::Vector3d t;
@@ -364,6 +428,7 @@ int main(int argc, char** argv) {
     int resolution;
     int bufferDepth = 1;
     int inPaintingRadius = 5;
+    int classMaskId = -1;
 
     std::optional<CamDef> cameraDef = std::nullopt;
 
@@ -380,6 +445,7 @@ int main(int argc, char** argv) {
         TCLAP::ValueArg<std::string> cameraArg("", "camera", "camera definition, with the pose a axis angle and position, the focal length and sensor dimension", false, "", "rx,ry,rz,x,y,z,f,w,h");
         TCLAP::ValueArg<std::string> clustersArg("", "clusters", "clusters definition file", false, "", "filepath");
         TCLAP::ValueArg<std::string> vclustersArg("", "vclusters", "valid clusters definition file", false, "", "filepath");
+        TCLAP::ValueArg<int> classMaskArg("", "classMask", "classes to outline a mask ok", false, -1, "class id number");
 
         cmd.add(cloudFilePathArg);
         cmd.add(resArg);
@@ -387,6 +453,7 @@ int main(int argc, char** argv) {
         cmd.add(cameraArg);
         cmd.add(clustersArg);
         cmd.add(vclustersArg);
+        cmd.add(classMaskArg);
 
         cmd.parse(argc, argv);
 
@@ -397,6 +464,8 @@ int main(int argc, char** argv) {
             int tmp = bufferDepthArg.getValue();
             bufferDepth = std::max(tmp, 1);
         }
+
+        classMaskId = classMaskArg.getValue();
 
         if (clustersArg.isSet()) {
             clustersFileList = getFileList(clustersArg.getValue().c_str());
@@ -441,6 +510,7 @@ int main(int argc, char** argv) {
 
     Multidim::Array<float,3> raster;
     Multidim::Array<float,2> intensityRaster;
+    Multidim::Array<uint8_t,2> classMaskRaster;
 
     bool useInpainting = false;
 
@@ -476,30 +546,30 @@ int main(int argc, char** argv) {
 
     } else {
 
-        float minX = points[0].x();
-        float maxX = points[0].x();
-        float minY = points[0].y();
-        float maxY = points[0].y();
-        float minZ = points[0].z();
+        float minX = points[0].point.x();
+        float maxX = points[0].point.x();
+        float minY = points[0].point.y();
+        float maxY = points[0].point.y();
+        float minZ = points[0].point.z();
 
         for (int i = 1; i < points.size(); i++) {
 
-            if (points[i].x() < minX) {
-                minX = points[i].x();
+            if (points[i].point.x() < minX) {
+                minX = points[i].point.x();
             }
-            if (points[i].x() > maxX) {
-                maxX = points[i].x();
-            }
-
-            if (points[i].y() < minY) {
-                minY = points[i].y();
-            }
-            if (points[i].y() > maxY) {
-                maxY = points[i].y();
+            if (points[i].point.x() > maxX) {
+                maxX = points[i].point.x();
             }
 
-            if (points[i].z() < minZ) {
-                minZ = points[i].z();
+            if (points[i].point.y() < minY) {
+                minY = points[i].point.y();
+            }
+            if (points[i].point.y() > maxY) {
+                maxY = points[i].point.y();
+            }
+
+            if (points[i].point.z() < minZ) {
+                minZ = points[i].point.z();
             }
         }
 
@@ -626,12 +696,21 @@ int main(int argc, char** argv) {
         intensityRaster = StereoVision::ImageProcessing::nearestInPaintingMonochannel(intensityRaster, inpaintingMask);
     }
 
+    if (classMaskId >= 0) {
+        classMaskRaster = generateClassMask(shape,
+                                            points,
+                                            {classMaskId},
+                                            ptcloud2img,
+                                            out);
+    }
+
     out << "Computed raster (shape: " << raster.shape()[0] << "x" << raster.shape()[1] << "x" << raster.shape()[2] << ")" << Qt::endl;
 
     out << "Start writing image!" << Qt::endl;
 
     QString outFile = pointCloudFile + ".tiff";
     QString outIntensityFile = pointCloudFile + "intensity.tiff";
+    QString outclassMaskFile = pointCloudFile + "class_mask.tiff";
 
     bool ok = StereoVision::IO::writeImage<float, float>(outFile.toStdString(), raster);
 
@@ -645,6 +724,15 @@ int main(int argc, char** argv) {
 
         if (!ok) {
             err << "Error while writing intensity image" << Qt::endl;
+            return 1;
+        }
+    }
+
+    if (!classMaskRaster.empty()) {
+        ok = StereoVision::IO::writeImage<uint8_t, uint8_t>(outclassMaskFile.toStdString(), classMaskRaster);
+
+        if (!ok) {
+            err << "Error while writing class mask image" << Qt::endl;
             return 1;
         }
     }
