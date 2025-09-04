@@ -14,6 +14,8 @@ include(CMakePackageConfigHelpers)
 
 include(GNUInstallDirs)
 
+include(FetchContent)
+
 set(CMAKE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
 set(CMAKE_INSTALL_CMAKEDIR ${CMAKE_INSTALL_LIBDIR})
 set(CMAKE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME})
@@ -22,9 +24,9 @@ set(CMAKE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
 set(STEREOVISION_NAME "StereoVision")
 set(STEREOVISION_EXPORTNAME "StereoVisionTargets")
 
-option(buildTests "Build the test suits for the library" ON)
-option(buildExamples "Build the examples for the library" ON)
-option(buildGui "Build some additional tools for building gui with Qt" OFF)
+option(buildTests "Build the test suits for the library" OFF)
+option(buildExamples "Build the examples for the library" OFF)
+option(buildGui "Build some additional tools for building gui with Qt" ON)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
@@ -52,6 +54,16 @@ endif()
 if (FMASUPPORTED)
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mfma")
 endif()
+
+#MultidimArrays
+
+FetchContent_Declare(
+  MultidimArrays
+  GIT_REPOSITORY https://github.com/french-paragon/MultidimArrays.git
+  GIT_TAG 0f62f460a2670afdd1f0a4ede327332e361e565e
+  FIND_PACKAGE_ARGS
+)
+FetchContent_MakeAvailable(MultidimArrays)
 
 #openMP
 
@@ -200,8 +212,22 @@ add_library(
     ${LIB_SRC}
 )
 
+#copy all header files for build time headers availability
+foreach(FILE IN LISTS LIB_SRC)
+        if(FILE MATCHES "^((.*)/)?([^/]+)\\.h$")
+                file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/${FILE} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/include/${STEREOVISION_NAME}/${CMAKE_MATCH_2})
+        endif()
+endforeach()
+
 target_compile_definitions(${STEREOVISION_LIB} PRIVATE LIBSTEREOVISION_BUILDING)
-target_link_libraries(${STEREOVISION_LIB} PUBLIC Threads::Threads)
+target_link_libraries(${STEREOVISION_LIB} PUBLIC Threads::Threads MultidimArrays::MultidimArrays)
+
+target_include_directories(
+    ${STEREOVISION_LIB}
+    INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include/>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/>
+)
 
 if (JPEG_FOUND)
     message("Using native jpg library")
