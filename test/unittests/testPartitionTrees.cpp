@@ -140,9 +140,9 @@ ContainerType<Vec<nDim, fixedSize>> buildPointsWithHoles(QVector<int> const& sha
         }
 
         ptExcl[1] = basePoints[0];
-        ptExcl[2] = basePoints[std::min(1,basePoints.size()-1)];
-        ptExcl[3] = basePoints[std::min(2,basePoints.size()-1)];
-        ptExcl[4] = basePoints[std::min(3,basePoints.size()-1)];
+        ptExcl[2] = basePoints[std::min<int>(1,basePoints.size()-1)];
+        ptExcl[3] = basePoints[std::min<int>(2,basePoints.size()-1)];
+        ptExcl[4] = basePoints[std::min<int>(3,basePoints.size()-1)];
 
         for (Vec<nDim, fixedSize> const& vev : basePoints) {
 
