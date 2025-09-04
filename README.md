@@ -27,7 +27,32 @@ The building process is straighforward with cmake:
 	cmake ../path/to/src/LibStevi -DbuildTests=ON/OFF -DbuildExamples=ON/OFF
 	make
 
-The buildTests and buildExamples options are ON by default.
+The buildTests and buildExamples options are OFF by default.
+
+## Use via FetchContent
+
+To use the library in cmake directly using FetchContent write:
+
+```
+include(FetchContent) #if you have not done so before
+FetchContent_Declare(
+  StereoVision
+  GIT_REPOSITORY https://github.com/french-paragon/LibStevi.git
+  GIT_TAG [select your tag here]
+  FIND_PACKAGE_ARGS
+)
+FetchContent_MakeAvailable(StereoVision)
+```
+
+in your CMake Project. 
+
+## Linking the library
+
+You can link against the library by using in your CMakeLists.txt:
+
+```
+target_link_libraries([your_cmake_target] StereoVision::stevi)
+```
 
 ## Test data
 
@@ -35,12 +60,18 @@ The test data can be downloaded apart (to not clog the main repository) from [he
 
 We took some test data from the Active-Passive SimStereo dataset [https://ieee-dataport.org/open-access/active-passive-simstereo]. This dataset is licensed under a Creative Commons Attribution license, if you reuse this data, you have to cite the original work:
 
-	@data{gf1e-t452-22,
-	doi = {10.21227/gf1e-t452},
-	url = {https://dx.doi.org/10.21227/gf1e-t452},
-	author = {Jospin, Laurent Valentin and Laga, Hamid and Boussaid, Farid and Bennamoun, Mohammed},
-	publisher = {IEEE Dataport},
-	title = {Active-Passive SimStereo},
-	year = {2022}} 
+```
+@inproceedings{NEURIPS2022_bc3a68a2,
+author = {Jospin, Laurent and Antony, Allen and Xu, Lian and Laga, Hamid and Boussaid, Farid and Bennamoun, Mohammed},
+booktitle = {Advances in Neural Information Processing Systems},
+editor = {S. Koyejo and S. Mohamed and A. Agarwal and D. Belgrave and K. Cho and A. Oh},
+pages = {29235--29247},
+publisher = {Curran Associates, Inc.},
+title = {Active-Passive SimStereo - Benchmarking the Cross-Generalization Capabilities of Deep Learning-based Stereo Methods},
+url = {https://proceedings.neurips.cc/paper_files/paper/2022/file/bc3a68a20e5c8ba5cbefc1ecf74bfaaa-Paper-Datasets_and_Benchmarks.pdf},
+volume = {35},
+year = {2022}
+}
+```
 
 
