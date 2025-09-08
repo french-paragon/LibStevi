@@ -14,6 +14,7 @@
  add_subdirectory(generic_ray_alignement_evaluation)
  add_subdirectory(points_cloud2depth_map)
  add_subdirectory(detrend_terrain_in_pt_cloud)
+ add_subdirectory(split_pt_cloud_with_context)
 
  if (buildGui)
      add_subdirectory(stevimg_viewer)
