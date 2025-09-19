@@ -1,8 +1,7 @@
 
 set(EXEC_NAME io_metacloud)
 
-configure_file(main.cpp main.cpp)
-set(PROG_SRC ${CMAKE_CURRENT_BINARY_DIR}/main.cpp)
+set(PROG_SRC main.cpp)
 
 add_executable(
     ${EXEC_NAME}
