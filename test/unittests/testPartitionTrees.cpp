@@ -188,8 +188,15 @@ private Q_SLOTS:
     void initTestCase_data();
     void initTestCase();
 
+    void testGenericBSPClosest_data();
     void testGenericBSPClosest();
+    void testGenericBSPClosestInRange_data();
     void testGenericBSPClosestInRange();
+
+    void testGenericBVHPointsItemsIntersection_data();
+    void testGenericBVHPointsItemsIntersection();
+    void testGenericBVHRayIntersection_data();
+    void testGenericBVHRayIntersection();
 
 private:
 
@@ -322,48 +329,6 @@ private:
 
 void TestPartitionTrees::initTestCase_data() {
 
-    QTest::addColumn<QVector<int>>("shape");
-    QTest::addColumn<bool>("fixedSize");
-    QTest::addColumn<bool>("withHoles");
-
-
-    QTest::newRow("2D space (5x5) (dynamic)") << QVector<int>{5, 5} << false << false;
-    QTest::newRow("2D space (25x25) (dynamic)") << QVector<int>{25, 25} << false << false;
-    QTest::newRow("2D space (125x125) (dynamic)") << QVector<int>{125, 125} << false << false;
-    QTest::newRow("2D space (250x250) (dynamic)") << QVector<int>{250, 250} << false << false;
-    QTest::newRow("2D space (375x375) (dynamic)") << QVector<int>{375, 375} << false << false;
-    QTest::newRow("2D space (500x500) (dynamic)") << QVector<int>{500, 500} << false << false;
-    QTest::newRow("2D space (625x625) (dynamic)") << QVector<int>{625, 625} << false << false;
-    QTest::newRow("3D space (3x3x3) (dynamic)") << QVector<int>{3,3,3} << false << false;
-    QTest::newRow("3D space (9x9x9) (dynamic)") << QVector<int>{9,9,9} << false << false;
-    QTest::newRow("3D space (27x27x27) (dynamic)") << QVector<int>{27,27,27} << false << false;
-    QTest::newRow("3D space (50x50x50) (dynamic)") << QVector<int>{50,50,50} << false << false;
-
-
-    QTest::newRow("2D space (5x5) (fixed)") << QVector<int>{5, 5} << true << false;
-    QTest::newRow("2D space (25x25) (fixed)") << QVector<int>{25, 25} << true << false;
-    QTest::newRow("2D space (125x125) (fixed)") << QVector<int>{125, 125} << true << false;
-    QTest::newRow("2D space (250x250) (fixed)") << QVector<int>{250, 250} << true << false;
-    QTest::newRow("2D space (375x375) (fixed)") << QVector<int>{375, 375} << true << false;
-    QTest::newRow("2D space (500x500) (fixed)") << QVector<int>{500, 500} << true << false;
-    QTest::newRow("2D space (625x625) (fixed)") << QVector<int>{625, 625} << true << false;
-    QTest::newRow("3D space (3x3x3) (fixed)") << QVector<int>{3,3,3} << true << false;
-    QTest::newRow("3D space (9x9x9) (fixed)") << QVector<int>{9,9,9} << true << false;
-    QTest::newRow("3D space (27x27x27) (fixed)") << QVector<int>{27,27,27} << true << false;
-    QTest::newRow("3D space (50x50x50) (fixed)") << QVector<int>{50,50,50} << true << false;
-
-
-    QTest::newRow("2D space (5x5) (fixed, with holes)") << QVector<int>{5, 5} << true << true;
-    QTest::newRow("2D space (25x25) (fixed, with holes)") << QVector<int>{25, 25} << true << true;
-    QTest::newRow("2D space (125x125) (fixed, with holes)") << QVector<int>{125, 125} << true << true;
-    QTest::newRow("2D space (250x250) (fixed, with holes)") << QVector<int>{250, 250} << true << true;
-    QTest::newRow("2D space (375x375) (fixed, with holes)") << QVector<int>{375, 375} << true << true;
-    QTest::newRow("2D space (500x500) (fixed, with holes)") << QVector<int>{500, 500} << true << true;
-    QTest::newRow("2D space (625x625) (fixed, with holes)") << QVector<int>{625, 625} << true << true;
-    QTest::newRow("3D space (3x3x3) (fixed, with holes)") << QVector<int>{3,3,3} << true << true;
-    QTest::newRow("3D space (9x9x9) (fixed, with holes)") << QVector<int>{9,9,9} << true << true;
-    QTest::newRow("3D space (27x27x27) (fixed, with holes)") << QVector<int>{27,27,27} << true << true;
-    QTest::newRow("3D space (50x50x50) (fixed, with holes)") << QVector<int>{50,50,50} << true << true;
 }
 
 void TestPartitionTrees::initTestCase() {
@@ -373,10 +338,69 @@ void TestPartitionTrees::initTestCase() {
 
 }
 
+void TestPartitionTrees::testGenericBSPClosest_data() {
+
+    QTest::addColumn<QVector<int>>("shape");
+    QTest::addColumn<bool>("fixedSize");
+    QTest::addColumn<bool>("withHoles");
+
+
+    QTest::newRow("2D space (5x5) (dynamic)") << QVector<int>{5, 5} << false << false;
+    QTest::newRow("2D space (25x25) (dynamic)") << QVector<int>{25, 25} << false << false;
+#ifdef NDEBUG
+    QTest::newRow("2D space (125x125) (dynamic)") << QVector<int>{125, 125} << false << false;
+    QTest::newRow("2D space (250x250) (dynamic)") << QVector<int>{250, 250} << false << false;
+    QTest::newRow("2D space (375x375) (dynamic)") << QVector<int>{375, 375} << false << false;
+    QTest::newRow("2D space (500x500) (dynamic)") << QVector<int>{500, 500} << false << false;
+    QTest::newRow("2D space (625x625) (dynamic)") << QVector<int>{625, 625} << false << false;
+#endif
+    QTest::newRow("3D space (3x3x3) (dynamic)") << QVector<int>{3,3,3} << false << false;
+#ifdef NDEBUG
+    QTest::newRow("3D space (9x9x9) (dynamic)") << QVector<int>{9,9,9} << false << false;
+    QTest::newRow("3D space (27x27x27) (dynamic)") << QVector<int>{27,27,27} << false << false;
+    QTest::newRow("3D space (50x50x50) (dynamic)") << QVector<int>{50,50,50} << false << false;
+#endif
+
+
+    QTest::newRow("2D space (5x5) (fixed)") << QVector<int>{5, 5} << true << false;
+    QTest::newRow("2D space (25x25) (fixed)") << QVector<int>{25, 25} << true << false;
+#ifdef NDEBUG
+    QTest::newRow("2D space (125x125) (fixed)") << QVector<int>{125, 125} << true << false;
+    QTest::newRow("2D space (250x250) (fixed)") << QVector<int>{250, 250} << true << false;
+    QTest::newRow("2D space (375x375) (fixed)") << QVector<int>{375, 375} << true << false;
+    QTest::newRow("2D space (500x500) (fixed)") << QVector<int>{500, 500} << true << false;
+    QTest::newRow("2D space (625x625) (fixed)") << QVector<int>{625, 625} << true << false;
+#endif
+    QTest::newRow("3D space (3x3x3) (fixed)") << QVector<int>{3,3,3} << true << false;
+#ifdef NDEBUG
+    QTest::newRow("3D space (9x9x9) (fixed)") << QVector<int>{9,9,9} << true << false;
+    QTest::newRow("3D space (27x27x27) (fixed)") << QVector<int>{27,27,27} << true << false;
+    QTest::newRow("3D space (50x50x50) (fixed)") << QVector<int>{50,50,50} << true << false;
+#endif
+
+
+    QTest::newRow("2D space (5x5) (fixed, with holes)") << QVector<int>{5, 5} << true << true;
+    QTest::newRow("2D space (25x25) (fixed, with holes)") << QVector<int>{25, 25} << true << true;
+#ifdef NDEBUG
+    QTest::newRow("2D space (125x125) (fixed, with holes)") << QVector<int>{125, 125} << true << true;
+    QTest::newRow("2D space (250x250) (fixed, with holes)") << QVector<int>{250, 250} << true << true;
+    QTest::newRow("2D space (375x375) (fixed, with holes)") << QVector<int>{375, 375} << true << true;
+    QTest::newRow("2D space (500x500) (fixed, with holes)") << QVector<int>{500, 500} << true << true;
+    QTest::newRow("2D space (625x625) (fixed, with holes)") << QVector<int>{625, 625} << true << true;
+#endif
+    QTest::newRow("3D space (3x3x3) (fixed, with holes)") << QVector<int>{3,3,3} << true << true;
+#ifdef NDEBUG
+    QTest::newRow("3D space (9x9x9) (fixed, with holes)") << QVector<int>{9,9,9} << true << true;
+    QTest::newRow("3D space (27x27x27) (fixed, with holes)") << QVector<int>{27,27,27} << true << true;
+    QTest::newRow("3D space (50x50x50) (fixed, with holes)") << QVector<int>{50,50,50} << true << true;
+#endif
+
+}
+
 void TestPartitionTrees::testGenericBSPClosest() {
-    QFETCH_GLOBAL(QVector<int>, shape);
-    QFETCH_GLOBAL(bool, fixedSize);
-    QFETCH_GLOBAL(bool, withHoles);
+    QFETCH(QVector<int>, shape);
+    QFETCH(bool, fixedSize);
+    QFETCH(bool, withHoles);
 
 
     int nDim = shape.size();
@@ -448,10 +472,69 @@ void TestPartitionTrees::testGenericBSPClosest() {
 
 }
 
+void TestPartitionTrees::testGenericBSPClosestInRange_data() {
+
+    QTest::addColumn<QVector<int>>("shape");
+    QTest::addColumn<bool>("fixedSize");
+    QTest::addColumn<bool>("withHoles");
+
+
+    QTest::newRow("2D space (5x5) (dynamic)") << QVector<int>{5, 5} << false << false;
+    QTest::newRow("2D space (25x25) (dynamic)") << QVector<int>{25, 25} << false << false;
+#ifdef NDEBUG
+    QTest::newRow("2D space (125x125) (dynamic)") << QVector<int>{125, 125} << false << false;
+    QTest::newRow("2D space (250x250) (dynamic)") << QVector<int>{250, 250} << false << false;
+    QTest::newRow("2D space (375x375) (dynamic)") << QVector<int>{375, 375} << false << false;
+    QTest::newRow("2D space (500x500) (dynamic)") << QVector<int>{500, 500} << false << false;
+    QTest::newRow("2D space (625x625) (dynamic)") << QVector<int>{625, 625} << false << false;
+#endif
+    QTest::newRow("3D space (3x3x3) (dynamic)") << QVector<int>{3,3,3} << false << false;
+#ifdef NDEBUG
+    QTest::newRow("3D space (9x9x9) (dynamic)") << QVector<int>{9,9,9} << false << false;
+    QTest::newRow("3D space (27x27x27) (dynamic)") << QVector<int>{27,27,27} << false << false;
+    QTest::newRow("3D space (50x50x50) (dynamic)") << QVector<int>{50,50,50} << false << false;
+#endif
+
+
+    QTest::newRow("2D space (5x5) (fixed)") << QVector<int>{5, 5} << true << false;
+    QTest::newRow("2D space (25x25) (fixed)") << QVector<int>{25, 25} << true << false;
+#ifdef NDEBUG
+    QTest::newRow("2D space (125x125) (fixed)") << QVector<int>{125, 125} << true << false;
+    QTest::newRow("2D space (250x250) (fixed)") << QVector<int>{250, 250} << true << false;
+    QTest::newRow("2D space (375x375) (fixed)") << QVector<int>{375, 375} << true << false;
+    QTest::newRow("2D space (500x500) (fixed)") << QVector<int>{500, 500} << true << false;
+    QTest::newRow("2D space (625x625) (fixed)") << QVector<int>{625, 625} << true << false;
+#endif
+    QTest::newRow("3D space (3x3x3) (fixed)") << QVector<int>{3,3,3} << true << false;
+#ifdef NDEBUG
+    QTest::newRow("3D space (9x9x9) (fixed)") << QVector<int>{9,9,9} << true << false;
+    QTest::newRow("3D space (27x27x27) (fixed)") << QVector<int>{27,27,27} << true << false;
+    QTest::newRow("3D space (50x50x50) (fixed)") << QVector<int>{50,50,50} << true << false;
+#endif
+
+
+    QTest::newRow("2D space (5x5) (fixed, with holes)") << QVector<int>{5, 5} << true << true;
+    QTest::newRow("2D space (25x25) (fixed, with holes)") << QVector<int>{25, 25} << true << true;
+#ifdef NDEBUG
+    QTest::newRow("2D space (125x125) (fixed, with holes)") << QVector<int>{125, 125} << true << true;
+    QTest::newRow("2D space (250x250) (fixed, with holes)") << QVector<int>{250, 250} << true << true;
+    QTest::newRow("2D space (375x375) (fixed, with holes)") << QVector<int>{375, 375} << true << true;
+    QTest::newRow("2D space (500x500) (fixed, with holes)") << QVector<int>{500, 500} << true << true;
+    QTest::newRow("2D space (625x625) (fixed, with holes)") << QVector<int>{625, 625} << true << true;
+#endif
+    QTest::newRow("3D space (3x3x3) (fixed, with holes)") << QVector<int>{3,3,3} << true << true;
+#ifdef NDEBUG
+    QTest::newRow("3D space (9x9x9) (fixed, with holes)") << QVector<int>{9,9,9} << true << true;
+    QTest::newRow("3D space (27x27x27) (fixed, with holes)") << QVector<int>{27,27,27} << true << true;
+    QTest::newRow("3D space (50x50x50) (fixed, with holes)") << QVector<int>{50,50,50} << true << true;
+#endif
+
+}
+
 void TestPartitionTrees::testGenericBSPClosestInRange() {
-    QFETCH_GLOBAL(QVector<int>, shape);
-    QFETCH_GLOBAL(bool, fixedSize);
-    QFETCH_GLOBAL(bool, withHoles);
+    QFETCH(QVector<int>, shape);
+    QFETCH(bool, fixedSize);
+    QFETCH(bool, withHoles);
 
     int nDim = shape.size();
 
@@ -519,6 +602,149 @@ void TestPartitionTrees::testGenericBSPClosestInRange() {
     default:
         QSKIP("Unsupported number of dimensions requested!");
     }
+}
+
+
+
+void TestPartitionTrees::testGenericBVHPointsItemsIntersection_data() {
+
+    QTest::addColumn<int>("size");
+
+    QTest::newRow("small (4)") << 2;
+    QTest::newRow("large (10000)") << 100;
+#ifdef NDEBUG
+    QTest::newRow("larger (40000)") << 200;
+#endif
+
+}
+void TestPartitionTrees::testGenericBVHPointsItemsIntersection() {
+
+
+    QFETCH(int, size);
+
+    long nPoints = size*size;
+
+    QVector<std::array<float,2>> points;
+
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
+            points.push_back(std::array<float,2>{float(i),float(j)});
+        }
+    }
+
+    float radius = 1;
+
+    using BVHType = StereoVision::Geometry::GenericBVH<std::array<float,2>, 2, float, QVector<std::array<float,2>>>;
+
+    BVHType::RangeFunc rangeFunc = [&radius] (std::array<float,2> const& obj, int dim) {
+        return BVHType::Range{obj[dim]-radius, obj[dim]+radius};
+    };
+
+    BVHType::ContainPointFunc pointFunc = [&radius] (std::array<float,2> const& obj, BVHType::GenericPoint const& point) {
+        double dr = 0;
+
+        for (int i = 0; i < 2; i++) {
+            double delta = obj[i] - point[i];
+            dr += delta*delta;
+        }
+
+        return dr <= radius*radius;
+    };
+
+    BVHType bvh(points, rangeFunc, pointFunc);
+
+    QBENCHMARK {
+        float center = float(size-1)/2;
+        std::array<float,2> point = {center, center};
+        std::vector<int> points = bvh.itemsContainingPoint(point);
+        QCOMPARE(points.size(), 4);
+    }
+
+}
+void TestPartitionTrees::testGenericBVHRayIntersection_data() {
+
+    QTest::addColumn<int>("size");
+
+    QTest::newRow("small (4)") << 2;
+    QTest::newRow("large (10000)") << 100;
+#ifdef NDEBUG
+    QTest::newRow("larger (40000)") << 200;
+#endif
+
+}
+void TestPartitionTrees::testGenericBVHRayIntersection() {
+
+
+    QFETCH(int, size);
+
+    long nPoints = size*size;
+
+    QVector<std::array<float,2>> points;
+
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
+            points.push_back(std::array<float,2>{float(i),float(j)});
+        }
+    }
+
+    float radius = 1;
+
+    using BVHType = StereoVision::Geometry::GenericBVH<std::array<float,2>, 2, float, QVector<std::array<float,2>>>;
+
+    BVHType::RangeFunc rangeFunc = [&radius] (std::array<float,2> const& obj, int dim) {
+        return BVHType::Range{obj[dim]-radius, obj[dim]+radius};
+    };
+
+    BVHType::RayIntersectFunc rayFunc = [&radius] (std::array<float,2> const& obj,
+                                                  BVHType::GenericPoint const& origin,
+                                                  BVHType::GenericVec const& direction) -> std::optional<BVHType::GenericPoint> {
+        double numerator = 0;
+        double denominator = 0;
+
+        for (int i = 0; i < 2; i++) {
+            numerator += direction[i]*(obj[i]-origin[i]);
+            denominator += direction[i]*direction[i];
+        }
+
+        double a = numerator/denominator;
+
+        double dr = 0;
+
+        for (int i = 0; i < 2; i++) {
+            double delta = obj[i] - (origin[i] + a*direction[i]);
+            dr += delta*delta;
+        }
+
+        double r2 = radius*radius;
+
+        if (dr > r2) {
+            return std::nullopt;
+        }
+
+        double dh = std::sqrt(r2-dr);
+
+        double dScale = std::sqrt(denominator);
+
+        std::array<float,2> ret;
+
+        for (int i = 0; i < 2; i++) {
+            ret[i] = (origin[i] + (a - dh/dScale)*direction[i]);
+        }
+
+        return ret;
+
+    };
+
+    BVHType bvh(points, rangeFunc, BVHType::ContainPointFunc(), rayFunc);
+
+    QBENCHMARK {
+        std::array<float,2> origin = {float(-size), float(-size)};
+        std::array<float,2> direction = {float(1), float(1)};
+        auto intersection = bvh.rayIntersection(origin, direction);
+        QVERIFY(intersection.has_value());
+    }
+
+
 }
 
 QTEST_MAIN(TestPartitionTrees);

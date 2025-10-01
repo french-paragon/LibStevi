@@ -10,6 +10,8 @@
 #include "io/pointcloud_io.h"
 #include "io/pcd_pointcloud_io.h"
 
+#include "geometry/genericbinarypartitioningtree.h"
+
 struct Point {
     float x;
     float y;
@@ -18,6 +20,42 @@ struct Point {
     float g;
     float b;
     uint8_t inCluster;
+
+    float& operator[](int dim) {
+        switch(dim) {
+        case 0:
+            return x;
+        case 1:
+            return y;
+        case 2:
+            return z;
+        case 3:
+            return r;
+        case 4:
+            return g;
+        case 5:
+            return b;
+        }
+        return x;
+    }
+
+    float const& operator[](int dim) const {
+        switch(dim) {
+        case 0:
+            return x;
+        case 1:
+            return y;
+        case 2:
+            return z;
+        case 3:
+            return r;
+        case 4:
+            return g;
+        case 5:
+            return b;
+        }
+        return x;
+    }
 };
 
 struct PointSet {
@@ -328,8 +366,35 @@ int main(int argc, char** argv) {
 
         } while (hasMore);
     }
+
+    std::cout << "Points data loaded!" << std::endl;
+
     //scope 2, second read
     {
+
+        using BVHStruct = StereoVision::Geometry::GenericBVH<int,3,float,std::vector<int>>;
+
+        std::vector<int> clustersIdxs(sets.size());
+
+        for (int i = 0; i < sets.size(); i++) {
+            clustersIdxs[i] = i;
+        }
+
+        BVHStruct::RangeFunc rangeRead = [&sets, &distance] (int i, int dim) {
+            //read the range with distance tolerance for correct intersection computation
+            switch (dim) {
+            case 0:
+                return BVHStruct::Range{sets[i]->minX-distance, sets[i]->maxX+distance};
+            case 1:
+                return BVHStruct::Range{sets[i]->minY-distance, sets[i]->maxY+distance};
+            case 2:
+                return BVHStruct::Range{sets[i]->minZ-distance, sets[i]->maxZ+distance};
+            }
+            return BVHStruct::Range{sets[i]->minX, sets[i]->maxX};
+        };
+
+        BVHStruct bvhStruct(clustersIdxs, rangeRead);
+
         std::optional<StereoVision::IO::FullPointCloudAccessInterface> optPointCloud =
             StereoVision::IO::openPointCloud(pointCloudFile);
 
@@ -370,7 +435,9 @@ int main(int argc, char** argv) {
 
             hasMore = ptCloud.pointAccess->gotoNext();
 
-            for (int i = 0; i < sets.size(); i++) {
+            std::vector<int> clustersIntersecting = bvhStruct.itemsContainingPoint(point);
+
+            for (int i : clustersIntersecting) {
                 if (sets[i]->id == cluster) {
                     continue; //do not insert the point into its own cluster
                 }
