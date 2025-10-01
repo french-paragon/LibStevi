@@ -188,8 +188,6 @@ Eigen::Matrix<Pos_T, 2, 1> inverseSkewDistortion(Eigen::Matrix<Pos_T, 2, 1> cons
                                       Eigen::Matrix<Pos_T, 2, 1> const& f,
                                       Eigen::Matrix<Pos_T, 2, 1> const& pp) {
 
-    static_assert (std::is_floating_point_v<Pos_T> and std::is_floating_point_v<B_T>, "The position and B parameters type should be float point types");
-
     Eigen::Matrix<Pos_T, 2, 1> r = pos;
     r[1] -= pp[1];
     r[1] /= f[1];
