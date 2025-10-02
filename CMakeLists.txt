@@ -60,7 +60,7 @@ endif()
 FetchContent_Declare(
   MultidimArrays
   GIT_REPOSITORY https://github.com/french-paragon/MultidimArrays.git
-  GIT_TAG 0f62f460a2670afdd1f0a4ede327332e361e565e
+  GIT_TAG 6b816b3b0ab8f1a484cfa695daa9f64f11ea2348
   FIND_PACKAGE_ARGS
 )
 FetchContent_MakeAvailable(MultidimArrays)
