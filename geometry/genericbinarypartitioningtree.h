@@ -763,6 +763,17 @@ public:
         return std::vector<int>(idxs.begin(), idxs.end());
     }
 
+    template <typename PtT>
+    inline bool pointIntersectAnItem(PtT const& point) {
+        std::set<int> idxs;
+
+        constexpr bool stopAtFirst = true;
+        checkItemsIntersectingPoints<stopAtFirst>(_hierarchyRoot, idxs, point);
+
+        return !idxs.empty();
+
+    }
+
     struct RayIntersection {
         GenericPoint point;
         int objIdx;
@@ -906,8 +917,13 @@ protected:
         _hierarchyRoot = buildGroupInfos(idxs.data(), idxs.size());
     }
 
-    template <typename PtT>
+    template <bool stopAtFirst = false, typename PtT>
     void checkItemsIntersectingPoints(GroupInfos* group, std::set<int> & items, PtT const& point) {
+
+        if (stopAtFirst and !items.empty()) {
+            return; //stop recursion if an item is found
+        }
+
         if (!ContainPoint(*group, point)) {
             return;
         }

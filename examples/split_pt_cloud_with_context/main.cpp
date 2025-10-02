@@ -59,6 +59,16 @@ struct Point {
 };
 
 struct PointSet {
+
+
+    using BVHStruct = StereoVision::Geometry::GenericBVH<size_t,3,float,std::vector<size_t>>;
+
+    ~PointSet() {
+        if (bvhAccelerator != nullptr) {
+            delete bvhAccelerator;
+        }
+    }
+
     Point operator[](int i) {
         return points[i];
     }
@@ -89,17 +99,8 @@ struct PointSet {
     }
 
     bool pointIsInContext(Point const& pt, float distance) {
-        //first use the bounding box as a pre-filter
-        if (pt.x < minX-distance or pt.x > maxX+distance) {
-            return false;
-        }
-
-        if (pt.y < minY-distance or pt.y > maxY+distance) {
-            return false;
-        }
-
-        if (pt.z < minZ-distance or pt.z > maxZ+distance) {
-            return false;
+        if (bvhAccelerator != nullptr) {
+            return bvhAccelerator->pointIntersectAnItem(pt);
         }
 
         //if within the bounding box search for closest match
@@ -119,6 +120,41 @@ struct PointSet {
         return dist2 <= (distance*distance);
     }
 
+    void buildBVHAccelerator(float distance) {
+        std::vector<size_t> pointsPointers(points.size());
+
+        for (size_t i = 0; i < points.size(); i++) {
+            pointsPointers[i] = i;
+        }
+
+        BVHStruct::RangeFunc rangeFunc = [this, distance] (int i, int dim) {
+            //read the range with distance tolerance for correct intersection computation
+            switch (dim) {
+            case 0:
+                return BVHStruct::Range{points[i].x-distance, points[i].x+distance};
+            case 1:
+                return BVHStruct::Range{points[i].y-distance, points[i].y+distance};
+            case 2:
+                return BVHStruct::Range{points[i].z-distance, points[i].z+distance};
+            }
+            return BVHStruct::Range{points[i].x-distance, points[i].x+distance};
+        };
+
+        double d2 = distance*distance;
+        BVHStruct::ContainPointFunc containPointFunc = [this, d2] (int ptId, BVHStruct::GenericPoint point) -> bool {
+            double dist2 = 0;
+
+            for (int i = 0; i < 3; i++) {
+                float delta = point[i] - points[ptId][i];
+                dist2 += delta*delta;
+            }
+
+            return dist2 <= d2;
+        };
+
+        bvhAccelerator = new BVHStruct(pointsPointers, rangeFunc, containPointFunc);
+    }
+
     long id;
 
     float minX;
@@ -130,6 +166,8 @@ struct PointSet {
 
     std::vector<Point> points;
     std::vector<Point> context;
+
+    BVHStruct* bvhAccelerator = nullptr;
 };
 
 class PointSetPointAccessInterface : public StereoVision::IO::PointCloudPointAccessInterface {
@@ -310,6 +348,8 @@ int main(int argc, char** argv) {
     std::map<long,long> setMatch;
     std::vector<std::unique_ptr<PointSet>> sets;
 
+    size_t nPoints = 0;
+
     //scope 1, first read
     {
         std::optional<StereoVision::IO::FullPointCloudAccessInterface> optPointCloud =
@@ -349,7 +389,6 @@ int main(int argc, char** argv) {
 
             long cluster = StereoVision::IO::castedPointCloudAttribute<long>(
                 ptCloud.pointAccess->getAttributeByName(clustersAttribute.c_str()).value_or(0));
-
             hasMore = ptCloud.pointAccess->gotoNext();
 
             if (cluster <= 0) {
@@ -364,12 +403,24 @@ int main(int argc, char** argv) {
 
             sets[setMatch[cluster]]->insertPoint(point);
 
+            nPoints++;
+
         } while (hasMore);
     }
 
-    std::cout << "Points data loaded!" << std::endl;
+    std::cout << "Points data loaded (" << nPoints << " points)!" << std::endl;
 
     //scope 2, second read
+
+    for (std::unique_ptr<PointSet>& ptSet : sets) {
+        ptSet->buildBVHAccelerator(distance);
+        ptSet->context.reserve(ptSet->points.size()/2); //reserve memory for speedups
+    }
+
+    std::cout << "Internal BVH built!" << std::endl;
+
+    int nProcessed = 0;
+
     {
 
         using BVHStruct = StereoVision::Geometry::GenericBVH<int,3,float,std::vector<int>>;
@@ -447,7 +498,17 @@ int main(int argc, char** argv) {
                 }
             }
 
+            nProcessed++;
+
+            if (nProcessed%16 == 0) {
+                std::cout << "\r" << "Processed point " << nProcessed << "/" << nPoints << std::flush;
+            }
+
         } while (hasMore);
+
+        std::cout << "\r" << "Processed point " << nPoints << "/" << nPoints << std::endl;
+
+        std::cout << "Start writing the sets!" << std::endl;
 
         //writing the sets
         for (int i = 0; i < sets.size(); i++) {
