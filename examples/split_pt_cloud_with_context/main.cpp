@@ -391,6 +391,8 @@ int main(int argc, char** argv) {
                 ptCloud.pointAccess->getAttributeByName(clustersAttribute.c_str()).value_or(0));
             hasMore = ptCloud.pointAccess->gotoNext();
 
+            nPoints++;
+
             if (cluster <= 0) {
                 continue; //cluster 0 is assumed to be ground
             }
@@ -402,8 +404,6 @@ int main(int argc, char** argv) {
             }
 
             sets[setMatch[cluster]]->insertPoint(point);
-
-            nPoints++;
 
         } while (hasMore);
     }
