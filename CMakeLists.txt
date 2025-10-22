@@ -214,6 +214,10 @@ add_library(
 )
 add_library(${STEREOVISION_NAME}::${STEREOVISION_LIB} ALIAS ${STEREOVISION_LIB})
 
+if (buildGui)
+    add_library(${STEREOVISION_NAME}::qImageWidget ALIAS ${QIMAGEDISPLAYWIDGET_LIB})
+endif()
+
 #copy all header files for build time headers availability
 foreach(FILE IN LISTS LIB_SRC)
         if(FILE MATCHES "^((.*)/)?([^/]+)\\.h$")
