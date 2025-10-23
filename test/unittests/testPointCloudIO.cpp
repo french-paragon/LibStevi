@@ -668,7 +668,7 @@ void TestPointCloudIO::testLasPointCloud() {
         // open the las file
         auto fullPointCloud = StereoVision::IO::openPointCloudLas(filePath.toStdString());
         // verify that the interface is not nullopt and that the header and the point cloud are not nullptr
-        QVERIFY2(fullPointCloud != std::nullopt, qPrintable(QString("Failed to open las file: %1").arg(filePath)));
+        QVERIFY2(fullPointCloud.has_value(), qPrintable(QString("Failed to open las file: %1").arg(filePath)));
         auto& pointAccess = fullPointCloud->pointAccess;
         auto& headerAccess = fullPointCloud->headerAccess;
         QVERIFY2(pointAccess != nullptr, qPrintable(QString("The point cloud is null for file: %1").arg(filePath)));
@@ -1075,7 +1075,7 @@ void TestPointCloudIO::testPcdPointCloud() {
         // open the pcd file
         auto fullPointCloud = StereoVision::IO::openPointCloudPcd(filePath.toStdString());
         // verify that the interface is not nullopt and that the header and the point cloud are not nullptr
-        QVERIFY2(fullPointCloud != std::nullopt, qPrintable(QString("Failed to open pcd file: %1").arg(filePath)));
+        QVERIFY2(fullPointCloud.has_value(), qPrintable(QString("Failed to open pcd file: %1").arg(filePath)));
         auto& pointAccess = fullPointCloud->pointAccess;
         auto& headerAccess = fullPointCloud->headerAccess;
         QVERIFY2(pointAccess != nullptr, qPrintable(QString("The point cloud is null for file: %1").arg(filePath)));
