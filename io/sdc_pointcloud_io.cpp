@@ -32,11 +32,11 @@ SdcPointCloudPoint::SdcPointCloudPoint(std::unique_ptr<std::istream> reader, uin
     }
 }
 
-int SdcPointCloudPoint::expectedNumberOfPoints() const {
+int64_t SdcPointCloudPoint::expectedNumberOfPoints() const {
     return -1;
 }
 
-int SdcPointCloudPoint::processedNumberOfPoints() const {
+int64_t SdcPointCloudPoint::processedNumberOfPoints() const {
     return -1;
 }
 

@@ -188,7 +188,7 @@ public:
         const PcdDataStorageType dataStorageType);
 
 
-    virtual int expectedNumberOfPoints() const override;
+    virtual int64_t expectedNumberOfPoints() const override;
 
     std::optional<PointCloudGenericAttribute> getAttributeById(int id) const override;
 

@@ -137,7 +137,7 @@ public:
 
     std::vector<std::string> attributeList() const override { return attributeNames; }
 
-    virtual int expectedNumberOfPoints() const override;
+    virtual int64_t expectedNumberOfPoints() const override;
 
     bool gotoNext() override;
     bool hasData() const override;

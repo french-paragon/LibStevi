@@ -637,7 +637,7 @@ std::optional<PointCloudGenericAttribute> MetaCloudPoint::getAttributeByName(con
     return getAttributeById(std::distance(attributeNames.begin(), it));
 }
 
-int MetaCloudPoint::expectedNumberOfPoints() const {
+int64_t MetaCloudPoint::expectedNumberOfPoints() const {
 
     int count = 0;
 

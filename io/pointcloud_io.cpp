@@ -54,14 +54,14 @@ std::optional<FullPointCloudAccessInterface> openPointCloud(const std::filesyste
     }
 }
 
-int PointCloudHeaderInterface::expectedNumberOfPoints() const {
+int64_t PointCloudHeaderInterface::expectedNumberOfPoints() const {
     return -1;
 }
 
-int PointCloudPointAccessInterface::expectedNumberOfPoints() const {
+int64_t PointCloudPointAccessInterface::expectedNumberOfPoints() const {
     return -1;
 }
-int PointCloudPointAccessInterface::processedNumberOfPoints() const {
+int64_t PointCloudPointAccessInterface::processedNumberOfPoints() const {
     return -1;
 }
 

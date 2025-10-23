@@ -723,7 +723,7 @@ std::vector<std::string> LasPointCloudHeader::attributeList() const {
     return publicHeaderBlock.publicHeaderAttributeList();
 }
 
-int LasPointCloudHeader::expectedNumberOfPoints() const {
+int64_t LasPointCloudHeader::expectedNumberOfPoints() const {
     return publicHeaderBlock.numberOfPointRecords;
 }
 LasExtraAttributesInfos LasPointCloudHeader::getPointwiseExtraAttributesInfos(bool ignoreUndocumentedExtraBytes) const {

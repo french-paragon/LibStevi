@@ -327,7 +327,7 @@ public:
      * \brief expectedNumberOfPoints expected number of points in the associated cloud
      * \return the expected number of points in the cloud, or a nagative number if it cannot be estimated.
      */
-    virtual int expectedNumberOfPoints() const;
+    virtual int64_t expectedNumberOfPoints() const;
 
     virtual std::optional<PointCloudGenericAttribute> getAttributeById(int id) const = 0;
     virtual std::optional<PointCloudGenericAttribute> getAttributeByName(const char* attributeName) const = 0;
@@ -361,14 +361,14 @@ public:
      *
      * The default implementation return -1
      */
-    virtual int expectedNumberOfPoints() const;
+    virtual int64_t expectedNumberOfPoints() const;
     /*!
      * \brief processedNumberOfPoints return the number of points that have been processed
      * \return the number of points that have been processed, or a negative value if it cannot be evaluated.
      *
      * the default implementation return -1
      */
-    virtual int processedNumberOfPoints() const;
+    virtual int64_t processedNumberOfPoints() const;
 
     virtual PtGeometry<PointCloudGenericAttribute> getPointPosition() const = 0;
     virtual std::optional<PtColor<PointCloudGenericAttribute>> getPointColor() const = 0;
@@ -457,7 +457,7 @@ public:
 
     }
 
-    virtual int processedNumberOfPoints() const override {
+    virtual int64_t processedNumberOfPoints() const override {
         return _auto_points_counter;
     }
 

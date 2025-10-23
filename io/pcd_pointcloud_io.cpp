@@ -589,7 +589,7 @@ PcdPointCloudHeader::PcdPointCloudHeader(const double version, const std::vector
         viewpoint{viewpoint}, points{points}, data{data}
 { }
 
-int PcdPointCloudHeader::expectedNumberOfPoints() const {
+int64_t PcdPointCloudHeader::expectedNumberOfPoints() const {
     return points;
 }
 std::optional<PointCloudGenericAttribute> PcdPointCloudHeader::getAttributeById(int id) const {

@@ -133,8 +133,8 @@ private:
 public:
     SdcPointCloudPoint(std::unique_ptr<std::istream> reader, uint16_t majorVersion, uint16_t minorVersion);
 
-    virtual int expectedNumberOfPoints() const override;
-    virtual int processedNumberOfPoints() const override;
+    virtual int64_t expectedNumberOfPoints() const override;
+    virtual int64_t processedNumberOfPoints() const override;
 
     PtGeometry<PointCloudGenericAttribute> getPointPosition() const override;
 
