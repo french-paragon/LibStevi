@@ -69,7 +69,7 @@ FetchContent_MakeAvailable(MultidimArrays)
 FetchContent_Declare(
   statusoptional
   GIT_REPOSITORY https://github.com/french-paragon/StatusOptional.git
-  GIT_TAG 9fbfb64476665cd34d69932b75b7e84437bf1f45
+  GIT_TAG 91fe5ef424cd95995e54fdd49164c12fb639a8f1
 )
 FetchContent_MakeAvailable(statusoptional)
 
