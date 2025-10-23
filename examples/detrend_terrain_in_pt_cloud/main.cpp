@@ -31,7 +31,7 @@ PointsContainer loadPoints(QString const& fileName) {
 
     PointsContainer ret;
 
-    std::optional<StereoVision::IO::FullPointCloudAccessInterface> optPointCloud =
+    StatusOptional<StereoVision::IO::FullPointCloudAccessInterface> optPointCloud =
             StereoVision::IO::openPointCloud(fileName.toStdString());
 
     if (!optPointCloud.has_value()) {
@@ -290,7 +290,7 @@ int main(int argc, char** argv) {
 
     out << "Depth map produced!" << Qt::endl;
 
-    std::optional<StereoVision::IO::FullPointCloudAccessInterface> optPointCloud =
+    StatusOptional<StereoVision::IO::FullPointCloudAccessInterface> optPointCloud =
             StereoVision::IO::openPointCloud(pointCloudFile.toStdString());
 
     if (!optPointCloud.has_value()) {

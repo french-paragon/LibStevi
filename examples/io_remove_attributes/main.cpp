@@ -47,7 +47,7 @@ int main(int argc, char const *argv[]) {
     }
     std::cout << std::endl;
 
-    auto& fullAccess = *fullAccessOpt;
+    auto& fullAccess = fullAccessOpt.value();
     auto& header = fullAccess.headerAccess;
     auto& cloudpoint = fullAccess.pointAccess;
 
@@ -89,7 +89,7 @@ int main(int argc, char const *argv[]) {
         return 1;
     }
     std::cout << "file opened" << std::endl;
-    auto& fullAccess2 = *fullAccessOpt2;
+    auto& fullAccess2 = fullAccessOpt2.value();
     auto fullAccessRemover = std::make_unique<StereoVision::IO::FullPointCloudAccessInterface>(std::move(fullAccess2));
 
     fullAccessRemover = std::move(StereoVision::IO::RemoveAttributesOrColorFromPointCloud(fullAccessRemover, attributesToRemove));

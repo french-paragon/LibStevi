@@ -37,7 +37,7 @@ int main(int argc, char const *argv[]) {
     }
     std::cout << "file opened" << std::endl;
 
-    auto& fullAccess = *fullAccessOpt;
+    auto& fullAccess = fullAccessOpt.value();
     auto& header = fullAccess.headerAccess;
     auto& cloudpoint = fullAccess.pointAccess;
 
@@ -109,7 +109,7 @@ int main(int argc, char const *argv[]) {
         std::cout << "Could not open the pcd file, check the path" << std::endl;
         return 1;
     }
-    auto& fullAccessWrite = *fullAccessWriteOpt;
+    auto& fullAccessWrite = fullAccessWriteOpt.value();
     std::filesystem::path pcdFilePathOut = pcdFilePath;
     pcdFilePathOut.replace_extension("out.pcd");
     StereoVision::IO::writePointCloudPcd(pcdFilePathOut, fullAccessWrite, StereoVision::IO::PcdDataStorageType::binary);
@@ -125,7 +125,7 @@ int main(int argc, char const *argv[]) {
         std::cout << "Could not open the pcd file, check the path" << std::endl;
         return 1;
     }
-    auto& fullAccessWrite2 = *fullAccessWriteOpt2;
+    auto& fullAccessWrite2 = fullAccessWriteOpt2.value();
     pcdFilePathOut.replace_extension("out2.pcd");
     StereoVision::IO::writePointCloudPcd(pcdFilePathOut, fullAccessWrite2, StereoVision::IO::PcdDataStorageType::ascii);
 

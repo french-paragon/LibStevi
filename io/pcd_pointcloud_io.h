@@ -234,18 +234,18 @@ public:
  * @param pcdFilePath The path to the pcd file containing the point cloud
  *
  * @return A FullPointCloudAccessInterface containing the header and the points.
- *         If the file can't be opened, an empty optional is returned
+ *         If the file can't be opened, an error message is returned
  */
-std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesystem::path& pcdFilePath);
+StatusOptional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesystem::path& pcdFilePath);
 
 /**
  * @brief Open a pcd file from a stream and returns a FullPointCloudAccessInterface
  * 
  * @param reader The stream to read from
  * @return A FullPointCloudAccessInterface containing the header and the points.
- *         If the file can't be opened, an empty optional is returned
+ *         If the file can't be opened, an error message is returned
  */
-std::optional<FullPointCloudAccessInterface> openPointCloudPcd(std::unique_ptr<std::istream> reader);
+StatusOptional<FullPointCloudAccessInterface> openPointCloudPcd(std::unique_ptr<std::istream> reader);
 
 /**
  * @brief

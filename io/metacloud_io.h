@@ -152,9 +152,9 @@ public:
  * @param metacloudFilePath The path to the metacloud file containing the point cloud
  *
  * @return A FullPointCloudAccessInterface containing the header and the points.
- *         If the file can't be opened, an empty optional is returned
+ *         If the file can't be opened, an error message is returned
  */
-std::optional<FullPointCloudAccessInterface> openPointCloudMetacloud(const std::filesystem::path& metacloudFilePath);
+StatusOptional<FullPointCloudAccessInterface> openPointCloudMetacloud(const std::filesystem::path& metacloudFilePath);
 
 /**
  * @brief
@@ -167,10 +167,10 @@ std::optional<FullPointCloudAccessInterface> openPointCloudMetacloud(const std::
  * By default, the path is empty.
  * 
  * @return A FullPointCloudAccessInterface containing the header and the points.
- *         If the stream can't be opened, an empty optional is returned
+ *         If the stream can't be opened, an error message is returned
  * 
  */
-std::optional<FullPointCloudAccessInterface> openPointCloudMetacloud(std::unique_ptr<std::istream> reader,
+StatusOptional<FullPointCloudAccessInterface> openPointCloudMetacloud(std::unique_ptr<std::istream> reader,
     const std::filesystem::path& metacloudFileFolderPath = std::filesystem::path{});
 
 }

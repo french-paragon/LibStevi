@@ -37,7 +37,7 @@ int main(int argc, char const *argv[]) {
     }
     std::cout << "file opened" << std::endl;
 
-    auto& fullAccess = *fullAccessOpt;
+    auto& fullAccess = fullAccessOpt.value();
     auto& header = fullAccess.headerAccess;
     auto& cloudpoint = fullAccess.pointAccess;
 
@@ -114,7 +114,7 @@ int main(int argc, char const *argv[]) {
         return 1;
     }
     std::cout << "file opened" << std::endl;
-    auto& fullAccess2 = *fullAccessOpt2;
+    auto& fullAccess2 = fullAccessOpt2.value();
 
     if (!StereoVision::IO::writePointCloudLas(lasFilePathOut, fullAccess2)) {
         std::cout << "Could not write the las file, check the path" << std::endl;

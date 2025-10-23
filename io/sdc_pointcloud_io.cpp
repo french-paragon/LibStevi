@@ -169,7 +169,7 @@ bool SdcPointCloudHeader::write(std::ostream &stream) const {
     return stream.good();
 }
 
-std::optional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesystem::path &sdcFilePath) {
+StatusOptional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesystem::path &sdcFilePath) {
     // read the file
 
     auto inputFile = std::make_unique<ifstreamCustomBuffer<sdcFileReaderBufferSize>>();
@@ -177,22 +177,22 @@ std::optional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesy
     inputFile->open(sdcFilePath, std::ios_base::binary);
 
     // return null if the file can't be opened
-    if (!inputFile->is_open()) return std::nullopt;
+    if (!inputFile->is_open()) return StatusOptional<FullPointCloudAccessInterface>::error("Cannot open input file: \"" + sdcFilePath.native() + "\"");
 
     return openPointCloudSdc(std::move(inputFile));
 }
 
-std::optional<FullPointCloudAccessInterface> openPointCloudSdc(std::unique_ptr<std::istream> stream) {
-    if (!stream) return std::nullopt;
+StatusOptional<FullPointCloudAccessInterface> openPointCloudSdc(std::unique_ptr<std::istream> stream) {
+    if (!stream) return StatusOptional<FullPointCloudAccessInterface>::error("Invalid stream requested");
     // first 4 bytes are the size of the header
     uint32_t headerSize;
     stream->read(reinterpret_cast<char*>(&headerSize), 4);
-    if (!stream->good()) return std::nullopt;
+    if (!stream->good()) return StatusOptional<FullPointCloudAccessInterface>::error("Invalid header size");
 
     // read the rest of the header
      std::vector<char> bufferHeader(headerSize - 4);
     stream->read(bufferHeader.data(), headerSize - 4);
-    if (!stream->good()) return std::nullopt;
+     if (!stream->good()) return StatusOptional<FullPointCloudAccessInterface>::error("Invalid header");
 
     // next 2 bytes are the major version
     auto majorVersion = fromBytes<uint16_t>(bufferHeader.data());
@@ -213,7 +213,7 @@ std::optional<FullPointCloudAccessInterface> openPointCloudSdc(std::unique_ptr<s
         fullPointInterface.pointAccess = std::move(cloudpoint);
         return fullPointInterface;
     }
-    return std::nullopt;
+    return StatusOptional<FullPointCloudAccessInterface>::error("Unknown error");
 }
 
 bool writePointCloudSdc(const std::filesystem::path &sdcFilePath, FullPointCloudAccessInterface &pointCloud)

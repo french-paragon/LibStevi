@@ -27,7 +27,7 @@ int main(int argc, char const *argv[]) {
         return 1;
     }
 
-    auto& fullAccess = *fullAccessOpt;
+    auto& fullAccess = fullAccessOpt.value();
     auto& header = fullAccess.headerAccess;
     auto& cloudpoint = fullAccess.pointAccess;
 
@@ -93,7 +93,7 @@ int main(int argc, char const *argv[]) {
         std::cout << "Could not open the sdc file, check the path" << std::endl;
         return 1;
     }
-    auto& fullAccess2 = *fullAccessOpt2;
+    auto& fullAccess2 = fullAccessOpt2.value();
     // start timer + write
     startTime = std::chrono::high_resolution_clock::now();
     if (!StereoVision::IO::writePointCloudSdc(sdcFilePathOut, fullAccess2)) return 1;

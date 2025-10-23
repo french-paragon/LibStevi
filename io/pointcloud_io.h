@@ -33,6 +33,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <type_traits>
 #include <filesystem>
 #include "../utils/types_manipulations.h"
+#include <status_optional.h>
 
 namespace StereoVision {
 namespace IO {
@@ -809,9 +810,9 @@ protected:
  * @param filePath The path to the file containing the point cloud
  *
  * @return A FullPointCloudAccessInterface containing the header and the points.
- * If the file can't be opened, an empty optional is returned.
+ * If the file can't be opened, an error message is returned.
  */
-std::optional<FullPointCloudAccessInterface> openPointCloud(const std::filesystem::path& filePath);
+StatusOptional<FullPointCloudAccessInterface> openPointCloud(const std::filesystem::path& filePath);
 
 } // namespace IO
 } // namespace StereoVision

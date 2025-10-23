@@ -41,7 +41,7 @@ using BinaryTree = StereoVision::Geometry::GenericBSP<PointType, 2, StereoVision
 BinaryTree::ContainerT loadPoints(QString const& fileName) {
     BinaryTree::ContainerT ret;
 
-    std::optional<StereoVision::IO::FullPointCloudAccessInterface> optPointCloud =
+    StatusOptional<StereoVision::IO::FullPointCloudAccessInterface> optPointCloud =
             StereoVision::IO::openPointCloud(fileName.toStdString());
 
     if (!optPointCloud.has_value()) {

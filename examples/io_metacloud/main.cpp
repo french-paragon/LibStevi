@@ -111,7 +111,7 @@ int main(int argc, char const *argv[]) {
         return 1;
     }
 
-    auto& pointCloud = *pointCloudOpt;
+    auto& pointCloud = pointCloudOpt.value();
     auto& headerAbstract = pointCloud.headerAccess;
     auto& cloudpoint = pointCloud.pointAccess;
 

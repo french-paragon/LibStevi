@@ -38,7 +38,7 @@ FullPointCloudAccessInterface::FullPointCloudAccessInterface(FullPointCloudAcces
     other.pointAccess = nullptr;
 }
 
-std::optional<FullPointCloudAccessInterface> openPointCloud(const std::filesystem::path &filePath) {
+StatusOptional<FullPointCloudAccessInterface> openPointCloud(const std::filesystem::path &filePath) {
     // get the file extension of the file
     auto fileExtension = filePath.extension();
     if (fileExtension == ".sdc" || fileExtension == ".SDC") {
@@ -50,7 +50,7 @@ std::optional<FullPointCloudAccessInterface> openPointCloud(const std::filesyste
     } else if (fileExtension == ".metacloud" || fileExtension == ".METACLOUD") {
         return openPointCloudMetacloud(filePath);
     } else {
-        return std::nullopt;
+        return StatusOptional<FullPointCloudAccessInterface>::error("Unrecognized file type: \"" + fileExtension.native() + "\"");
     }
 }
 

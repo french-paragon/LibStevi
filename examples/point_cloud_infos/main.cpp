@@ -23,11 +23,11 @@ int main(int argc, char** argv) {
         std::cerr << "Argument error:" << e.error().c_str() << " for arg " << e.argId().c_str() << std::endl;
     }
 
-    std::optional<StereoVision::IO::FullPointCloudAccessInterface> optPointCloud =
+    StatusOptional<StereoVision::IO::FullPointCloudAccessInterface> optPointCloud =
         StereoVision::IO::openPointCloud(pointCloudFile);
 
     if (!optPointCloud.has_value()) {
-        std::cerr << "Could not open point cloud \"" << pointCloudFile << "\"" << std::endl;
+        std::cerr << "Could not open point cloud: \"" << pointCloudFile << "\"\n\t Error message is: \"" << optPointCloud.message() << "\"" << std::endl;
         return -1;
     }
 

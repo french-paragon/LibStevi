@@ -444,9 +444,9 @@ public:
  * @param lasFilePath The path to the las file containing the point cloud
  *
  * @return A FullPointCloudAccessInterface containing the header and the points.
- *         If the file can't be opened, an empty optional is returned
+ *         If the file can't be opened, an error message is returned
  */
-std::optional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesystem::path& lasFilePath);
+StatusOptional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesystem::path& lasFilePath);
 
 /**
  * @brief
@@ -457,10 +457,10 @@ std::optional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesy
  * @param reader The stream to open the point cloud from
  * 
  * @return A FullPointCloudAccessInterface containing the header and the points.
- *         If the stream can't be opened, an empty optional is returned
+ *         If the stream can't be opened, an error message is returned
  * 
  */
-std::optional<FullPointCloudAccessInterface> openPointCloudLas(std::unique_ptr<std::istream> reader);
+StatusOptional<FullPointCloudAccessInterface> openPointCloudLas(std::unique_ptr<std::istream> reader);
 
 /**
  * @brief Write a point cloud to a las file

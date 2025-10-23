@@ -40,7 +40,7 @@ int main(int argc, char const *argv[]) {
     }
     std::cout << "file opened" << std::endl;
 
-    auto& fullAccess = *fullAccessOpt;
+    auto& fullAccess = fullAccessOpt.value();
     auto& header = fullAccess.headerAccess;
     auto& cloudpoint = fullAccess.pointAccess;
 
@@ -82,9 +82,9 @@ int main(int argc, char const *argv[]) {
         return 1;
     }
     std::cout << "file opened" << std::endl;
-    auto& fullAccess2 = *fullAccessOpt2;
+    auto& fullAccess2 = fullAccessOpt2.value();
 
-    auto fullAccessMap = std::move(mapPointCloudAttributes(std::move(*fullAccessOpt2), attributeMap, onlyKeepAttributesInMap));
+    auto fullAccessMap = std::move(mapPointCloudAttributes(std::move(fullAccessOpt2.value()), attributeMap, onlyKeepAttributesInMap));
     
     auto& cloudpoint2 = fullAccessMap.pointAccess;
 

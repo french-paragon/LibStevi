@@ -1083,7 +1083,7 @@ std::string sanitizeAttributeNamePcd(const std::string &str) {
     return sanitizedStr;
 }
 
-std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesystem::path &pcdFilePath) {
+StatusOptional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesystem::path &pcdFilePath) {
    // open the file
     auto reader = std::make_unique<ifstreamCustomBuffer<pcdFileReaderBufferSize>>();
 
@@ -1092,17 +1092,17 @@ std::optional<FullPointCloudAccessInterface> openPointCloudPcd(const std::filesy
 
     reader->open(pcdFilePath, std::ios_base::binary);
 
-    if (!reader->is_open()) return std::nullopt;
+    if (!reader->is_open()) return StatusOptional<FullPointCloudAccessInterface>::error("Cannot open file \"" + pcdFilePath.native() + "\"");
 
     return openPointCloudPcd(std::move(reader));
 }
 
-std::optional<FullPointCloudAccessInterface> openPointCloudPcd(std::unique_ptr<std::istream> reader) {
+StatusOptional<FullPointCloudAccessInterface> openPointCloudPcd(std::unique_ptr<std::istream> reader) {
     // read the header
     auto header = PcdPointCloudHeader::readHeader(*reader);
     // test if header ptr is not null
     if (header == nullptr) {
-        return std::nullopt;
+        return StatusOptional<FullPointCloudAccessInterface>::error("Invalid pcd header!");
     }
 
     // create a point cloud
@@ -1117,7 +1117,7 @@ std::optional<FullPointCloudAccessInterface> openPointCloudPcd(std::unique_ptr<s
             fullPointInterface.pointAccess = std::move(pointCloud);
             return fullPointInterface;
     }
-    return std::nullopt;
+    return StatusOptional<FullPointCloudAccessInterface>::error("Unknown error!");
 }
 
 bool writePointCloudPcd(const std::filesystem::path &pcdFilePath, FullPointCloudAccessInterface &pointCloud,

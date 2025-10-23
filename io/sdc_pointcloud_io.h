@@ -227,7 +227,7 @@ public:
  * @return A FullPointCloudAccessInterface containing the header and the points.
  *         If the file can't be opened, an empty optional is returned
  */
-std::optional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesystem::path& sdcFilePath);
+StatusOptional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesystem::path& sdcFilePath);
 
 /**
  * @brief
@@ -241,7 +241,7 @@ std::optional<FullPointCloudAccessInterface> openPointCloudSdc(const std::filesy
  *         If the stream can't be opened, an empty optional is returned
  * 
  */
-std::optional<FullPointCloudAccessInterface> openPointCloudSdc(std::unique_ptr<std::istream> stream);
+StatusOptional<FullPointCloudAccessInterface> openPointCloudSdc(std::unique_ptr<std::istream> stream);
 
 /**
  * @brief

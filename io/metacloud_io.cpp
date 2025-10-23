@@ -57,7 +57,7 @@ std::string to_string(MetaCloudSimpleType type) {
     }
 }
 
-std::optional<FullPointCloudAccessInterface> openPointCloudMetacloud(const std::filesystem::path &metacloudFilePath) {
+StatusOptional<FullPointCloudAccessInterface> openPointCloudMetacloud(const std::filesystem::path &metacloudFilePath) {
 
     // remove the file name
     auto metacloudFileDirectoryPath = metacloudFilePath;
@@ -71,18 +71,18 @@ std::optional<FullPointCloudAccessInterface> openPointCloudMetacloud(const std::
 
     reader->open(metacloudFilePath, std::ios_base::binary);
 
-    if (!reader->is_open()) return std::nullopt;
+    if (!reader->is_open()) return StatusOptional<FullPointCloudAccessInterface>::error("Cannot read file: \"" + metacloudFilePath.native() + "\"");
 
     return openPointCloudMetacloud(std::move(reader), metacloudFileDirectoryPath);
 }
 
-std::optional<FullPointCloudAccessInterface> openPointCloudMetacloud(std::unique_ptr<std::istream> reader,
+StatusOptional<FullPointCloudAccessInterface> openPointCloudMetacloud(std::unique_ptr<std::istream> reader,
     const std::filesystem::path& metacloudFileDirectoryPath) {
     // read the file header
     auto header = StereoVision::IO::MetaCloudHeader::readHeader(*reader, metacloudFileDirectoryPath);
     // test if header ptr is not null
     if (header == nullptr) {
-        return std::nullopt;
+        return StatusOptional<FullPointCloudAccessInterface>::error("Invalid metacloud header!");
     }
 
     auto& pointFilePaths = header->pointFilePaths;
@@ -94,10 +94,11 @@ std::optional<FullPointCloudAccessInterface> openPointCloudMetacloud(std::unique
 
     for (auto&& pointCloudPath : pointFilePaths) {
         auto pointCloudOpt = openPointCloud(pointCloudPath);
-        if (pointCloudOpt == std::nullopt) {
-            return std::nullopt;
+        if (pointCloudOpt.is_error()) {
+            return StatusOptional<FullPointCloudAccessInterface>::error("Invalid point cloud provided in metacloud: \"" + pointCloudPath.native() +
+                                                                        "\"\n reported error message is: \"" + pointCloudOpt.message() + "\"");
         }
-        auto pointCloudPtr = std::make_unique<FullPointCloudAccessInterface>(std::move(*pointCloudOpt));
+        auto pointCloudPtr = std::make_unique<FullPointCloudAccessInterface>(std::move(pointCloudOpt.value()));
         pointCloudInterfaces.push_back(std::move(pointCloudPtr));
     }
 
@@ -115,14 +116,14 @@ std::optional<FullPointCloudAccessInterface> openPointCloudMetacloud(std::unique
         fileStream->open(path, std::ios_base::binary);
 
         if (!fileStream->is_open()) {
-            return std::nullopt;
+            return StatusOptional<FullPointCloudAccessInterface>::error("Invalid extra attribute file in metacloud: \"" + path.native() + "\"");
         }
 
         auto accessor = std::make_unique<MetaCloudExtraAttributeReader>(std::move(fileStream), attributeNames,
             attributeTypes);
         
         if (accessor == nullptr) {
-            return std::nullopt;
+            return StatusOptional<FullPointCloudAccessInterface>::error("Unable to access data for extra arguments in file: \"" + path.native() + "\"");
         }
 
         extraAttributeAccessors.push_back(std::move(accessor));
@@ -134,7 +135,7 @@ std::optional<FullPointCloudAccessInterface> openPointCloudMetacloud(std::unique
         std::move(extraAttributeAccessors));
 
     if (pointCloud == nullptr) {
-        return std::nullopt;
+        return StatusOptional<FullPointCloudAccessInterface>::error("Unable to create metacloud!");
     }
 
     // return the point cloud full access interface
@@ -142,8 +143,6 @@ std::optional<FullPointCloudAccessInterface> openPointCloudMetacloud(std::unique
     fullPointInterface.headerAccess = std::move(header);
     fullPointInterface.pointAccess = std::move(pointCloud);
     return fullPointInterface;
-
-    return std::nullopt;
 }
 
 std::optional<MetaCloudSimpleType> getMetaCloudSimpleType(PointCloudGenericAttribute const &attribute) {

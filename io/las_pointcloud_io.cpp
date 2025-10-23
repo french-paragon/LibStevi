@@ -1332,7 +1332,7 @@ std::unique_ptr<PointCloudPointAccessInterface> LasPointCloudPoint::createAdapte
         xScaleFactor, yScaleFactor, zScaleFactor, xOffset, yOffset, zOffset);
 }
 
-std::optional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesystem::path &lasFilePath) {
+StatusOptional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesystem::path &lasFilePath) {
     // open the file
     auto reader = std::make_unique<ifstreamCustomBuffer<lasFileReaderBufferSize>>();
 
@@ -1341,17 +1341,17 @@ std::optional<FullPointCloudAccessInterface> openPointCloudLas(const std::filesy
 
     reader->open(lasFilePath, std::ios_base::binary);
 
-    if (!reader->is_open()) return std::nullopt;
+    if (!reader->is_open()) return StatusOptional<FullPointCloudAccessInterface>::error("Cannot read file: \"" + lasFilePath.native() + "\"");
 
     return openPointCloudLas(std::move(reader));
 }
 
-std::optional<FullPointCloudAccessInterface> openPointCloudLas(std::unique_ptr<std::istream> reader) {
+StatusOptional<FullPointCloudAccessInterface> openPointCloudLas(std::unique_ptr<std::istream> reader) {
     // read the header
     auto header = LasPointCloudHeader::readHeader(*reader);
     // test if header ptr is not null
     if (header == nullptr) {
-        return std::nullopt;
+        return StatusOptional<FullPointCloudAccessInterface>::error("Invalid las header!");
     }
     // get the extra attributes
     auto [extraAttributesNames, extraAttributesTypes, extraAttributesSizes, extraAttributesOffsets]
@@ -1367,7 +1367,7 @@ std::optional<FullPointCloudAccessInterface> openPointCloudLas(std::unique_ptr<s
         header->publicHeaderBlock.getZOffset(), nullptr);
 
     if (pointCloud == nullptr) {
-        return std::nullopt;
+        return StatusOptional<FullPointCloudAccessInterface>::error("Unknown error while creating las cloud!");
     }
 
     // return the point cloud full access interface
@@ -1375,8 +1375,6 @@ std::optional<FullPointCloudAccessInterface> openPointCloudLas(std::unique_ptr<s
     fullPointInterface.headerAccess = std::move(header);
     fullPointInterface.pointAccess = std::move(pointCloud);
     return fullPointInterface;
-
-    return std::nullopt;
 }
 
 bool writePointCloudLas(std::ostream &writer, FullPointCloudAccessInterface &pointCloud) {

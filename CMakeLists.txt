@@ -65,6 +65,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(MultidimArrays)
 
+#status optional
+FetchContent_Declare(
+  statusoptional
+  GIT_REPOSITORY https://github.com/french-paragon/StatusOptional.git
+  GIT_TAG 9fbfb64476665cd34d69932b75b7e84437bf1f45
+)
+FetchContent_MakeAvailable(statusoptional)
+
 #openMP
 
 find_package(OpenMP)
@@ -236,7 +244,7 @@ if (buildGui)
 endif()
 
 target_compile_definitions(${STEREOVISION_LIB} PRIVATE LIBSTEREOVISION_BUILDING)
-target_link_libraries(${STEREOVISION_LIB} PUBLIC Threads::Threads MultidimArrays::MultidimArrays)
+target_link_libraries(${STEREOVISION_LIB} PUBLIC Threads::Threads MultidimArrays::MultidimArrays statusoptional::statusoptional)
 
 target_include_directories(
     ${STEREOVISION_LIB}
