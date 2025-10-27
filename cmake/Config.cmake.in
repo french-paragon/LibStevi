@@ -2,6 +2,12 @@
 
 include(CMakeFindDependencyMacro)
 
+find_dependency(Eigen3)
+find_dependency(Threads)
+find_dependency(OpenMP)
+find_dependency(statusoptional)
+find_dependency(MultidimArrays)
+
 if (@JPEG_FOUND@)
     find_dependency(JPEG) #find jpeg for the dependency
 endif()
