@@ -23,6 +23,8 @@ private Q_SLOTS:
     void testOptimalAssignement_data();
     void testOptimalAssignement();
 
+    void testCostExtensionWithNonMatched();
+
 private:
     std::default_random_engine re;
 };
@@ -114,6 +116,73 @@ void TestAssignementProblem::testOptimalAssignement() {
         QVERIFY2(!found.contains(idx), "duplicate pair returned");
 
         found.insert(idx);
+
+    }
+
+}
+
+
+
+void TestAssignementProblem::testCostExtensionWithNonMatched() {
+
+    CostT cost;
+
+    cost.resize(6,4);
+
+    std::uniform_int_distribution<int> dist(-27,33);
+
+    std::vector<int> idxs(cost.cols());
+
+    for (int i = 0; i < cost.rows(); i++) {
+        for (int j = 0; j < cost.cols(); j++) {
+            cost(i,j) = dist(re);
+        }
+
+        idxs[i] = i;
+    }
+
+    int nBest = 3;
+    int costDist = 4;
+    int best = -69;
+    int worst = 42;
+
+    for (int i = 0; i < cost.rows(); i++) {
+
+        std::shuffle(idxs.begin(), idxs.end(), re);
+
+        for (int j = 0; j < nBest; j++) {
+            cost(i,j) = best+j;
+        }
+        cost(i,cost.cols()-1) = worst;
+
+        for (int j = 0; j < cost.cols(); j++) {
+            int tmp = cost(i,j);
+            cost(i,j) = cost(i,idxs[j]);
+            cost(i,idxs[j]) = tmp;
+        }
+    }
+
+    CostT costExtendedNBest = extendCostForNBestCosts(cost,nBest);
+    CostT costExtendedScale = extendCostForDistFromBestCost(cost,costDist);
+
+    QCOMPARE(costExtendedNBest.rows(), cost.rows());
+    QCOMPARE(costExtendedScale.rows(), cost.rows());
+
+    QCOMPARE(costExtendedNBest.cols(), cost.cols() + cost.rows());
+    QCOMPARE(costExtendedScale.cols(), cost.cols() + cost.rows());
+
+    for (int i = 0; i < cost.rows(); i++) {
+
+        for (int j = 0; j < cost.cols(); j++) {
+            if (j == i) {
+                QVERIFY(costExtendedNBest(i,cost.cols()+j) <= best+2);
+                QVERIFY(costExtendedScale(i,cost.cols()+j) <= best+costDist);
+
+            } else {
+                QVERIFY(costExtendedNBest(i,cost.cols()+j) >= worst);
+                QVERIFY(costExtendedScale(i,cost.cols()+j) >= worst);
+            }
+        }
 
     }
 

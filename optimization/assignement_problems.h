@@ -3,7 +3,7 @@
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 
-Copyright (C) 2023  Paragon<french.paragon@gmail.com>
+Copyright (C) 2023-2025  Paragon<french.paragon@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -24,6 +24,112 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 namespace StereoVision {
 namespace Optimization {
+
+template<typename T>
+Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> extendCostForNBestCosts (
+    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> const& Costs,
+    int nAcceptableBestMatches) {
+
+    int o_n = Costs.rows();
+    int o_m = Costs.cols();
+
+    int f_o_m = o_m + o_n;
+
+    int nCostConsidered = std::min(o_m, nAcceptableBestMatches);
+
+    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> ret;
+    ret.resize(o_n, f_o_m);
+
+    for (int i = 0; i < o_n; i++) {
+        std::vector<T> smallestCosts(nCostConsidered);
+
+        for (int j = 0; j < nCostConsidered; j++) {
+            smallestCosts[j] = Costs(i,j);
+        }
+
+        std::sort(smallestCosts.begin(), smallestCosts.end());
+
+        T largestCost = Costs(i,0);
+
+        for (int j = 0; j < o_m; j++) {
+            T c = Costs(i,j);
+            ret(i,j) = c;
+
+            if (c > largestCost) {
+                largestCost = c;
+            }
+
+            for (int k = 0; k < nCostConsidered; k++) {
+                if (c < smallestCosts[k]) {
+                    T tmp = smallestCosts[k];
+                    smallestCosts[k] = c;
+                    c = tmp;
+                }
+            }
+
+        }
+
+        for (int j = 0; j < o_n; j++) {
+            if (j == i) {
+                ret(i,o_m+j) = smallestCosts.back();
+            } else {
+                ret(i,o_m+j) = largestCost;
+            }
+        }
+    }
+
+    return ret;
+}
+
+/*!
+ * \brief extendCostForScaleBestCost build a new cost matrix such that the match is a least within a certain scaled distance from the best cost
+ * \param Costs the costs matrix
+ * \param distFromBest the distance the match can be from the best cost, else will be assigned to non-assigned
+ * \return a modified cost matrix.
+ */
+template<typename T>
+Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> extendCostForDistFromBestCost (
+    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> const& Costs,
+    T distFromBest) {
+
+    int o_n = Costs.rows();
+    int o_m = Costs.cols();
+
+    int f_o_m = o_m + o_n;
+
+    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> ret;
+    ret.resize(o_n, f_o_m);
+
+    for (int i = 0; i < o_n; i++) {
+
+        T smallestCost = Costs(i,0);
+        T largestCost = Costs(i,0);
+
+        for (int j = 0; j < o_m; j++) {
+            T c = Costs(i,j);
+            ret(i,j) = c;
+
+            if (c < smallestCost) {
+                smallestCost = c;
+            }
+
+            if (c > largestCost) {
+                largestCost = c;
+            }
+
+        }
+
+        for (int j = 0; j < o_n; j++) {
+            if (j == i) {
+                ret(i,o_m+j) = smallestCost + distFromBest;
+            } else {
+                ret(i,o_m+j) = largestCost;
+            }
+        }
+    }
+
+    return ret;
+}
 
 /*!
  * \brief optimalAssignement compute an optimal assignement between two finite sets, given a cost matrix
@@ -162,7 +268,7 @@ std::vector<std::array<int, 2>> optimalAssignement(Eigen::Matrix<T, Eigen::Dynam
  * \param Costs the costs of assigning elements to one another, as a matrix.
  * \return the optimal assignement
  *
- * This version has suboptimal complexity and is kept mainly for benchmarking and
+ * This version has suboptimal complexity and is kept mainly for benchmarking and testing
  */
 template<typename T>
 std::vector<std::array<int, 2>> optimalAssignementO4(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> const& Costs) {
