@@ -155,6 +155,7 @@ set(LIB_SRC
         optimization/affine_utils.h
         optimization/principalComponentsAnalysis.h
         optimization/gaussnewtownproblem.h
+        optimization/generic_ransac.h
         utils/contiguity.h
         utils/margins.h
         utils/indexers.h
