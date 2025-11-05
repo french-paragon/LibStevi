@@ -172,7 +172,7 @@ void TestOptimizationUtils::testGenericRansac() {
 
     constexpr float threshold = 1e-3;
 
-    GenericRansac<Observation, Model> ransac(corrects,2, threshold);
+    GenericRansac<Observation, Model> ransac(corrects, 2, threshold);
 
     constexpr int nIterations = 5;
 
