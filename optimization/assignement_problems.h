@@ -131,6 +131,31 @@ Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> extendCostForDistFromBestCost (
     return ret;
 }
 
+
+/*!
+ * \brief setConstantNonAssignementCost change an extended cost matrix, setting a constant as maximum non-assignement cost
+ * \param costs the extended cost matrix
+ * \param maxNonAssignCost the maximal cost of non-assignement
+ * \return a modified extended cost matrix.
+ */
+template<typename T>
+Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> setConstantMaxNonAssignementCost(
+    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> const& costs,
+    T maxNonAssignCost)
+{
+
+    int o_n = costs.rows();
+    int o_m = costs.cols() - o_n;
+
+    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> ret = costs;
+
+    for (int i = 0; i < o_n; i++) {
+        ret(i,i+o_m) = std::min(maxNonAssignCost, costs(i,i+o_m));
+    }
+
+    return ret;
+}
+
 /*!
  * \brief optimalAssignement compute an optimal assignement between two finite sets, given a cost matrix
  * \param Costs the costs of assigning elements to one another, as a matrix.
