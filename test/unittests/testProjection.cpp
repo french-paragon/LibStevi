@@ -107,8 +107,10 @@ private Q_SLOTS:
 
     void initTestCase();
 
-	void testBuildEssentialMatrix_data();
-	void testBuildEssentialMatrix();
+    void testBuildEssentialMatrix_data();
+    void testBuildEssentialMatrix();
+
+    void testEstimatePerspectiveMatrix();
 
 	void testReprojection_data();
 	void testReprojection();
@@ -173,6 +175,58 @@ void TestReprojectionMethods::testBuildEssentialMatrix() {
 		float lastSingularValue = std::fabs(svd.singularValues()[2]);
 		QVERIFY2(lastSingularValue < 1e-3, qPrintable(QString("Last singular value too big (%1)").arg(lastSingularValue)));
 	}
+}
+
+void TestReprojectionMethods::testEstimatePerspectiveMatrix() {
+
+    constexpr int nRuns = 10;
+
+    for (int i = 0; i < nRuns; i++) {
+        Eigen::Matrix3f transform = Eigen::Matrix3f::Random();
+        int nPoints = i+1;
+
+        Eigen::Array<float,2,Eigen::Dynamic> pts1 = Eigen::Array<float,2,Eigen::Dynamic>::Random(2,nPoints);
+        Eigen::Array<float,2,Eigen::Dynamic> pts2;
+        pts2.resize(2,nPoints);
+
+        bool ok = true;
+
+        for (int j = 0; j < nPoints; j++) {
+            Eigen::Vector3f pt(pts1(0,j), pts1(1,j), 1);
+            Eigen::Vector3f projected = transform*pt;
+
+            if (std::fabs(projected.z()) < 1e-5) {
+                ok = false;
+                break;
+            }
+
+            pts2(0,j) = projected.x()/projected.z();
+            pts2(1,j) = projected.y()/projected.z();
+        }
+
+        if (!ok) {
+            continue; //skip degenerated matrices
+        }
+
+        Eigen::Matrix3f estimatedTransform = estimatePerspectiveTransformMatrix(pts1, pts2);
+
+        for (int j = 0; j < nPoints; j++) {
+            Eigen::Vector3f pt(pts1(0,j), pts1(1,j), 1);
+            Eigen::Vector3f projected = estimatedTransform*pt;
+
+            if (std::fabs(projected.z()) < 1e-2) { //small z a numerically ill conditioned
+                continue;
+            }
+
+            float dx = pts2(0,j) - projected.x()/projected.z();
+            float dy = pts2(1,j) - projected.y()/projected.z();
+
+            QVERIFY(std::fabs(dx) < 1e-4);
+            QVERIFY(std::fabs(dy) < 1e-4);
+        }
+
+    }
+
 }
 
 void TestReprojectionMethods::testReprojection_data() {

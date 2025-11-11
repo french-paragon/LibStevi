@@ -25,6 +25,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../geometry/lensdistortion.h"
 #include "../geometry/geometricexception.h"
 
+#include "../optimization/l2optimization.h"
+
 #include <MultidimArrays/MultidimIndexManipulators.h>
 
 #include <utility>
@@ -301,6 +303,80 @@ Eigen::Matrix<Pos_T, 3, 3> estimateEssentialMatrix(Eigen::Array<Pos_T, 2, nCols>
 		 e[6], e[7], e[8];
 
 	return E;
+}
+
+template <typename Pos_T, int nCols>
+/*!
+ * \brief estimatePerspectiveTransformMatrix estimate the perspective transform matrix between two sets of points
+ * \param pt_cam_1 points from first coordinate system
+ * \param pt_cam_2 same points in the second coordinate system
+ * \return the perspective transform matrix.
+ */
+Eigen::Matrix<Pos_T, 3, 3> estimatePerspectiveTransformMatrix(Eigen::Array<Pos_T, 2, nCols> const& pt_cam_1, Eigen::Array<Pos_T, 2, nCols> const& pt_cam_2) {
+
+    using ParamVecT = Eigen::Matrix<Pos_T, Eigen::Dynamic,1>;
+    using VecbT = Eigen::Matrix<Pos_T, Eigen::Dynamic,1>;
+    using MatrixAT = Eigen::Matrix<Pos_T, Eigen::Dynamic,Eigen::Dynamic>;
+
+    int nPts = pt_cam_1.cols();
+
+    if (pt_cam_1.cols() != pt_cam_2.cols()) {
+        throw GeometricException("Points arrays of different dimensions provided");
+    }
+
+    int nParams = 9 + nPts-1; //9 parameters for the matrix, one scaling parameter for every point except the first where scaling is set to 1 to lift ambiguity
+    int nObs = 3*nPts;
+
+    MatrixAT A;
+    A.resize(nObs, nParams);
+    A.setConstant(0);
+    VecbT b;
+    b.resize(nObs);
+    b.setConstant(0);
+
+    for (int i = 0; i < nPts; i++) {
+
+        A(3*i,0) = pt_cam_1(0,i);
+        A(3*i,1) = pt_cam_1(1,i);
+        A(3*i,2) = 1;
+
+        A(3*i+1,3) = pt_cam_1(0,i);
+        A(3*i+1,4) = pt_cam_1(1,i);
+        A(3*i+1,5) = 1;
+
+        A(3*i+2,6) = pt_cam_1(0,i);
+        A(3*i+2,7) = pt_cam_1(1,i);
+        A(3*i+2,8) = 1;
+
+        if (i == 0) { //first point
+            b[i] = pt_cam_2(0,i);
+            b[i+1] = pt_cam_2(1,i);
+            b[i+2] = 1;
+        } else {
+            //scaling parameters
+            A(3*i,8+i) = -pt_cam_2(0,i);
+            A(3*i+1,8+i) = -pt_cam_2(1,i);
+            A(3*i+2,8+i) = -1;
+        }
+    }
+
+    ParamVecT opt = Optimization::leastSquares(A,b);
+
+    Eigen::Matrix<Pos_T, 3, 3> ret;
+
+    ret(0,0) = opt[0];
+    ret(0,1) = opt[1];
+    ret(0,2) = opt[2];
+
+    ret(1,0) = opt[3];
+    ret(1,1) = opt[4];
+    ret(1,2) = opt[5];
+
+    ret(2,0) = opt[6];
+    ret(2,1) = opt[7];
+    ret(2,2) = opt[8];
+
+    return ret;
 }
 
 template <typename Pos_T>
