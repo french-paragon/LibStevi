@@ -103,11 +103,14 @@ public:
 
         auto salt = _re();
 
-        #pragma omp parallel for
-        for (int i = 0; i < nIterations; i++) {
+        #pragma omp parallel
+        {
             std::default_random_engine thread_re; //one random engine per thread
             thread_re.seed(salt + omp_get_thread_num()); //seed the generator in each thread with the thread id and the salt
-            ransacIterationImpl(thread_re);
+            #pragma omp for
+            for (int i = 0; i < nIterations; i++) {
+                ransacIterationImpl(thread_re);
+            }
         }
 
         #else
