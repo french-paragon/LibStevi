@@ -52,3 +52,6 @@ target_link_libraries(benchmarkForegroundSegmentation ${STEREOVISION_LIB} Qt${QT
 
 add_executable(benchmarkRaysAlignementAlgorithms benchmarkRaysAlignementAlgorithms.cpp)
 target_link_libraries(benchmarkRaysAlignementAlgorithms ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+
+add_executable(benchmarkSparseImageMatching benchmarkSparseImageMatching.cpp)
+target_link_libraries(benchmarkSparseImageMatching ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)

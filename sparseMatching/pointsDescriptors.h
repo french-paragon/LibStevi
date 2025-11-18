@@ -33,6 +33,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../interpolation/interpolation.h"
 
+#include "../imageProcessing/fourierTransform.h"
+
 namespace StereoVision {
 namespace SparseMatching {
 
@@ -166,6 +168,73 @@ std::vector<std::array<int,nDim>> generateDensePatchCoordinates(std::array<int,n
         }
 
         ret[i] = idx;
+    }
+
+    return ret;
+}
+
+template<int nDim>
+std::vector<std::array<float,nDim>> generateUniformRadialSampleCoordinates(float radius, int n) {
+
+    std::vector<std::array<float,nDim>> ret(n);
+
+    std::default_random_engine re(n); //deterministic seeding
+    std::uniform_real_distribution<float> dist(-radius, radius);
+
+    for (int i = 0; i < n; i++) {
+        std::array<float,nDim>& cand = ret[i];
+
+        float norm = 0;
+
+        for (int j = 0; j < nDim; j++) {
+            float tmp = dist(re);
+            cand[j] = tmp;
+            norm += tmp*tmp;
+        }
+
+        norm = sqrt(norm);
+
+        if (norm > radius) {
+            i -= 1;
+            continue;
+        }
+
+    }
+
+    return ret;
+}
+
+template<int nDim, int featureDim = nDim-1>
+std::vector<std::array<float,nDim>> generateUniformRadialSampleCoordinatesWithFeaturesDim(float radius, int n, int nFeatures) {
+
+    std::vector<std::array<float,nDim>> ret(n);
+
+    std::default_random_engine re(n); //deterministic seeding
+    std::uniform_real_distribution<float> dist(-radius, radius);
+    std::uniform_int_distribution<int> featuresDist(0, nFeatures-1);
+
+    for (int i = 0; i < n; i++) {
+        std::array<float,nDim>& cand = ret[i];
+
+        float norm = 0;
+
+        for (int j = 0; j < nDim; j++) {
+            if (j == featureDim) {
+                cand[j] = featuresDist(re);
+            } else {
+                float tmp = dist(re);
+                cand[j] = tmp;
+                norm += tmp*tmp;
+            }
+        }
+
+        norm = sqrt(norm);
+
+        if (norm > radius) {
+            i -= 1;
+            continue;
+        }
+
     }
 
     return ret;
@@ -321,6 +390,223 @@ std::vector<pointFeatures<nDim, std::vector<float>>> WhitenedPixelsDescriptor(st
         }
 
         ret.emplace_back(coord.coord, feature);
+
+    }
+
+    return ret;
+
+}
+
+template <int fDims, typename T, Multidim::ArrayDataAccessConstness constNess>
+std::vector<pointFeatures<2, std::vector<float>>> OrientedWhitenedPixelsDescriptor(std::vector<orientedCoordinate<2>> const& coords,
+                                                                                   Multidim::Array<T, fDims, constNess> const& img,
+                                                                                   std::vector<std::array<float,std::size_t(fDims)>> const& patchCoordinates,
+                                                                                   int featureAxis = 2) {
+
+    static_assert (fDims == 2 or fDims == 3, "image dimension should be equal (grayscale) or one more (color) than coordinates dimensions");
+
+    constexpr bool hasFeatureAxis = fDims == 3;
+
+    std::vector<pointFeatures<2, std::vector<float>>> ret;
+    ret.reserve(coords.size());
+
+    for (orientedCoordinate<2> const& coord : coords) {
+
+        float theta = std::atan2(coord.main_dir[0], coord.main_dir[1]);
+
+        float cos = std::cos(theta);
+        float sin = std::sin(theta);
+
+        std::vector<float> feature(patchCoordinates.size());
+        int f = 0;
+
+        std::array<int, fDims> center;
+
+        for (int i = 0; i < fDims; i++) {
+
+            if (hasFeatureAxis and i == featureAxis) {
+                center[i] = 0;
+                break;
+            }
+
+            int idx = (i < featureAxis or !hasFeatureAxis) ? coord.coord[i] : coord.coord[i-1];
+            center[i] = idx;
+        }
+
+        std::array<int, fDims> idxs;
+
+        for (std::array<float,fDims> const& pCoord : patchCoordinates) {
+
+            int id1 = 0;
+            int id2 = 1;
+
+            if (hasFeatureAxis and featureAxis == 0) {
+                id1 += 1;
+                id2 += 1;
+            } else if (hasFeatureAxis and featureAxis == 1) {
+                id2 += 1;
+            }
+
+            float modifiedCoord1 = cos*pCoord[id1] - sin*pCoord[id2];
+            float modifiedCoord2 = cos*pCoord[id2] - sin*pCoord[id1];
+
+            idxs[id1] = std::round(center[id1] + modifiedCoord1);
+            idxs[id2] = std::round(center[id2] + modifiedCoord2);
+
+            if (hasFeatureAxis) {
+                idxs[featureAxis] = std::round(pCoord[featureAxis]);
+            }
+
+            feature[f] = img.valueOrAlt(idxs, 0);
+            f++;
+        }
+
+        //whitening of the features
+        float mean = 0;
+
+        for (float const& val : feature) {
+            mean += val;
+        }
+
+        mean /= feature.size();
+
+        for (float & val : feature) {
+            val -= mean;
+        }
+
+        float norm = 0;
+
+        for (float const& val : feature) {
+            norm += val*val;
+        }
+
+        norm /= feature.size();
+        norm = std::sqrt(norm);
+
+        for (float & val : feature) {
+            val /= norm;
+        }
+
+        ret.emplace_back(coord.coord, feature);
+
+    }
+
+    return ret;
+
+}
+
+template<int ... sizes>
+struct CircularFFTFeatureInfos {
+    static constexpr int nLevels = sizeof...(sizes);
+    static constexpr std::array<int,nLevels> levelSizes{sizes...};
+
+    static constexpr std::array<int,nLevels> hermitianOutSizes() {
+        std::array<int,nLevels> ret;
+        for (int i = 0; i < nLevels; i++) {
+            ret[i] = levelSizes[i]/2 + 1; //assuming FFT is for real data, so the fourier transform satisfy the hermitian property
+        }
+        return ret;
+    }
+};
+
+/*!
+ * \brief CircularFFTAmplitudeDescriptors compute descriptors based on circular samples around the tie point, given in fourier domain amplitude.
+ * \param coords the coordinate of the tie points
+ * \param img the image where the tie points have been found
+ * \param circleRadiuses the radiuses of the circle to sample
+ * \param featureAxis the axis which should be considered as batched features
+ * \return a list of feature descriptors corresponding to every points in the image.
+ *
+ * the benefit of building the feature vector by using the fft of circular sampling patterns around the tie point is that the
+ * feature can be made invariant to the orientation of the point if only the amplitude is used, as a rotation of the pattern will
+ * only influence the phase of the Fourier transform
+ */
+template<typename FFTFeatureInfos, int fDims,  typename T, Multidim::ArrayDataAccessConstness constNess>
+std::vector<pointFeatures<2, std::vector<float>>> CircularFFTAmplitudeDescriptors(std::vector<orientedCoordinate<2>> const& coords,
+                                                                                 Multidim::Array<T, fDims, constNess> const& img,
+                                                                                 std::vector<float> const& circleRadiuses,
+                                                                                 int featureAxis = 2) {
+
+
+    static_assert (fDims == 2 or fDims == 3, "image dimension should be equal (grayscale) or one more (color) than coordinates dimensions");
+
+    constexpr bool hasFeatureAxis = fDims == 3;
+
+    constexpr std::array<int, FFTFeatureInfos::nLevels> sizes = FFTFeatureInfos::levelSizes;
+    constexpr int nLevels = sizes.size();
+
+    using FFT = ImageProcessing::FourierTransformCalculator<double>;
+
+    std::array<FFT, nLevels> fourierTransformers;
+
+    int nDescriptorFeatures = 0;
+
+    for (int i = 0; i < nLevels; i++) {
+        fourierTransformers[i] = FFT(sizes[i]);
+        nDescriptorFeatures += fourierTransformers[i].outSize();
+    }
+
+    if constexpr (hasFeatureAxis) {
+        nDescriptorFeatures *= img.shape()[featureAxis];
+    }
+
+    std::vector<pointFeatures<2, std::vector<float>>> ret;
+    ret.reserve(coords.size());
+
+    for (orientedCoordinate<2> const& coord : coords) {
+
+        std::vector<float> descriptor;
+        descriptor.reserve(nDescriptorFeatures);
+
+        for (int level = 0; level < nLevels; level++) {
+            float samplingDistance = circleRadiuses[level];
+
+            if constexpr (hasFeatureAxis) {
+                for (int f = 0; f < img.shape()[featureAxis]; f++) {
+                    for (int i = 0; i < sizes[level]; i++) {
+                        float rho = i*2*M_PI/(sizes[level]-1);
+                        float dx = std::cos(rho)*samplingDistance;
+                        float dy = std::sin(rho)*samplingDistance;
+
+                        std::array<float,3> transformed_coords{coord.coord[0]+dx, coord.coord[1]+dy, float(f)};
+
+                        constexpr int kernelRadius = 0;
+                        T val = Interpolation::interpolateValue<3, T, Interpolation::pyramidFunction<T, 3>, kernelRadius>(img, transformed_coords);
+
+                        fourierTransformers[level].setInbufferElement(i, val);
+
+                    }
+
+                    fourierTransformers[level].execute();
+
+                    for (int i = 0; i < fourierTransformers[level].outSize(); i++) {
+                        descriptor.push_back(fourierTransformers[level].outElementAmplitude(i));
+                    }
+                }
+            } else {
+                for (int i = 0; i < sizes[level]; i++) {
+                    float rho = i*2*M_PI/(sizes[level]);
+                    float dx = std::cos(rho)*samplingDistance;
+                    float dy = std::sin(rho)*samplingDistance;
+
+                    std::array<float,2> transformed_coords{coord.coord[0]+dx, coord.coord[1]+dy};
+
+                    constexpr int kernelRadius = 0;
+                    T val = Interpolation::interpolateValue<2, T, Interpolation::pyramidFunction<T, 2>, kernelRadius>(img, transformed_coords);
+
+                    fourierTransformers[level].setInbufferElement(i, val);
+
+                }
+
+                fourierTransformers[level].execute();
+
+                for (int i = 0; i < fourierTransformers[level].outSize(); i++) {
+                    descriptor.push_back(fourierTransformers[level].outElementAmplitude(i));
+                }
+            }
+        }
+
+        ret.push_back(pointFeatures<2,std::vector<float>>(coord.coord, descriptor));
 
     }
 

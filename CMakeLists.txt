@@ -16,6 +16,8 @@ include(GNUInstallDirs)
 
 include(FetchContent)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/additionalModules/")
+
 set(CMAKE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
 set(CMAKE_INSTALL_CMAKEDIR ${CMAKE_INSTALL_LIBDIR})
 set(CMAKE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME})
@@ -86,6 +88,10 @@ endif(OPENMP_FOUND)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+#FFTW
+find_package(FFTW REQUIRED)
+
+#Eigen
 find_package(Eigen3 3.3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
 
@@ -186,6 +192,7 @@ set(LIB_SRC
         imageProcessing/pixelsTriangles.h
         imageProcessing/edgesDetection.h
         imageProcessing/inpainting.h
+        imageProcessing/fourierTransform.h
         io/image_io.h
         io/image_io.cpp
         io/read_exr.h
@@ -226,6 +233,9 @@ add_library(${STEREOVISION_NAME}::${STEREOVISION_LIB} ALIAS ${STEREOVISION_LIB})
 if (buildGui)
     add_library(${STEREOVISION_NAME}::qImageWidget ALIAS ${QIMAGEDISPLAYWIDGET_LIB})
 endif()
+
+target_include_directories(${STEREOVISION_LIB} PUBLIC ${FFTW_INCLUDE_DIRS})
+target_link_libraries(${STEREOVISION_LIB} PUBLIC ${FFTW_LIBRARIES} Eigen3::Eigen)
 
 #copy all header files for build time headers availability
 foreach(FILE IN LISTS LIB_SRC)
@@ -370,3 +380,5 @@ install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/${STEREOVISION_NAME}Config.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/${STEREOVISION_NAME}ConfigVersion.cmake
         DESTINATION ${CMAKE_INSTALL_CMAKEDIR}/cmake/${STEREOVISION_NAME} )
+
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/cmake/additionalModules" DESTINATION ${CMAKE_INSTALL_CMAKEDIR}/cmake/${STEREOVISION_NAME})
