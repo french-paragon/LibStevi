@@ -23,6 +23,7 @@ private Q_SLOTS:
     void testPseudoHuberLossDiffs();
     void testSqrtHuberLossDiffs();
     void testGenericRansac();
+    void testFullyPrioritzedRansacSampler();
 
 private:
 
@@ -188,6 +189,101 @@ void TestOptimizationUtils::testGenericRansac() {
     for (int i = 0; i < corrects.size(); i++) {
         QVERIFY(ransac.currentInliers()[i]);
     }
+
+}
+
+
+void TestOptimizationUtils::testFullyPrioritzedRansacSampler() {
+
+    std::vector<int> idxs{1,2,3,4,5,6,7,8,9,10};
+
+    StereoVision::Optimization::FullyPrioritizedRansacSamplingStrategy sampler(idxs);
+
+    int pseudoRe; //need a pseudoRe, albeit the sampler will not use it.
+    int pseudoThreadId = 0; //same for thread id
+    int pseudoThreadNumber = 1; //same for thread number
+
+    int nSamples = 4;
+
+    std::vector<int> expectedSampled = {1,2,3,4};
+    std::vector<int> sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
+
+    expectedSampled = {1,2,3,5};
+    sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
+
+    expectedSampled = {1,2,4,5};
+    sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
+
+    expectedSampled = {1,3,4,5};
+    sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
+
+    expectedSampled = {2,3,4,5};
+    sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
+
+    expectedSampled = {1,2,3,6};
+    sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
+
+    expectedSampled = {1,2,4,6};
+    sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
+
+    expectedSampled = {1,3,4,6};
+    sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
+
+    expectedSampled = {2,3,4,6};
+    sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
+
+    expectedSampled = {1,2,5,6};
+    sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
+
+    expectedSampled = {1,3,5,6};
+    sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
+
+    expectedSampled = {2,3,5,6};
+    sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
+
+    expectedSampled = {1,4,5,6};
+    sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
+
+    expectedSampled = {2,4,5,6};
+    sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
+
+    expectedSampled = {3,4,5,6};
+    sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
+
+    expectedSampled = {1,2,3,7};
+    sampled = sampler(pseudoRe,nSamples,pseudoThreadId,pseudoThreadNumber);
+
+    QCOMPARE(sampled,expectedSampled);
 
 }
 
