@@ -922,8 +922,8 @@ LasPublicHeaderBlock::LasPublicHeaderBlock() {
     fileSignature = {'L','A','S','F'};
     versionMajor = 1;
     versionMinor = 4;
-    systemIdentifier = {"OTHER"};
-    generatingSoftware = {"LibStevi"};
+	systemIdentifier = {'O','T','H','E','R'};
+	generatingSoftware = {'L','i','b','S','t','e','v','i'};
     headerSize = 375;
     offsetToPointData = headerSize;
     pointDataRecordFormat = 6;
