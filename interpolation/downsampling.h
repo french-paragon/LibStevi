@@ -64,8 +64,8 @@ private:
 	int _vertical;
 };
 
-template<class T_I, class T_O = float>
-Multidim::Array<T_O, 2> averagePoolingDownsample(Multidim::Array<T_I, 2> const& input,
+template<class T_I, class T_O = float, Multidim::ArrayDataAccessConstness Cstn>
+Multidim::Array<T_O, 2> averagePoolingDownsample(Multidim::Array<T_I, 2, Cstn> const& input,
                                                  DownSampleWindows const& windows) {
 
 	static_assert ((sizeof (T_O) >= sizeof (T_I)) or !std::is_integral_v<T_O>, "cannot output downsampled array with a smaller integral type than the input array.");
@@ -117,8 +117,8 @@ Multidim::Array<T_O, 2> averagePoolingDownsample(Multidim::Array<T_I, 2> const& 
 	return output;
 }
 
-template<class T_I, class T_O = float>
-Multidim::Array<T_O, 3> averagePoolingDownsample(Multidim::Array<T_I, 3> const& input,
+template<class T_I, class T_O = float, Multidim::ArrayDataAccessConstness Cstn>
+Multidim::Array<T_O, 3> averagePoolingDownsample(Multidim::Array<T_I, 3, Cstn> const& input,
 												 DownSampleWindows const& windows) {
 
 	static_assert ((sizeof (T_O) >= sizeof (T_I)) or !std::is_integral_v<T_O>, "cannot output downsampled array with a smaller integral type than the input array.");
