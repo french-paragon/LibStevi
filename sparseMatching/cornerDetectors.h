@@ -44,7 +44,7 @@ Multidim::Array<T, 3> HarrisCornerMMat(Multidim::Array<T, 2, Multidim::ConstView
         Padding pad(lowPassRadius, ImageProcessing::Convolution::PaddingType::Mirror);
 
         std::array<FiltType, 2> separatedGaussianFilter =
-                ImageProcessing::Convolution::separatedGaussianFilters(sigma, lowPassRadius, normalize, MovingAxis(pad), MovingAxis(pad));
+            ImageProcessing::Convolution::separatedGaussianFilters<T>(sigma, lowPassRadius, normalize, MovingAxis(pad), MovingAxis(pad));
 
         lp_filtered = separatedGaussianFilter[0].convolve(img);
 
