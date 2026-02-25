@@ -415,10 +415,11 @@ namespace matchingcosts_details {
     };
 };
 
+
 template<>
 class MatchingFunctionTraits<matchingFunctions::NCC>{
 public:
-    static const std::string Name;
+	static constexpr char Name[] = "NCC";
     static constexpr bool ZeroMean = false;
     static constexpr bool Normalized = true;
     static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Score;
@@ -441,7 +442,7 @@ public:
 template<>
 class MatchingFunctionTraits<matchingFunctions::CC>{
 public:
-    static const std::string Name;
+	static constexpr char Name[] = "CC";
     static constexpr bool ZeroMean = false;
     static constexpr bool Normalized = false;
     static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Score;
@@ -458,7 +459,7 @@ public:
 template<>
 class MatchingFunctionTraits<matchingFunctions::SSD>{
 public:
-    static const std::string Name;
+	static constexpr char Name[] = "SSD";
     static constexpr bool ZeroMean = false;
     static constexpr bool Normalized = false;
     static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;
@@ -481,7 +482,7 @@ public:
 template<>
 class MatchingFunctionTraits<matchingFunctions::SAD>{
 public:
-    static const std::string Name;
+	static constexpr char Name[] = "SAD";
     static constexpr bool ZeroMean = false;
     static constexpr bool Normalized = false;
     static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;
@@ -504,7 +505,7 @@ public:
 template<>
 class MatchingFunctionTraits<matchingFunctions::ZCC>{
 public:
-    static const std::string Name;
+	static constexpr char Name[] = "ZCC";
     static constexpr bool ZeroMean = true;
     static constexpr bool Normalized = false;
     static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Score;
@@ -521,7 +522,7 @@ public:
 template<>
 class MatchingFunctionTraits<matchingFunctions::ZNCC>{
 public:
-    static const std::string Name;
+	static constexpr char Name[] = "ZNCC";
     static constexpr bool ZeroMean = true;
     static constexpr bool Normalized = true;
     static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Score;
@@ -544,7 +545,7 @@ public:
 template<>
 class MatchingFunctionTraits<matchingFunctions::ZSSD>{
 public:
-    static const std::string Name;
+	static constexpr char Name[] = "ZSSD";
     static constexpr bool ZeroMean = true;
     static constexpr bool Normalized = false;
     static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;
@@ -567,7 +568,7 @@ public:
 template<>
 class MatchingFunctionTraits<matchingFunctions::ZSAD>{
 public:
-    static const std::string Name;
+	static constexpr char Name[] = "ZSAD";
     static constexpr bool ZeroMean = true;
     static constexpr bool Normalized = false;
     static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;
@@ -590,7 +591,7 @@ public:
 template<>
 class MatchingFunctionTraits<matchingFunctions::MEDAD>{
 public:
-    static const std::string Name;
+	static constexpr char Name[] = "MEDAD";
     static constexpr bool ZeroMean = false;
     static constexpr bool Normalized = false;
     static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;
@@ -621,7 +622,7 @@ public:
 template<>
 class MatchingFunctionTraits<matchingFunctions::ZMEDAD>{
 public:
-    static const std::string Name;
+	static constexpr char Name[] = "ZMEDAD";
     static constexpr bool ZeroMean = true;
     static constexpr bool Normalized = false;
     static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;
@@ -652,7 +653,7 @@ public:
 template<>
 class MatchingFunctionTraits<matchingFunctions::HAMMING>{
 public:
-    static const std::string Name;
+	static constexpr char Name[] = "HAMMING";
     static constexpr bool ZeroMean = false;
     static constexpr bool Normalized = false;
     static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;
@@ -662,14 +663,14 @@ public:
     template<class T_S, class T_T, class T_O = float, Multidim::ArrayDataAccessConstness viewConstness = Multidim::ConstView>
     inline static float featureComparison(Multidim::Array<T_S,1, viewConstness> const& source,
                                    Multidim::Array<T_T,1, viewConstness> const& target) {
-        return hammingDistance(source, target);
+		return hammingDistance(source, target);
     }
 };
 
 template<>
 class MatchingFunctionTraits<matchingFunctions::CENSUS>{
 public:
-    static const std::string Name;
+	static constexpr char Name[] = "CENSUS";
     static constexpr bool ZeroMean = false;
     static constexpr bool Normalized = false;
     static constexpr dispExtractionStartegy extractionStrategy = dispExtractionStartegy::Cost;

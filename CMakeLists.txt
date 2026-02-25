@@ -110,8 +110,7 @@ include_directories(${MODULES_INCLUDE_DIRECTORIES})
 
 set(LIB_SRC
         stevi_global.h
-        geometry/core.h
-        geometry/geometricexception.cpp
+		geometry/core.h
         geometry/geometricexception.h
         geometry/alignement.h
         geometry/imagecoordinates.h
@@ -119,8 +118,7 @@ set(LIB_SRC
         geometry/pointcloudalignment.h
         geometry/genericraysalignement.h
         geometry/rotations.h
-        geometry/posesmath.h
-        geometry/stereorigrectifier.cpp
+		geometry/posesmath.h
         geometry/stereorigrectifier.h
         geometry/genericbinarypartitioningtree.h
         geometry/sensorframesconvention.h
@@ -128,18 +126,14 @@ set(LIB_SRC
         graphs/doublyConnectedEdgeLists.h
         graphs/graph_flow.h
         graphs/graph_cut.h
-        optimization/assignement_problems.h
-        interpolation/interpolation.cpp
-        interpolation/interpolation.h
-        interpolation/lensdistortionsmap.cpp
+		optimization/assignement_problems.h
+		interpolation/interpolation.h
         interpolation/lensdistortionsmap.h
         interpolation/downsampling.h
         correlation/matching_costs.h
         correlation/correlation_base.h
-        correlation/unfold.h
-        correlation/unfold.cpp
-        correlation/cross_correlations.h
-        correlation/cross_correlations.cpp
+		correlation/unfold.h
+		correlation/cross_correlations.h
         correlation/census.h
         correlation/cost_based_refinement.h
         correlation/image_based_refinement.h
@@ -173,13 +167,13 @@ set(LIB_SRC
         utils/stevimath.h
         utils/hash_utils.h
         utils/iterative_numerical_algorithm_output.h
+		utils/combinatorial.h
         statistics/stereo_covering.h
         imageProcessing/colorConversions.h
         imageProcessing/histogram.h
         imageProcessing/meanShiftClustering.h
         imageProcessing/intrinsicImageDecomposition.h
-        imageProcessing/checkBoardDetection.h
-        imageProcessing/checkBoardDetection.cpp
+		imageProcessing/checkBoardDetection.h
         imageProcessing/hexagonalRGBTargetsDetection.h
         imageProcessing/finiteDifferences.h
         imageProcessing/connectedComponents.h
@@ -208,8 +202,7 @@ set(LIB_SRC
         io/metacloud_io.h
         io/metacloud_io.cpp
         io/attributeMapper.h
-        io/attributeRemover.h
-        io/attributeRemover.cpp
+		io/attributeRemover.h
         io/fstreamCustomBuffer.h
         io/bit_manipulations.h
         sparseMatching/cornerDetectors.h

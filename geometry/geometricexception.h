@@ -21,19 +21,32 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <string>
 #include <exception>
+#include <cstring>
 
 namespace StereoVision {
 namespace Geometry {
 
-class GeometricException : public std::exception
+class [[deprecated("Usage is not recommanded, use status optional instead to manage failure cases!")]] GeometricException : public std::exception
 {
 public:
-	GeometricException(std::string const& what);
-	GeometricException(GeometricException const& other);
+	inline GeometricException(std::string const& what)
+	{
+		_what = new char[what.size()];
+		std::memcpy (_what, what.c_str(), what.size());
+	}
+	inline GeometricException(GeometricException const& other) :
+		GeometricException(other.what())
+	{
 
-	virtual ~GeometricException();
+	}
 
-	const char* what() const noexcept override;
+	inline virtual ~GeometricException() {
+		delete _what;
+	}
+
+	inline const char* what() const noexcept override {
+		return _what;
+	}
 
 protected:
 
