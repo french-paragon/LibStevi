@@ -164,5 +164,9 @@ add_executable(testCovarianceKernels testCovarianceKernels.cpp)
 target_link_libraries(testCovarianceKernels ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
 add_test(TestCovarianceKernels testCovarianceKernels)
 
+add_executable(testCombinatorial testCombinatorial.cpp)
+target_link_libraries(testCombinatorial ${STEREOVISION_LIB} Qt${QT_VERSION_MAJOR}::Test)
+add_test(TestCombinatorial testCombinatorial)
+
 
 
