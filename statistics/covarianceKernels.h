@@ -51,6 +51,11 @@ public:
     static T corrFunction(T nu, T rho, T d) {
 
         T scaledD = std::sqrt(2*nu)*d/rho;
+        T logScaleD = std::log(scaledD);
+
+        if (!std::isfinite(logScaleD)) {
+            return 1;
+        }
 
         //treat the case of large nu, for large nu, the function converge to an exponential kernel
         if (nu > 150) { //empirical limit observed for double type
@@ -70,7 +75,7 @@ public:
 
         //compute in log space for numerical stability
         T log = (1-nu)*std::log(2) - std::lgamma(nu);
-        log += nu*std::log(scaledD);
+        log += nu*logScaleD;
 
         T bessel = std::cyl_bessel_k(nu, scaledD);
 
@@ -184,19 +189,19 @@ public:
 
     }
 
-    T operator()(T d) {
+    T operator()(T d) const {
         return corrFunction(_nu, _rho, d);
     }
 
-    T operator()(T sigma0, T d) {
+    T operator()(T sigma0, T d) const {
         return sigma0*sigma0*corrFunction(_nu, _rho, d);
     }
 
-    T diff(T d) {
+    T diff(T d) const {
         return diffCorrFunctionD(_nu,_rho, d);
     }
 
-    T diff(T sigma0, T d) {
+    T diff(T sigma0, T d) const {
         return sigma0*sigma0*diffCorrFunctionD(_nu,_rho, d);
     }
 
