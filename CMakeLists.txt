@@ -161,6 +161,7 @@ set(LIB_SRC
         optimization/affine_utils.h
         optimization/principalComponentsAnalysis.h
         optimization/gaussnewtownproblem.h
+        optimization/bfgs.h
         optimization/generic_ransac.h
         utils/contiguity.h
         utils/margins.h
@@ -227,6 +228,7 @@ add_library(
     ${STEREOVISION_LIB}
     SHARED
     ${LIB_SRC}
+    optimization/bfgs.h
 )
 add_library(${STEREOVISION_NAME}::${STEREOVISION_LIB} ALIAS ${STEREOVISION_LIB})
 
