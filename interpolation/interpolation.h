@@ -213,8 +213,56 @@ Multidim::Array<T, outDIM> interpolate(Multidim::Array<T, inDIM> const& input,
 
 }
 
-ImageArray interpolateImage(ImageArray const& imInput,
-                            ImageArray const& coordinates);
+inline ImageArray interpolateImage(ImageArray const& imInput,
+							ImageArray const& coordinates) {
+
+	constexpr BorderCondition bCond = Constant;
+	auto s = imInput.shape();
+
+	if (s[2] == 3) {
+
+		Multidim::Array<float, 3> imgOut(coordinates.shape()[0], coordinates.shape()[1], 3);
+
+		for (int i = 0; i < 3; i++) {
+			Multidim::Array<float, 3>* nonConst = const_cast<Multidim::Array<float, 3>*>(&imInput);
+
+			Multidim::Array<float, 2> inChannel = nonConst->subView(Multidim::DimSlice(),
+																	Multidim::DimSlice(),
+																	Multidim::DimIndex(i));
+
+			Multidim::Array<float, 2> outChannel = imgOut.subView(Multidim::DimSlice(),
+																  Multidim::DimSlice(),
+																  Multidim::DimIndex(i));
+
+			outChannel.copyData(interpolate<2, 2, float, pyramidFunction<float, 2>, 0, bCond>(inChannel, coordinates));
+
+		}
+
+		return imgOut;
+
+	} else if (s[2] == 1) {
+
+		Multidim::Array<float, 3> imgOut(coordinates.shape()[0], coordinates.shape()[1], 1);
+
+		Multidim::Array<float, 3>* nonConst = const_cast<Multidim::Array<float, 3>*>(&imInput);
+
+		Multidim::Array<float, 2> inChannel = nonConst->subView(Multidim::DimSlice(),
+																Multidim::DimSlice(),
+																Multidim::DimIndex(0));
+
+		Multidim::Array<float, 2> outChannel = imgOut.subView(Multidim::DimSlice(),
+															  Multidim::DimSlice(),
+															  Multidim::DimIndex(0));
+
+		outChannel.copyData(interpolate<2, 2, float, pyramidFunction<float, 2>, 0, bCond>(inChannel, coordinates));
+
+
+		return imgOut;
+	}
+
+	return Multidim::Array<float, 3>();
+
+}
 
 } // namespace Interpolation
 } // namespace StereoVision

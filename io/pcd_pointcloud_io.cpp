@@ -15,6 +15,26 @@
 #include "bit_manipulations.h"
 #include <unordered_set>
 
+#if __GNUC__ <= 10
+//simple placeholder to be able to compile on older versions of gcc
+#warning "Using an old compile, from chars will be placeholders to enable compilation, but resulting binaries should not be used in production!"
+#include <charconv>
+namespace std {
+from_chars_result from_chars( const char* first, const char* last,
+				float& value ) {
+		string str(first, last);
+		value = stof(str);
+		return from_chars_result{last, {}};
+	}
+from_chars_result from_chars( const char* first, const char* last,
+				double& value ) {
+		string str(first, last);
+		value = stod(str);
+		return from_chars_result{last, {}};
+	}
+}
+#endif
+
 namespace StereoVision {
 namespace IO {
 
@@ -612,8 +632,11 @@ std::optional<PointCloudGenericAttribute> PcdPointCloudHeader::getAttributeById(
             return PointCloudGenericAttribute{viewpoint};
         case 8:
             return PointCloudGenericAttribute{points};
-        case 9:
-            return PointCloudGenericAttribute{(std::ostringstream() << data).str()};
+		case 9: {
+			std::ostringstream ss;
+			ss << data;
+			return PointCloudGenericAttribute{ss.str()};
+		}
     }
     return std::nullopt;
 }
