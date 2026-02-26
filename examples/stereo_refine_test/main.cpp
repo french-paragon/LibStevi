@@ -199,8 +199,8 @@ Metrics compareWithGroundTruth(Multidim::Array<T,2> const& disp,
     std::vector<double> noise(err.size());
 
     for (int i = 0; i < err.size(); i++) {
-        double pos = subPix[i]*nSubpixelBins;
-        double expected = StereoVision::Interpolation::interpolateValue<1,double,StereoVision::Interpolation::pyramidFunction<double,1>,1>(subpixelErrorHistogram,{pos});
+        float pos = subPix[i]*nSubpixelBins;
+        double expected = StereoVision::Interpolation::interpolateValue<1,double,StereoVision::Interpolation::pyramidFunction<float,1>,1>(subpixelErrorHistogram,{pos});
         double eError = expected - me;
         eErrors[i] = eError;
         noise[i] = err[i] - eError;

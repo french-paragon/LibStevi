@@ -293,8 +293,8 @@ std::vector<pointFeatures<nDim, std::vector<uint32_t>>> BriefDescriptor(std::vec
                 transformed_coords1[featureAxis] = pair[1][featureAxis];
             }
 
-            T val0 = Interpolation::interpolateValue<imDim, T, Interpolation::pyramidFunction<T, imDim>, 0>(img, transformed_coords0);
-            T val1 = Interpolation::interpolateValue<imDim, T, Interpolation::pyramidFunction<T, imDim>, 0>(img, transformed_coords1);
+            T val0 = Interpolation::interpolateValue<imDim, T, Interpolation::pyramidFunction<float, imDim>, 0>(img, transformed_coords0);
+            T val1 = Interpolation::interpolateValue<imDim, T, Interpolation::pyramidFunction<float, imDim>, 0>(img, transformed_coords1);
 
             uint32_t m = (val0 > val1) ? 1 : 0; //compute bitmask
 
@@ -571,7 +571,7 @@ std::vector<pointFeatures<2, std::vector<float>>> CircularFFTAmplitudeDescriptor
                         std::array<float,3> transformed_coords{coord.coord[0]+dx, coord.coord[1]+dy, float(f)};
 
                         constexpr int kernelRadius = 0;
-                        T val = Interpolation::interpolateValue<3, T, Interpolation::pyramidFunction<T, 3>, kernelRadius>(img, transformed_coords);
+                        T val = Interpolation::interpolateValue<3, T, Interpolation::pyramidFunction<float, 3>, kernelRadius>(img, transformed_coords);
 
                         fourierTransformers[level].setInbufferElement(i, val);
 
@@ -592,7 +592,7 @@ std::vector<pointFeatures<2, std::vector<float>>> CircularFFTAmplitudeDescriptor
                     std::array<float,2> transformed_coords{coord.coord[0]+dx, coord.coord[1]+dy};
 
                     constexpr int kernelRadius = 0;
-                    T val = Interpolation::interpolateValue<2, T, Interpolation::pyramidFunction<T, 2>, kernelRadius>(img, transformed_coords);
+                    T val = Interpolation::interpolateValue<2, T, Interpolation::pyramidFunction<float, 2>, kernelRadius>(img, transformed_coords);
 
                     fourierTransformers[level].setInbufferElement(i, val);
 

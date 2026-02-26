@@ -78,13 +78,13 @@ T bicubicKernel(std::array<T,inDIM> const& pos) {
     return out;
 }
 
-template <int inDIM, typename T, T(kernel)(std::array<T,inDIM> const&), int kernelRadius, BorderCondition bCond = Constant>
+template <int inDIM, typename T, float(kernel)(std::array<float,inDIM> const&), int kernelRadius, BorderCondition bCond = Constant>
 inline T interpolateValue(Multidim::Array<T, inDIM> const& input,
-                          std::array<T,inDIM> const& fractionalCoord) {
+                          std::array<float,inDIM> const& fractionalCoord) {
 
     using IndexIn = typename Multidim::Array<T, inDIM>::IndexBlock;
     using ShapeIn = typename Multidim::Array<T, inDIM>::ShapeBlock;
-    using CoordIn = std::array<T, inDIM>;
+    using CoordIn = std::array<float, inDIM>;
 
     ShapeIn imgShape = input.shape();
 
@@ -149,9 +149,9 @@ inline T interpolateValue(Multidim::Array<T, inDIM> const& input,
 
 }
 
-template <int inDIM, int outDIM, typename T, T(kernel)(std::array<T,inDIM> const&), int kernelRadius, BorderCondition bCond = Constant>
+template <int inDIM, int outDIM, typename T, float(kernel)(std::array<float,inDIM> const&), int kernelRadius, BorderCondition bCond = Constant>
 Multidim::Array<T, outDIM> interpolate(Multidim::Array<T, inDIM> const& input,
-                                       Multidim::Array<T, outDIM + 1> const& coordinates) {
+                                       Multidim::Array<float, outDIM + 1> const& coordinates) {
 
     using ShapeIn = typename Multidim::Array<T, inDIM>::ShapeBlock;
     using ShapeOut = typename Multidim::Array<T, outDIM>::ShapeBlock;
@@ -161,7 +161,7 @@ Multidim::Array<T, outDIM> interpolate(Multidim::Array<T, inDIM> const& input,
     using IndexOut = typename Multidim::Array<T, outDIM>::IndexBlock;
     using IndexCoord = typename Multidim::Array<T, outDIM + 1>::IndexBlock;
 
-    using CoordIn = std::array<T, inDIM>;
+    using CoordIn = std::array<float, inDIM>;
 
     assert(coordinates.shape().back() == inDIM);
 
