@@ -249,14 +249,14 @@ protected:
 											  int maxDistanceRadius);
 };
 
-bool operator<(CheckBoardPoints::Coord c1, CheckBoardPoints::Coord c2) {
+inline bool operator<(CheckBoardPoints::Coord c1, CheckBoardPoints::Coord c2) {
 	if (c1.x == c2.x) {
 		return c1.y < c2.y;
 	}
 	return  c1.x < c2.x;
 }
 
-CheckBoardPoints isolateCheckBoard(std::vector<discretCheckCornerInfos> const& candidates,
+inline CheckBoardPoints isolateCheckBoard(std::vector<discretCheckCornerInfos> const& candidates,
 								   float relDistanceTolerance = 0.05,
 								   float angleTolerance = 0.05,
 								   float observationWeight = 1.,

@@ -15,7 +15,9 @@
 #include "bit_manipulations.h"
 #include <unordered_set>
 
+#ifndef __clang__
 #if __GNUC__ <= 10
+
 //simple placeholder to be able to compile on older versions of gcc
 #warning "Using an old compile, from chars will be placeholders to enable compilation, but resulting binaries should not be used in production!"
 #include <charconv>
@@ -33,6 +35,7 @@ from_chars_result from_chars( const char* first, const char* last,
 		return from_chars_result{last, {}};
 	}
 }
+#endif
 #endif
 
 namespace StereoVision {

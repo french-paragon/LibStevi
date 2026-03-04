@@ -4,8 +4,8 @@
 #include "./rotations.h"
 #include "MultidimArrays/MultidimArrays.h"
 
-#include "optimization/l2optimization.h"
-#include "lensdistortion.h"
+#include "../optimization/l2optimization.h"
+#include "./lensdistortion.h"
 
 #include <optional>
 
