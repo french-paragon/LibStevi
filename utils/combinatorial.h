@@ -37,7 +37,15 @@ public:
 
 	inline int nChoices() const {
 		return nChooseK(_setSize, _nChoose);
-	}
+    }
+
+    inline int itemsSetSize() const {
+        return _setSize;
+    }
+
+    inline int choiceSetSize() const {
+        return _nChoose;
+    }
 
 	std::vector<int> idx2set(int idx) {
 		std::vector<int> ret(_nChoose);
