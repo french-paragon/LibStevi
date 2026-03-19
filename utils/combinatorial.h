@@ -25,25 +25,25 @@ public:
 
 	}
 
-	inline static int nChooseK(int n, int k) {
-		int num = 1;
-		int denum = 1;
+    inline static size_t nChooseK(int n, int k) {
+        double num = 1;
+        double denum = 1;
 		for (int i = 1; i <= k; i++) {
 			num *= n - (k - i);
 			denum *= i;
 		}
-		return num/denum;
+        return long(num/denum);
 	}
 
-	inline int nChoices() const {
+    inline size_t nChoices() const {
 		return nChooseK(_setSize, _nChoose);
     }
 
-    inline int itemsSetSize() const {
+    inline size_t itemsSetSize() const {
         return _setSize;
     }
 
-    inline int choiceSetSize() const {
+    inline size_t choiceSetSize() const {
         return _nChoose;
     }
 
@@ -78,10 +78,10 @@ public:
 	 *
 	 * If the choice set is not sorted, not of size k or contain indices >= n, then the behavior is undefined.
 	 */
-	int set2idx(std::vector<int> const& choice) {
-		int idx = 0;
-		int prev = -1;
-		int currentSetSize = _setSize;
+    size_t set2idx(std::vector<int> const& choice) {
+        size_t idx = 0;
+        size_t prev = -1;
+        size_t currentSetSize = _setSize;
 		for (int i = 0; i < _nChoose; i++) {
 			int delta = choice[i]-prev-1;
 			for (int s = 0; s < delta; s++) {

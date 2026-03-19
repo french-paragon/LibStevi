@@ -44,8 +44,11 @@ void TestCombinatorial::testNChooseK() {
 	QCOMPARE(StereoVision::Combinatorial::ChooseInSetIndexer::nChooseK(3,2),3);
 	QCOMPARE(StereoVision::Combinatorial::ChooseInSetIndexer::nChooseK(5,3),10);
 	QCOMPARE(StereoVision::Combinatorial::ChooseInSetIndexer::nChooseK(11,6),462);
-	QCOMPARE(StereoVision::Combinatorial::ChooseInSetIndexer::nChooseK(7,3),35);
-	QCOMPARE(StereoVision::Combinatorial::ChooseInSetIndexer::nChooseK(13,7),1716);
+    QCOMPARE(StereoVision::Combinatorial::ChooseInSetIndexer::nChooseK(7,3),35);
+    QCOMPARE(StereoVision::Combinatorial::ChooseInSetIndexer::nChooseK(13,7),1716);
+    QCOMPARE(StereoVision::Combinatorial::ChooseInSetIndexer::nChooseK(30,14),145422675);
+    QCOMPARE(StereoVision::Combinatorial::ChooseInSetIndexer::nChooseK(31,16),300540195);
+    QCOMPARE(StereoVision::Combinatorial::ChooseInSetIndexer::nChooseK(31,15),300540195);
 
 }
 
