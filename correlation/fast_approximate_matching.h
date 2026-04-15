@@ -2,7 +2,7 @@
 #define STEREOVISION_FAST_APPROXIMATE_MATCHING_H
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 
-Copyright (C) 2022  Paragon<french.paragon@gmail.com>
+Copyright (C) 2022-2026  Paragon<french.paragon@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -34,8 +34,8 @@ struct FastMatchTraits {
 	template<Multidim::ArrayDataAccessConstness constnessS,
 			 Multidim::ArrayDataAccessConstness constnessT>
 	using FastMatchOnDemandCV = std::conditional_t<searchSpaceDim == 1,
-	OnDemandStereoCostVolume<matchFunc, TCV, T_FV, T_FV, constnessS, constnessT>,
-	OnDemandImageFlowVolume<matchFunc, TCV, T_FV, T_FV, constnessS, constnessT>> ;
+    OnDemandStereoCostVolume<matchFunc, TCV, Multidim::Array<T_FV, 3, constnessS>, Multidim::Array<T_FV, 3, constnessT>>,
+    OnDemandImageFlowVolume<matchFunc, TCV, Multidim::Array<T_FV, 3, constnessS>, Multidim::Array<T_FV, 3, constnessT>>> ;
 };
 
 template<matchingFunctions matchFunc, int searchSpaceDim, class T_FV, class T_CV,
@@ -51,7 +51,7 @@ inline std::array<disp_t, searchSpaceDim> fullDispAtIdx(Multidim::Array<disp_t, 
 
 	std::array<int, searchSpaceDim> dispCoord;
 
-	if (searchSpaceDim == 1) {
+    if constexpr (searchSpaceDim == 1) {
 		disp_t currentD = 0;
 		T_CV currentCost = defaultCvValForMatchFunc<matchFunc, T_CV>();
 

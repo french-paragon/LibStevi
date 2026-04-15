@@ -65,7 +65,7 @@ private:
 	template<StereoVision::Correlation::matchingFunctions matchFunc>
 	void testStereoCV(int imgHeight, int imgWidth, int nFeatures, int maxDisp) {
 
-		using OnDemandCostVolT = OnDemandStereoCostVolume<matchFunc, float, float, float, Multidim::NonConstView, Multidim::NonConstView>;
+        using OnDemandCostVolT = OnDemandStereoCostVolume<matchFunc, float, Multidim::Array<float, 3, Multidim::NonConstView>, Multidim::Array<float, 3, Multidim::NonConstView>>;
 		using SearchSpaceT = typename OnDemandCostVolT::SearchSpaceType;
 
 		static_assert (OnDemandCostVolT::nSearchDim == 1, "Error in cv type");
@@ -117,7 +117,7 @@ private:
 	template<StereoVision::Correlation::matchingFunctions matchFunc>
 	void testFlowCV(int imgHeight, int imgWidth, int nFeatures, int dispRadius) {
 
-		using OnDemandCostVolT = OnDemandImageFlowVolume<matchFunc, float, float, float, Multidim::NonConstView, Multidim::NonConstView>;
+        using OnDemandCostVolT = OnDemandImageFlowVolume<matchFunc, float, Multidim::Array<float, 3, Multidim::NonConstView>, Multidim::Array<float, 3, Multidim::NonConstView>>;
 		using SearchSpaceT = typename OnDemandCostVolT::SearchSpaceType;
 
 		static_assert (OnDemandCostVolT::nSearchDim == 2, "Error in cv type");

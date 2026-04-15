@@ -3,7 +3,7 @@
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 
-Copyright (C) 2022  Paragon<french.paragon@gmail.com>
+Copyright (C) 2022-2026  Paragon<french.paragon@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "./correlation_base.h"
 #include "./matching_costs.h"
 #include "./cross_correlations.h"
+#include "./on_demand_features_volume.h"
 
 #include <MultidimArrays/MultidimArrays.h>
 #include <MultidimArrays/MultidimIndexManipulators.h>
@@ -31,14 +32,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace StereoVision {
 namespace Correlation {
 
-template<matchingFunctions matchFunc, class T_CV, class T_S, class T_T,
-		 Multidim::ArrayDataAccessConstness constnessS,
-		 Multidim::ArrayDataAccessConstness constnessT,
+template<matchingFunctions matchFunc, class T_CV, class F_V_S_T, class F_V_T_T,
 		 typename... Ds>
 class GenericOnDemandCostVolume {
 
 public:
 	using SearchSpaceType = FixedSearchSpace<Ds...>;
+
+    using T_S = typename FeatureVolumeInfos<F_V_S_T>::FeatureScalarT;
+    using T_T = typename FeatureVolumeInfos<F_V_T_T>::FeatureScalarT;
 
 	using T_SF = typename MatchingFuncComputeTypeInfos<matchFunc, T_S>::FeatureType;
 	using T_TF = typename MatchingFuncComputeTypeInfos<matchFunc, T_T>::FeatureType;
@@ -50,8 +52,8 @@ public:
 
 	static_assert (featureDim >= 0 and featureDim < nDim, "Invalid search space");
 
-	explicit GenericOnDemandCostVolume(Multidim::Array<T_S, nDim, constnessS> const& source,
-									   Multidim::Array<T_T, nDim, constnessT> const& target,
+    explicit GenericOnDemandCostVolume(F_V_S_T const& source,
+                                       F_V_T_T const& target,
 									   SearchSpaceType const& searchSpace) :
 		_source(source),
 		_target(target),
@@ -60,8 +62,8 @@ public:
 
 		if (MatchingFunctionTraits<matchFunc>::Normalized or MatchingFunctionTraits<matchFunc>::ZeroMean) {
 
-			_source_processed = getFeatureVolumeForMatchFunc<matchFunc, T_S, Multidim::NonConstView, T_SF>(source);
-			_target_processed = getFeatureVolumeForMatchFunc<matchFunc, T_T, Multidim::NonConstView, T_TF>(target);
+            _source_processed = getFeatureVolumeForMatchFunc<matchFunc>(source);
+            _target_processed = getFeatureVolumeForMatchFunc<matchFunc>(target);
 
 		}
 
@@ -178,7 +180,7 @@ public:
 		return cost;
 	}
 
-	inline SearchSpace<sizeof... (Ds)> const& searchSpace() const {
+    inline SearchSpaceType const& searchSpace() const {
 		return _search_space;
 	}
 
@@ -312,8 +314,8 @@ protected:
 
 	std::array<Multidim::array_size_t, nSearchDim> _searchDims;
 
-	Multidim::Array<T_S, nDim, constnessS> const& _source;
-	Multidim::Array<T_S, nDim, constnessT> const& _target;
+    F_V_S_T const& _source;
+    F_V_T_T const& _target;
 
 	Multidim::Array<T_SF, nDim> _source_processed;
 	Multidim::Array<T_TF, nDim> _target_processed;
@@ -324,21 +326,300 @@ protected:
 	SearchSpaceType _search_space;
 };
 
-template<matchingFunctions matchFunc, class T_CV, class T_S, class T_T,
-		 Multidim::ArrayDataAccessConstness constnessS,
-		 Multidim::ArrayDataAccessConstness constnessT>
+template<matchingFunctions matchFunc, class T_CV, class F_V_S_T, class F_V_T_T>
 using OnDemandStereoCostVolume =
-GenericOnDemandCostVolume<matchFunc, T_CV, T_S, T_T,
-constnessS, constnessT,
+GenericOnDemandCostVolume<matchFunc, T_CV, F_V_S_T, F_V_T_T,
 SearchSpaceBase::IgnoredDim, SearchSpaceBase::SearchDim, SearchSpaceBase::FeatureDim>;
 
-template<matchingFunctions matchFunc, class T_CV, class T_S, class T_T,
-		 Multidim::ArrayDataAccessConstness constnessS,
-		 Multidim::ArrayDataAccessConstness constnessT>
+template<matchingFunctions matchFunc, class T_CV, class F_V_S_T, class F_V_T_T>
 using OnDemandImageFlowVolume =
-GenericOnDemandCostVolume<matchFunc, T_CV, T_S, T_T,
-constnessS, constnessT,
+GenericOnDemandCostVolume<matchFunc, T_CV, F_V_S_T, F_V_T_T,
 SearchSpaceBase::SearchDim, SearchSpaceBase::SearchDim, SearchSpaceBase::FeatureDim>;
+
+/*!
+ * \brief The CachelessOnDemandCostVolume class represent an implicit cost volume
+ *
+ * It is meant to be used with very large images, when explicitly instancing the cost or feature volumes
+ * is not feasible.
+ */
+template<matchingFunctions matchFunc, class T_CV, class F_V_S_T, class F_V_T_T,
+         typename... Ds>
+class CachelessOnDemandCostVolume {
+
+public:
+    using SearchSpaceType = FixedSearchSpace<Ds...>;
+
+    using T_S = typename FeatureVolumeInfos<F_V_S_T>::FeatureScalarT;
+    using T_T = typename FeatureVolumeInfos<F_V_T_T>::FeatureScalarT;
+
+    using T_SF = typename MatchingFuncComputeTypeInfos<matchFunc, T_S>::FeatureType;
+    using T_TF = typename MatchingFuncComputeTypeInfos<matchFunc, T_T>::FeatureType;
+
+    static constexpr int nDim = SearchSpaceType::nDim;
+    static constexpr int nSearchDim = SearchSpaceType::nDimsOfType(SearchSpaceBase::Search);
+    static constexpr int featureDim = SearchSpaceType::featuresDim();
+    static constexpr int nCostVolDim = nDim + nSearchDim - 1;
+
+    static_assert(FeatureVolumeInfos<F_V_S_T>::NDims == nDim);
+    static_assert(FeatureVolumeInfos<F_V_T_T>::NDims == nDim);
+
+    static_assert (featureDim >= 0 and featureDim < nDim, "Invalid search space");
+
+    explicit CachelessOnDemandCostVolume() :
+        _source(nullptr),
+        _target(nullptr),
+        _search_space()
+    {
+    }
+
+    explicit CachelessOnDemandCostVolume(F_V_S_T const& source,
+                                         F_V_T_T const& target,
+                                         SearchSpaceType const& searchSpace) :
+        _source(&source),
+        _target(&target),
+        _search_space(searchSpace)
+    {
+
+        for (int i = 0, s = 0; i < nDim; i++) {
+            int d = (i >= featureDim) ? i-1 : i;
+
+            if (_search_space.getDimType(i) == SearchSpaceBase::Search) {
+
+                _searchDims[s] = i;
+                s++;
+            }
+
+            if (_search_space.getDimType(i) != SearchSpaceBase::Feature) {
+                _cvShape[d] = source.shape()[i];
+            }
+
+        }
+
+        for (int i = 0; i < nSearchDim; i++) {
+
+            int range = _search_space.dimRange(_searchDims[i]);
+
+            _cvShape[nDim-1+i] = range;
+        }
+    }
+
+    inline std::array<Multidim::array_size_t, nCostVolDim> shape() const {
+        return _cvShape;
+    }
+
+    inline std::optional<T_CV> costValue(std::array<int, nDim-1> pos, std::array<int, nSearchDim> disp) const {
+
+        constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
+
+        std::array<int, nDim-1> sourcePos = pos;
+        std::array<int, nDim-1> targetPos = pos;
+
+        std::array<Multidim::array_size_t, nCostVolDim> cvIndex{};
+
+        for(int i = 0; i < nDim-1; i++) {
+            cvIndex[i] = pos[i];
+        }
+
+        for (int i = 0; i < nSearchDim; i++) {
+
+            cvIndex[nDim+i-1] = _search_space.disp2idx(_searchDims[i], disp[i]);
+        }
+
+        for (int i = 0; i < nCostVolDim; i++) {
+
+            if (cvIndex[i] < 0) {
+                return std::nullopt;
+            }
+
+            if (cvIndex[i] >= _cvShape[i]) {
+                return std::nullopt;
+            }
+        }
+
+        for (int i = 0, s = 0; i < nDim; i++) {
+
+            int d = (i >= featureDim) ? i-1 : i;
+
+            if (_search_space.getDimType(i) == SearchSpaceBase::Search) {
+
+                if (disp[s] < _search_space.getDimMinSearchRange(i)) {
+                    return std::nullopt;
+                }
+
+                if (disp[s] > _search_space.getDimMaxSearchRange(i)) {
+                    return std::nullopt;
+                }
+
+                targetPos[d] += disp[s];
+
+                if (targetPos[d] < 0 or targetPos[d] >= _target->shape()[i]) {
+                    return std::nullopt;
+                }
+                s++;
+            }
+        }
+
+        T_CV cost;
+
+        Multidim::Array<T_S,1> source_features = FeatureVolumeInfos<F_V_S_T>::getFeatureVec(*_source, sourcePos);
+        Multidim::Array<T_T,1> target_features = FeatureVolumeInfos<F_V_T_T>::getFeatureVec(*_target, targetPos);
+
+        cost = MatchingFunctionTraits<matchFunc>::template featureComparison<T_S, T_T, T_CV>(source_features, target_features);
+
+        return cost;
+    }
+
+    inline SearchSpaceType const& searchSpace() const {
+        return _search_space;
+    }
+
+    template<Multidim::ArrayDataAccessConstness viewConstness>
+    Multidim::Array<T_CV, nCostVolDim> truncatedCostVolume(Multidim::Array<disp_t, nDim, viewConstness> const& disp,
+                                                           int radius = 1,
+                                                           T_CV defaultVal = defaultCvValForMatchFunc<matchFunc, T_CV>()) const {
+
+        if (disp.shape()[nDim-1] != nSearchDim) {
+            return Multidim::Array<T_CV, nCostVolDim>();
+        }
+
+        std::array<int, nCostVolDim> tcv_shape;
+
+        for (int i = 0; i < nDim-1; i++) {
+            tcv_shape[i] = _cvShape[i];
+        }
+
+        for (int i = 0; i < nSearchDim; i++) {
+            tcv_shape[nDim - 1 + i] = 2*radius+1;
+        }
+
+        Multidim::Array<T_CV, nCostVolDim> tcv(tcv_shape);
+
+        Multidim::IndexConverter<nCostVolDim> idxConv(tcv_shape);
+
+#pragma omp parallel for
+        for (int i = 0; i < idxConv.numberOfPossibleIndices(); i++) {
+
+            std::array<int, nCostVolDim> tcvid = idxConv.getIndexFromPseudoFlatId(i);
+            std::array<int, nCostVolDim> cvid = tcvid;
+
+            std::array<int, nDim> dispId;
+
+            for (int j = 0; j < nDim-1; j++) {
+                dispId[j] = cvid[j];
+            }
+
+            for (int j = 0; j < nSearchDim; j++) {
+                dispId[nDim-1] = j;
+                disp_t delta = _search_space.disp2idx(_searchDims[j], disp.valueUnchecked(dispId));
+                cvid[nDim - 1 + j] = tcvid[nDim - 1 + j]-radius + delta;
+            }
+
+            std::array<int, nDim-1> pos;
+            std::array<int, nSearchDim> disp;
+
+            for (int j = 0; j < nDim-1; j++) {
+                pos[j] = cvid[j];
+            }
+
+            for (int j = 0; j < nSearchDim; j++) {
+                disp[j] = cvid[nDim-1+j];
+            }
+
+            std::optional<T_CV> cand_cost = costValue(pos, disp);
+
+            if (cand_cost.has_value()) {
+                tcv.atUnchecked(tcvid) = cand_cost.value();
+            } else {
+                tcv.atUnchecked(tcvid) = defaultVal;
+            }
+
+        }
+
+        return tcv;
+
+    }
+
+    template<Multidim::ArrayDataAccessConstness viewConstness, int nSrchDims = nSearchDim>
+    std::enable_if_t<nSrchDims == 1, Multidim::Array<T_CV, nCostVolDim>>
+    truncatedCostVolume(Multidim::Array<disp_t, nDim-1, viewConstness> const& disp,
+                        int radius = 1,
+                        T_CV defaultVal = defaultCvValForMatchFunc<matchFunc, T_CV>()) const {
+
+        std::array<int, nCostVolDim> tcv_shape;
+
+        for (int i = 0; i < nDim-1; i++) {
+            tcv_shape[i] = _cvShape[i];
+        }
+
+        for (int i = 0; i < nSearchDim; i++) {
+            tcv_shape[nDim - 1 + i] = 2*radius+1;
+        }
+
+        Multidim::Array<T_CV, nCostVolDim> tcv(tcv_shape);
+
+        Multidim::IndexConverter<nCostVolDim> idxConv(tcv_shape);
+
+#pragma omp parallel for
+        for (int i = 0; i < idxConv.numberOfPossibleIndices(); i++) {
+
+            std::array<int, nCostVolDim> tcvid = idxConv.getIndexFromPseudoFlatId(i);
+            std::array<int, nCostVolDim> cvid = tcvid;
+
+            std::array<int, nDim-1> dispId;
+
+            for (int j = 0; j < nDim-1; j++) {
+                dispId[j] = cvid[j];
+            }
+
+            disp_t delta = _search_space.disp2idx(_searchDims[0], disp.valueUnchecked(dispId));
+            cvid[nDim - 1] = tcvid[nDim - 1]-radius + delta;
+
+            std::array<int, nDim-1> pos;
+            std::array<int, nSearchDim> disp;
+
+            for (int j = 0; j < nDim-1; j++) {
+                pos[j] = cvid[j];
+            }
+
+            for (int j = 0; j < nSearchDim; j++) {
+                disp[j] = cvid[nDim-1+j];
+            }
+
+            std::optional<T_CV> cand_cost = costValue(pos, disp);
+
+            if (cand_cost.has_value()) {
+                tcv.atUnchecked(tcvid) = cand_cost.value();
+            } else {
+                tcv.atUnchecked(tcvid) = defaultVal;
+            }
+
+        }
+
+        return tcv;
+
+    }
+
+protected:
+
+    std::array<Multidim::array_size_t, nSearchDim> _searchDims;
+    std::array<Multidim::array_size_t, nCostVolDim> _cvShape;
+
+    F_V_S_T const* _source;
+    F_V_T_T const* _target;
+
+    SearchSpaceType _search_space;
+
+};
+
+template<matchingFunctions matchFunc, class T_CV, class F_V_S_T, class F_V_T_T>
+using CachelessOnDemandStereoCostVolume =
+    CachelessOnDemandCostVolume<matchFunc, T_CV, F_V_S_T, F_V_T_T,
+                              SearchSpaceBase::IgnoredDim, SearchSpaceBase::SearchDim, SearchSpaceBase::FeatureDim>;
+
+template<matchingFunctions matchFunc, class T_CV, class F_V_S_T, class F_V_T_T>
+using CachelessOnDemandImageFlowVolume =
+    CachelessOnDemandCostVolume<matchFunc, T_CV, F_V_S_T, F_V_T_T,
+                              SearchSpaceBase::SearchDim, SearchSpaceBase::SearchDim, SearchSpaceBase::FeatureDim>;
 
 } //namespace Correlation
 } //namespace StereoVision

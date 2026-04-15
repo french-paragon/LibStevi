@@ -141,11 +141,13 @@ set(LIB_SRC
         correlation/hierarchical.h
         correlation/patchmatch.h
         correlation/on_demand_cost_volume.h
+        correlation/on_demand_features_volume.h
         correlation/fast_approximate_matching.h
         correlation/template_matching.h
         correlation/dynamic_programing_stereo.h
         correlation/disparity_plus_background_segmentation.h
         correlation/guided_cost_filtering.h
+        correlation/feature_volume_infos.h
         optimization/l0optimization.h
         optimization/l1optimization.h
         optimization/l2optimization.h
@@ -163,6 +165,7 @@ set(LIB_SRC
         utils/propagation_direction.h
         utils/randomcache.h
         utils/types_manipulations.h
+        utils/type_tests.h
         utils/colors.h
         utils/array_utils.h
         utils/stevimath.h
@@ -221,7 +224,6 @@ add_library(
     ${STEREOVISION_LIB}
     SHARED
     ${LIB_SRC}
-    optimization/bfgs.h
 )
 add_library(${STEREOVISION_NAME}::${STEREOVISION_LIB} ALIAS ${STEREOVISION_LIB})
 

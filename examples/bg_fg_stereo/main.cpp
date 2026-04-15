@@ -67,8 +67,8 @@ std::optional<matchingResultsInfos> testMatching(QString fgRightImPath,
 	//compute dense disparity map
 	auto start = std::chrono::high_resolution_clock::now();
 
-	auto source_bg_features = StereoVision::Correlation::getFeatureVolumeForMatchFunc<matchFunc, T_FV, Multidim::NonConstView, T_FV>(fRightFg);
-	auto target_bg_features = StereoVision::Correlation::getFeatureVolumeForMatchFunc<matchFunc, T_FV, Multidim::NonConstView, T_FV>(fLeftFg);
+    auto source_bg_features = StereoVision::Correlation::getFeatureVolumeForMatchFunc<matchFunc>(fRightFg);
+    auto target_bg_features = StereoVision::Correlation::getFeatureVolumeForMatchFunc<matchFunc>(fLeftFg);
 
 	auto cost_volume =
 			StereoVision::Correlation::featureVolume2CostVolume
@@ -214,7 +214,7 @@ int main(int argc, char** argv) {
 	DispEstimator<matchFunc, T_CV, T_F> matcher(relThresholds[0], disp_tol);
 
 	StereoVision::Correlation::searchOffset<1> search_offset(0, search_width);
-	bool computed = matcher.computeBackgroundDisp(fRightBg, fLeftBg, search_offset);
+    bool computed = matcher.template computeBackgroundDisp(fRightBg, fLeftBg, search_offset);
 
 	if (!computed) {
 		out << "Error while computing background disp" << Qt::endl;

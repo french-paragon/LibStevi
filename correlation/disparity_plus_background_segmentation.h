@@ -1,6 +1,24 @@
 #ifndef STEREOVISION_DISPARITY_PLUS_BACKGROUND_SEGMENTATION_H
 #define STEREOVISION_DISPARITY_PLUS_BACKGROUND_SEGMENTATION_H
 
+/*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
+
+Copyright (C) 2026  Paragon<french.paragon@gmail.com>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "correlation_base.h"
 #include "cross_correlations.h"
 #include "on_demand_cost_volume.h"
@@ -50,7 +68,7 @@ public:
 
 	template<Multidim::ArrayDataAccessConstness constnessS,
 			 Multidim::ArrayDataAccessConstness constnessT>
-	using OnDemandCVT = OnDemandStereoCostVolume<matchFunc, T_CV, T_FV, T_FV, constnessS, constnessT>;
+    using OnDemandCVT = OnDemandStereoCostVolume<matchFunc, T_CV, Multidim::Array<T_FV, 3, constnessS>, Multidim::Array<T_FV, 3, constnessT>>;
 
 	DisparityEstimatorWithBackgroundRemoval(float relative_threshold = 0.8, disp_t disp_tol = 2) :
 		_rel_threshold(relative_threshold),
@@ -72,8 +90,8 @@ public:
 			return false;
 		}
 
-		_source_bg_features = getFeatureVolumeForMatchFunc<matchFunc, T_FV, constnessT, T_F>(source_f);
-		_target_bg_features = getFeatureVolumeForMatchFunc<matchFunc, T_FV, constnessT, T_F>(target_f);
+        _source_bg_features = getFeatureVolumeForMatchFunc<matchFunc>(source_f);
+        _target_bg_features = getFeatureVolumeForMatchFunc<matchFunc>(target_f);
 
 		_bg_cost_volume = featureVolume2CostVolume<matchFunc, T_FV, T_FV, searchOffset<1>, dispDirection::RightToLeft, T_CV>
 				(_target_bg_features, _source_bg_features, _searchOffset);

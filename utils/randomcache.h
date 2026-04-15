@@ -31,7 +31,7 @@ template<typename T>
 /*!
  * \brief The NumbersCache class cache a serie of generated (random) numbers and then act as a random number generator.
  *
- * This class is meant to spead up pseudo random number generation for real time vision algorithms.
+ * This class is meant to speed up pseudo random number generation for real time vision algorithms.
  * Note that operator(), which is meant to generate a "random" number is not thread safe or even reentrant.
  * If you want to use a NumbersCache in multiple threads, you first have to create a copy in each thread using the copy constructor.
  * The copy constructor keep a reference to the previously cached numbers but duplicate the current index of the cache.

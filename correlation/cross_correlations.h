@@ -24,6 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "./cost_based_refinement.h"
 #include "./unfold.h"
 #include "./census.h"
+#include "./feature_volume_infos.h"
 
 #include "../utils/contiguity.h"
 #include "../utils/types_manipulations.h"
@@ -57,9 +58,9 @@ T_O channelsZeroMeanNorm (Multidim::Array<T_I, 1> const& in_data,
 	return sqrtf(norm);
 }
 
-template<class T_I, class T_M, class T_O = float, Multidim::ArrayDataAccessConstness C>
-Multidim::Array<T_O, 2> channelsZeroMeanNorm (Multidim::Array<T_I, 3, C> const& in_data,
-									   Multidim::Array<T_M, 2, C> const& mean) {
+template<class T_I, class T_M, class T_O = float, Multidim::ArrayDataAccessConstness Cd, Multidim::ArrayDataAccessConstness Cm>
+Multidim::Array<T_O, 2> channelsZeroMeanNorm (Multidim::Array<T_I, 3, Cd> const& in_data,
+                                       Multidim::Array<T_M, 2, Cm> const& mean) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -412,10 +413,10 @@ inline Multidim::Array<T_O, 1> zeromeanNormalizedFeatureVector(Multidim::Array<T
 
 }
 
-template<class T_I, class T_M, class T_N, class T_O = float, Multidim::ArrayDataAccessConstness C>
-inline Multidim::Array<T_O, 3> zeromeanNormalizedFeatureVolume(Multidim::Array<T_I, 3, C> const& feature_vol,
-															   Multidim::Array<T_M, 2, C> const& mean,
-															   Multidim::Array<T_N, 2, C> const& norm) {
+template<class T_I, class T_M, class T_N, class T_O = float, Multidim::ArrayDataAccessConstness Cf, Multidim::ArrayDataAccessConstness Cm, Multidim::ArrayDataAccessConstness Cn>
+inline Multidim::Array<T_O, 3> zeromeanNormalizedFeatureVolume(Multidim::Array<T_I, 3, Cf> const& feature_vol,
+                                                               Multidim::Array<T_M, 2, Cm> const& mean,
+                                                               Multidim::Array<T_N, 2, Cn> const& norm) {
 	using T_E = TypesManipulations::accumulation_extended_t<T_I>;
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -500,9 +501,9 @@ inline Multidim::Array<T_O, 1> normalizedFeatureVector(Multidim::Array<T_I, 1> c
 
 }
 
-template<class T_I, class T_N, class T_O = float, Multidim::ArrayDataAccessConstness C>
-inline Multidim::Array<T_O, 3> normalizedFeatureVolume(Multidim::Array<T_I, 3, C> const& feature_vol,
-													   Multidim::Array<T_N, 2, C> const& norm) {
+template<class T_I, class T_N, class T_O = float, Multidim::ArrayDataAccessConstness Cf, Multidim::ArrayDataAccessConstness Cn>
+inline Multidim::Array<T_O, 3> normalizedFeatureVolume(Multidim::Array<T_I, 3, Cf> const& feature_vol,
+                                                       Multidim::Array<T_N, 2, Cn> const& norm) {
 
 	using T_E = TypesManipulations::accumulation_extended_t<T_I>;
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
@@ -566,9 +567,9 @@ inline Multidim::Array<T_O, 1> zeromeanFeatureVector(Multidim::Array<T_I, 1> con
 
 }
 
-template<class T_I, class T_M, class T_O = float, Multidim::ArrayDataAccessConstness C>
-inline Multidim::Array<T_O, 3> zeromeanFeatureVolume(Multidim::Array<T_I, 3, C> const& feature_vol,
-													   Multidim::Array<T_M, 2, C> const& mean) {
+template<class T_I, class T_M, class T_O = float, Multidim::ArrayDataAccessConstness Cf, Multidim::ArrayDataAccessConstness Cm>
+inline Multidim::Array<T_O, 3> zeromeanFeatureVolume(Multidim::Array<T_I, 3, Cf> const& feature_vol,
+                                                       Multidim::Array<T_M, 2, Cm> const& mean) {
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
@@ -641,12 +642,40 @@ Multidim::Array<FeatureTypeForMatchFunc<matchFunc, T_I>,1> getFeatureVectorForMa
 
 }
 
-template<matchingFunctions matchFunc, class T_I, Multidim::ArrayDataAccessConstness C, class FType = typename MatchingFuncComputeTypeInfos<matchFunc,T_I>::FeatureType>
-Multidim::Array<FType,3> getFeatureVolumeForMatchFunc(Multidim::Array<T_I, 3, C> const& feature_vol) {
+template<matchingFunctions matchFunc, class FV_T,
+         class FType = typename MatchingFuncComputeTypeInfos<matchFunc,typename FeatureVolumeInfos<FV_T>::FeatureScalarT>::FeatureType>
+Multidim::Array<FType,3> getFeatureVolumeForMatchFunc(FV_T const& feature_vol_impl) {
 
-	using T_E = typename TypesManipulations::accumulation_extended_t<T_I>;
+    using T_I = typename FeatureVolumeInfos<FV_T>::FeatureScalarT;
+    using T_E = typename TypesManipulations::accumulation_extended_t<T_I>;
 
 	constexpr bool CensusFeatures = MatchingFunctionTraits<matchFunc>::isCensusBased;
+
+    Multidim::Array<T_I,3, Multidim::ArrayDataAccessConstness::ConstView> feature_vol;
+    Multidim::Array<T_I,3, Multidim::ArrayDataAccessConstness::NonConstView> feature_vol_editable;
+
+    if constexpr (std::is_same_v<FV_T, Multidim::Array<T_I,3, Multidim::ArrayDataAccessConstness::NonConstView>> or
+                  std::is_same_v<FV_T, Multidim::Array<T_I,3, Multidim::ArrayDataAccessConstness::ConstView>>) {
+        feature_vol = feature_vol_impl.template buildReshapedView<3>(feature_vol_impl.shape(), feature_vol_impl.strides());
+    } else {
+        std::array<int,3> shape = feature_vol_impl.shape();
+        feature_vol_editable = Multidim::Array<T_I,3, Multidim::ArrayDataAccessConstness::NonConstView>(shape);
+
+        for (int i = 0; i < shape[0]; i++) {
+            for (int j = 0; j < shape[1]; j++) {
+
+                Multidim::Array<T_I,1> fVector = FeatureVolumeInfos<FV_T>::getFeatureVec(feature_vol_impl,{i,j});
+
+                assert(fVector.shape()[0] == shape[2]); //assert the number of channels is correct
+
+                for (int c = 0; c < shape[2]; c++) {
+                    feature_vol_editable.atUnchecked(i,j,c) = fVector.valueUnchecked(c);
+                }
+
+            }
+        }
+        feature_vol = feature_vol_editable.buildReshapedView<3>(feature_vol_impl.shape(), feature_vol_impl.strides());
+    }
 
 	if (MatchingFunctionTraits<matchFunc>::ZeroMean and MatchingFunctionTraits<matchFunc>::Normalized) {
 
@@ -683,6 +712,10 @@ Multidim::Array<FType,3> getFeatureVolumeForMatchFunc(Multidim::Array<T_I, 3, C>
 	if (CensusFeatures) {
 		return censusFeatures(feature_vol).template cast<FType>();
 	}
+
+    if constexpr (std::is_same_v<FV_T, Multidim::Array<T_I,3, Multidim::ArrayDataAccessConstness::NonConstView>>) {
+        return feature_vol_impl.template cast<FType>(); //avoid the copy
+    }
 
 	return feature_vol.template cast<FType>();
 

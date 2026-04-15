@@ -3,7 +3,7 @@
 
 /*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
 
-Copyright (C) 2021  Paragon<french.paragon@gmail.com>
+Copyright (C) 2021-2026  Paragon<french.paragon@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -259,8 +259,8 @@ OffsetedCostVolume<TCV> hiearchicalTruncatedCostVolume(Multidim::Array<T_L, nImD
 
 		Multidim::Array<disp_t, 2> level_0_disp = extractSelectedIndex<MatchingFunctionTraits<matchFunc>::extractionStrategy>(level_0_cv);
 
-		Multidim::Array<T_LF,3> feature_vol_l = getFeatureVolumeForMatchFunc<matchFunc, T_L, Multidim::NonConstView, T_LF>(unfold<T_L, T_L>(h_radiuses[1], v_radiuses[1], img_l));
-		Multidim::Array<T_RF,3> feature_vol_r = getFeatureVolumeForMatchFunc<matchFunc, T_R, Multidim::NonConstView, T_RF>(unfold<T_R, T_R>(h_radiuses[1], v_radiuses[1], img_r));
+        Multidim::Array<T_LF,3> feature_vol_l = getFeatureVolumeForMatchFunc<matchFunc>(unfold<T_L, T_L>(h_radiuses[1], v_radiuses[1], img_l));
+        Multidim::Array<T_RF,3> feature_vol_r = getFeatureVolumeForMatchFunc<matchFunc>(unfold<T_R, T_R>(h_radiuses[1], v_radiuses[1], img_r));
 
 		return computeGuidedCV<matchFunc, T_LF, T_RF, dDir, TCV>(feature_vol_l, feature_vol_r, level_0_disp, upscale_disp_radius);
 
@@ -284,9 +284,9 @@ OffsetedCostVolume<TCV> hiearchicalTruncatedCostVolume(Multidim::Array<T_L, nImD
 				 (disp_width + 1)/2,
 				 upscale_disp_radius);
 
-		Multidim::Array<T_LF,3> feature_vol_l = getFeatureVolumeForMatchFunc<matchFunc, T_L, Multidim::NonConstView, T_LF>
+        Multidim::Array<T_LF,3> feature_vol_l = getFeatureVolumeForMatchFunc<matchFunc>
 				(unfold<T_L, T_L>(h_radiuses.back(), v_radiuses.back(), img_l));
-		Multidim::Array<T_RF,3> feature_vol_r = getFeatureVolumeForMatchFunc<matchFunc, T_R, Multidim::NonConstView, T_RF>
+        Multidim::Array<T_RF,3> feature_vol_r = getFeatureVolumeForMatchFunc<matchFunc>
 				(unfold<T_R, T_R>(h_radiuses.back(), v_radiuses.back(), img_r));
 
 		return computeGuidedCV<matchFunc, T_LF, T_RF, dDir, TCV>(feature_vol_l, feature_vol_r, previous_level.disp_estimate, upscale_disp_radius);

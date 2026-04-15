@@ -190,13 +190,13 @@ Multidim::Array<disp_t, 2> testPatchMatch(Multidim::Array<T_IMG, 3> const& img_l
 		optCache = *rngCache;
 	}
 
-	Multidim::Array<disp_t, 3> out = patchMatch<matchFunc, 1, T_IMG>(fVolRight,
-																	 fVolLeft,
-																	 searchOffset<1>(0,searchDist),
-																	 nIter,
-																	 nRandomSearch,
-																	 std::nullopt,
-																	 optCache);
+    Multidim::Array<disp_t, 3> out = patchMatch<matchFunc, 1>(fVolRight,
+                                                              fVolLeft,
+                                                              searchOffset<1>(0,searchDist),
+                                                              nIter,
+                                                              nRandomSearch,
+                                                              std::nullopt,
+                                                              optCache);
 
 
 	disp_t* data = out.takePointer(); //take the pointer instead of getting a view, to ensure move semantic can be used to move the resulting array once converted.
@@ -204,6 +204,48 @@ Multidim::Array<disp_t, 2> testPatchMatch(Multidim::Array<T_IMG, 3> const& img_l
 	Multidim::Array<disp_t, 2> ret(data, {out.shape()[0], out.shape()[1]}, {out.strides()[0], out.strides()[1]}, true);
 
 	return ret;
+}
+
+template<matchingFunctions matchFunc, typename T_IMG, int searchRadius, int searchDist, int nIter, int nRandomSearch>
+Multidim::Array<disp_t, 2> testCachelessPatchMatch(Multidim::Array<T_IMG, 3> const& img_left,
+                                                   Multidim::Array<T_IMG, 3> const& img_right,
+                                                   StereoVision::Random::NumbersCache<int>* rngCache) {
+
+    std::optional<StereoVision::Random::NumbersCache<int>> optCache = std::nullopt;
+    if (rngCache != nullptr) {
+        optCache = *rngCache;
+    }
+
+    constexpr int sSide = 2*searchRadius+1;
+    constexpr int sSize = sSide*sSide;
+
+    std::vector<std::array<int,3>> searchWindow;
+    searchWindow.reserve(sSize);
+
+    for (int i = -searchRadius; i <= searchRadius; i++) {
+        for (int j = -searchRadius; j <= searchRadius; j++) {
+            searchWindow.push_back({i,j});
+        }
+    }
+
+    using Decorator = ZNFeaturesVolumeDecorator<MatchingFunctionTraits<matchFunc>::ZeroMean,MatchingFunctionTraits<matchFunc>::Normalized>;
+    constexpr Multidim::ArrayDataAccessConstness constness = Multidim::ArrayDataAccessConstness::NonConstView;
+    using FeatureVolumeT = OnDemandDecoratedFeaturesVolume<Decorator,T_IMG,3,constness,2>;
+
+    Multidim::Array<disp_t, 3> out = cachelessPatchMatch<matchFunc, 1>(FeatureVolumeT(searchWindow,img_left),
+                                                                       FeatureVolumeT(searchWindow,img_right),
+                                                                       searchOffset<1>(0,searchDist),
+                                                                       nIter,
+                                                                       nRandomSearch,
+                                                                       std::nullopt,
+                                                                       optCache);
+
+
+    disp_t* data = out.takePointer(); //take the pointer instead of getting a view, to ensure move semantic can be used to move the resulting array once converted.
+
+    Multidim::Array<disp_t, 2> ret(data, {out.shape()[0], out.shape()[1]}, {out.strides()[0], out.strides()[1]}, true);
+
+    return ret;
 }
 
 template<matchingFunctions matchFunc, typename T_IMG, int searchRadius, int searchDist>
@@ -265,6 +307,14 @@ void BenchmarkStereoMatchingModels::benchmarkFloatDispFunc_data() {
 
 	QTest::newRow("testPatchMatch<cost = matchingFunctions::NCC, type = float, searchRadius = 3, searchRange = 120, niter = 5, nRandomSearch = 4> (rng cache)")
 			<< dispFuncF({testPatchMatch<matchingFunctions::NCC,float,3,120,5,4>}) << true;
+
+
+    QTest::newRow("testCachelessPatchMatch<cost = matchingFunctions::NCC, type = float, searchRadius = 3, searchRange = 120, niter = 5, nRandomSearch = 4> (no rng cache)")
+        << dispFuncF({testCachelessPatchMatch<matchingFunctions::NCC,float,3,120,5,4>}) << false;
+
+
+    QTest::newRow("testCachelessPatchMatch<cost = matchingFunctions::NCC, type = float, searchRadius = 3, searchRange = 120, niter = 5, nRandomSearch = 4> (rng cache)")
+        << dispFuncF({testCachelessPatchMatch<matchingFunctions::NCC,float,3,120,5,4>}) << true;
 
 
 	QTest::newRow("testDenseMatch<cost = matchingFunctions::NCC, type = float, searchRadius = 3, searchRange = 120>")

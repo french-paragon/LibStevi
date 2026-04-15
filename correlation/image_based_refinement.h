@@ -1,10 +1,29 @@
 #ifndef STEREOVISION_IMAGE_BASED_REFINEMENT_H
 #define STEREOVISION_IMAGE_BASED_REFINEMENT_H
 
+/*LibStevi, or the Stereo Vision Library, is a collection of utilities for 3D computer vision.
+
+Copyright (C) 2022-2026  Paragon<french.paragon@gmail.com>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "./cross_correlations.h"
 #include "./matching_costs.h"
 
 #include "../interpolation/interpolation.h"
+#include "../utils/type_tests.h"
 
 namespace StereoVision {
 namespace Correlation {
@@ -162,9 +181,10 @@ Multidim::Array<float, 2> refineSubpartBarycentricSymmetricDisp(Multidim::Array<
 	return refinedDisp;
 }
 
-template<matchingFunctions matchFunc, dispDirection dDir = dispDirection::RightToLeft>
-Multidim::Array<float, 2> refineBarycentricDisp(Multidim::Array<float, 3> const& feature_vol_l,
-												Multidim::Array<float, 3> const& feature_vol_r,
+template<matchingFunctions matchFunc, dispDirection dDir = dispDirection::RightToLeft,
+         typename FeatureVolumeT>
+Multidim::Array<float, 2> refineBarycentricDisp(FeatureVolumeT const& feature_vol_l,
+                                                FeatureVolumeT const& feature_vol_r,
 												Multidim::Array<disp_t, 2> const& selectedIndex) {
 
 	typedef Eigen::Matrix<float, Eigen::Dynamic, 2> TypeMatrixA;
@@ -173,8 +193,8 @@ Multidim::Array<float, 2> refineBarycentricDisp(Multidim::Array<float, 3> const&
 	constexpr disp_t deltaSign = (dDir == dispDirection::RightToLeft) ? 1 : -1;
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
-	Multidim::Array<float, 3> const& source_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_r : feature_vol_l;
-	Multidim::Array<float, 3> const& target_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_l : feature_vol_r;
+    FeatureVolumeT const& source_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_r : feature_vol_l;
+    FeatureVolumeT const& target_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_l : feature_vol_r;
 
 	auto d_shape = selectedIndex.shape();
 	auto t_shape = target_feature_volume.shape();
@@ -197,30 +217,44 @@ Multidim::Array<float, 2> refineBarycentricDisp(Multidim::Array<float, 3> const&
 
 				int f = t_shape[2];
 
-				Eigen::VectorXf source(f);
+                Eigen::VectorXf source(f);
 
-				for (int c = 0 ; c < f; c++) {
-					source(c) = source_feature_volume.value<Nc>(i,j,c);
-				}
+                if constexpr (type_is_multidim_array_v<FeatureVolumeT>) {
+                    for (int c = 0 ; c < f; c++) {
+                        source(c) = source_feature_volume.template value<Nc>(i,j,c);
+                    }
+                } else {
+                    source = source_feature_volume.getFeatureVecEigen({i,j});
+                }
 
 				TypeMatrixA Ap(f,2);
 				TypeMatrixA Am(f,2);
 
-				for (int c = 0 ; c < f; c++) {
-					Ap(c, 0) = target_feature_volume.value<Nc>(i,jd,c);
-					Ap(c, 1) = target_feature_volume.value<Nc>(i,jd+1,c);
-				}
+                if constexpr (type_is_multidim_array_v<FeatureVolumeT>) {
 
-				for (int c = 0 ; c < f; c++) {
-					Am(c, 0) = target_feature_volume.value<Nc>(i,jd-1,c);
-					Am(c, 1) = target_feature_volume.value<Nc>(i,jd,c);
-				}
+                    for (int c = 0 ; c < f; c++) {
+                        Ap(c, 0) = target_feature_volume.template value<Nc>(i,jd,c);
+                        Ap(c, 1) = target_feature_volume.template value<Nc>(i,jd+1,c);
+                    }
+
+                    for (int c = 0 ; c < f; c++) {
+                        Am(c, 0) = target_feature_volume.template value<Nc>(i,jd-1,c);
+                        Am(c, 1) = target_feature_volume.template value<Nc>(i,jd,c);
+                    }
+
+                } else {
+                    Ap.col(0) = target_feature_volume.getFeatureVecEigen({i,jd});
+                    Ap.col(1) = target_feature_volume.getFeatureVecEigen({i,jd+1});
+
+                    Am.col(0) = target_feature_volume.getFeatureVecEigen({i,jd-1});
+                    Am.col(1) = target_feature_volume.getFeatureVecEigen({i,jd});
+                }
 
 				Multidim::Array<float, 1> source_feature_vector(f);
 				float norm = source.norm();
 
 				for (int c = 0; c < f; c++) {
-					float s = source_feature_volume.value<Nc>(i,j,c);
+                    float s = source[c];
 					if (MatchingFunctionTraits<matchFunc>::Normalized) {
 						source_feature_vector.at<Nc>(c) = s/norm;
 					}
@@ -233,7 +267,7 @@ Multidim::Array<float, 2> refineBarycentricDisp(Multidim::Array<float, 3> const&
 				norm = Ap.col(0).norm();
 
 				for (int c = 0; c < f; c++) {
-					float s = target_feature_volume.value<Nc>(i,jd,c);
+                    float s = Ap.col(0)[c];
 					if (MatchingFunctionTraits<matchFunc>::Normalized) {
 						target_feature_vector0.at<Nc>(c) = s/norm;
 					}
@@ -640,9 +674,10 @@ Multidim::Array<float, 2> refineSubpartBarycentricDisp(Multidim::Array<float, 3>
 
 template<matchingFunctions matchFunc,
 		 Contiguity::bidimensionalContiguity contiguity = Contiguity::Queen,
-		 dispDirection dDir = dispDirection::RightToLeft>
-Multidim::Array<float, 3> refineBarycentric2dDisp(Multidim::Array<float, 3> const& feature_vol_l,
-												  Multidim::Array<float, 3> const& feature_vol_r,
+         dispDirection dDir = dispDirection::RightToLeft,
+         typename FeatureVolumeT>
+Multidim::Array<float, 3> refineBarycentric2dDisp(FeatureVolumeT const& feature_vol_l,
+                                                  FeatureVolumeT const& feature_vol_r,
 												  Multidim::Array<disp_t, 3> const& selectedIndices,
 												  searchOffset<2> const& searchWindows) {
 
@@ -653,8 +688,8 @@ Multidim::Array<float, 3> refineBarycentric2dDisp(Multidim::Array<float, 3> cons
 
 	constexpr Multidim::AccessCheck Nc = Multidim::AccessCheck::Nocheck;
 
-	Multidim::Array<float, 3> const& source_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_r : feature_vol_l;
-	Multidim::Array<float, 3> const& target_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_l : feature_vol_r;
+    FeatureVolumeT const& source_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_r : feature_vol_l;
+    FeatureVolumeT const& target_feature_volume = (dDir == dispDirection::RightToLeft) ? feature_vol_l : feature_vol_r;
 
 	auto d_shape = selectedIndices.shape();
 	auto t_shape = target_feature_volume.shape();
@@ -691,15 +726,19 @@ Multidim::Array<float, 3> refineBarycentric2dDisp(Multidim::Array<float, 3> cons
 
 				Eigen::VectorXf source(f);
 
-				for (int c = 0 ; c < f; c++) {
-					source(c) = source_feature_volume.value<Nc>(i,j,c);
-				}
+                if constexpr (type_is_multidim_array_v<FeatureVolumeT>) {
+                    for (int c = 0 ; c < f; c++) {
+                        source(c) = source_feature_volume.template value<Nc>(i,j,c);
+                    }
+                } else {
+                    source = source_feature_volume.getFeatureVecEigen({i,j});
+                }
 
 				Multidim::Array<float, 1> source_feature_vector(f);
 				float norm = source.norm();
 
 				for (int c = 0; c < f; c++) {
-					float s = source_feature_volume.value<Nc>(i,j,c);
+                    float s = source[c];
 					if (MatchingFunctionTraits<matchFunc>::Normalized) {
 						source_feature_vector.at<Nc>(c) = s/norm;
 					}
@@ -708,20 +747,30 @@ Multidim::Array<float, 3> refineBarycentric2dDisp(Multidim::Array<float, 3> cons
 					}
 				}
 
-				Multidim::Array<float, 1> target_feature_vector0(f);
+                Multidim::Array<float, 1> target_feature_vector0(f);
+                Eigen::VectorXf target(f);
+
+                if constexpr (type_is_multidim_array_v<FeatureVolumeT>) {
+                    for (int c = 0 ; c < f; c++) {
+                        target(c) = target_feature_volume.template value<Nc>(id,jd,c);
+                    }
+                } else {
+                    target = target_feature_volume.getFeatureVecEigen({id,jd});
+                }
+
 				norm = 1;
 				if (MatchingFunctionTraits<matchFunc>::Normalized) {
 					norm = 0;
 					for (int c = 0; c < f; c++) {
-						float s = target_feature_volume.value<Nc>(id,jd,c);
+                        float s = target[c];
 						norm += s*s;
 					}
 					norm = std::sqrt(norm);
 				}
 
 				for (int c = 0; c < f; c++) {
-					float s = target_feature_volume.value<Nc>(id,jd,c);
-					if (MatchingFunctionTraits<matchFunc>::Normalized) {
+                    float s = target[c];
+                    if constexpr (MatchingFunctionTraits<matchFunc>::Normalized) {
 						target_feature_vector0.at<Nc>(c) = s/norm;
 					}
 					else {
@@ -747,16 +796,24 @@ Multidim::Array<float, 3> refineBarycentric2dDisp(Multidim::Array<float, 3> cons
 							int di = sDir[0]*dir_x;
 							int dj = sDir[1]*dir_y;
 
-							for (int c = 0 ; c < f; c++) {
-								A(c,i) = target_feature_volume.value<Nc>(id+di,jd+dj,c);
-							}
+                            if constexpr (type_is_multidim_array_v<FeatureVolumeT>) {
+                                for (int c = 0 ; c < f; c++) {
+                                    A(c,i) = target_feature_volume.template value<Nc>(id+di,jd+dj,c);
+                                }
+                            } else {
+                                A.col(i) = target_feature_volume.getFeatureVecEigen({id+di,jd+dj});
+                            }
 
 							i++;
 						}
 
-						for (int c = 0 ; c < f; c++) {
-							A(c,i) = target_feature_volume.value<Nc>(id,jd,c);
-						}
+                        if constexpr (type_is_multidim_array_v<FeatureVolumeT>) {
+                            for (int c = 0 ; c < f; c++) {
+                                A(c,i) = target_feature_volume.template value<Nc>(id,jd,c);
+                            }
+                        } else {
+                            A.col(i) = target_feature_volume.getFeatureVecEigen({id,jd});
+                        }
 
 						TypeVectorAlpha alphas = MatchingFunctionTraits<matchFunc>::barycentricBestApproximation(A, source);
 
