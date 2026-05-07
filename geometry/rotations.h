@@ -76,11 +76,11 @@ Eigen::Matrix<T,3,1> inverseRodriguezFormula(Eigen::Matrix<T,3,3> const& R) {
     double d_threshold = (TypesManipulations::typeExceedFloat32Precision<T>()) ? 0.999999 : 0.999;
     double nDr_threshold = (TypesManipulations::typeExceedFloat32Precision<T>()) ? 1e-6 : 1e-3;
 
-    if (d>0.999)
+    if (d>d_threshold)
     {
       omega=0.5*dR;
     }
-    else if (nDr < 1e-3) {
+    else if (nDr < nDr_threshold) {
         T theta = acos(d);
         Eigen::Matrix<T,3,3> S = R + R.transpose() + (T(1) - trace)*Eigen::Matrix<T,3,3>::Identity();
         Eigen::Matrix<T,3,1> n;
