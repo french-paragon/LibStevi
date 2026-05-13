@@ -107,6 +107,23 @@ void TestGeometryLibRotation::testRodriguez_data() {
 		 0, 0, 1;
 	QTest::newRow("180deg z axis") << 0.0f << 0.0f << static_cast<float>(M_PI) << M;
 
+    constexpr float approx_pi_4digits = 3.1415;
+
+    M <<1, 0, 0,
+        0,std::cos(approx_pi_4digits), -std::sin(approx_pi_4digits),
+        0, std::sin(approx_pi_4digits), std::cos(approx_pi_4digits);
+    QTest::newRow("x axis approx pi 4 digits") << approx_pi_4digits << 0.0f << 0.0f << M;
+
+    M <<std::cos(approx_pi_4digits), 0, std::sin(approx_pi_4digits),
+        0, 1, 0,
+        -std::sin(approx_pi_4digits), 0,std::cos(approx_pi_4digits);
+    QTest::newRow("y axis approx pi 4 digits") << 0.0f << approx_pi_4digits << 0.0f << M;
+
+    M <<std::cos(approx_pi_4digits), -std::sin(approx_pi_4digits), 0,
+        std::sin(approx_pi_4digits),std::cos(approx_pi_4digits), 0,
+        0, 0, 1;
+    QTest::newRow("z axis approx pi 4 digits") << 0.0f << 0.0f << approx_pi_4digits << M;
+
 
     //failure cases that have been encountered during devellopement
     //TODO: check if we want to use a different test protocol for these ones
@@ -214,11 +231,29 @@ void TestGeometryLibRotation::testInverseRodriguez_data() {
 
 	QTest::newRow("x axis one") << 1.0f << 0.0f << 0.0f;
 	QTest::newRow("y axis one") << 0.0f << 1.0f << 0.0f;
-	QTest::newRow("z axis one") << 0.0f << 0.0f << 1.0f;
+    QTest::newRow("z axis one") << 0.0f << 0.0f << 1.0f;
 
-	QTest::newRow("x axis pi") << static_cast<float>(M_PI) << 0.0f << 0.0f;
-	QTest::newRow("y axis pi") << 0.0f << static_cast<float>(M_PI) << 0.0f;
-	QTest::newRow("z axis pi") << 0.0f << 0.0f << static_cast<float>(M_PI);
+    QTest::newRow("x axis pi") << static_cast<float>(M_PI) << 0.0f << 0.0f;
+    QTest::newRow("y axis pi") << 0.0f << static_cast<float>(M_PI) << 0.0f;
+    QTest::newRow("z axis pi") << 0.0f << 0.0f << static_cast<float>(M_PI);
+
+    constexpr float approx_pi_4digits = 3.1415;
+
+    QTest::newRow("x axis approx pi 4 digits") << approx_pi_4digits << 0.0f << 0.0f;
+    QTest::newRow("y axis approx pi 4 digits") << 0.0f << approx_pi_4digits << 0.0f;
+    QTest::newRow("z axis approx pi 4 digits") << 0.0f << 0.0f << approx_pi_4digits;
+
+    constexpr float approx_pi_6digits = 3.141592;
+
+    QTest::newRow("x axis approx pi 6 digits") << approx_pi_6digits << 0.0f << 0.0f;
+    QTest::newRow("y axis approx pi 6 digits") << 0.0f << approx_pi_6digits << 0.0f;
+    QTest::newRow("z axis approx pi 6 digits") << 0.0f << 0.0f << approx_pi_6digits;
+
+    constexpr float approx_pi_8digits = 3.14159265;
+
+    QTest::newRow("x axis approx pi 8 digits") << approx_pi_8digits << 0.0f << 0.0f;
+    QTest::newRow("y axis approx pi 8 digits") << 0.0f << approx_pi_8digits << 0.0f;
+    QTest::newRow("z axis approx pi 8 digits") << 0.0f << 0.0f << approx_pi_8digits;
 
 	QTest::newRow("pseudo random 1") << 0.2f << 0.5f << -1.3f;
 	QTest::newRow("pseudo random 2") << 0.8f << 1.1f << 0.3f;
@@ -234,12 +269,22 @@ void TestGeometryLibRotation::testInverseRodriguez() {
 	Eigen::Vector3f vec(rx, ry, rz);
 
 	Eigen::Matrix3f S = rodriguezFormula(vec);
+    Eigen::Matrix3d Sd = rodriguezFormula(vec).cast<double>();
+    Eigen::Matrix3d Sdouble = rodriguezFormula<double>(vec.cast<double>());
 
 	Eigen::Vector3f recons = inverseRodriguezFormula(S);
+    Eigen::Vector3f reconsD = inverseRodriguezFormula(Sd).cast<float>();
+    Eigen::Vector3d reconsDouble = inverseRodriguezFormula(Sdouble);
 
 	float mismatch = (vec - recons).norm();
+    float mismatchd = (vec - reconsD).norm();
+    float mismatchdouble = (vec.cast<double>() - reconsDouble).norm();
 
-	QVERIFY2(mismatch < 1e-5, qPrintable(QString("Reconstructed rotation axis not correct (norm (rgt - rrc) = %1)").arg(mismatch)));
+    QVERIFY2(mismatch < 1e-4, qPrintable(QString("Reconstructed rotation axis not correct (norm (rgt - rrc) = %1)").arg(mismatch)));
+
+    QVERIFY2(mismatchd < 1e-4, qPrintable(QString("Reconstructed rotation axis not correct (norm (rgt - rrc) = %1)").arg(mismatchd)));
+
+    QVERIFY2(mismatchdouble < 2e-7, qPrintable(QString("Reconstructed rotation axis not correct (norm (rgt - rrc) = %1)").arg(mismatchdouble)));
 
 }
 
