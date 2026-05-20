@@ -420,19 +420,42 @@ RigidBodyTransform<T> operator*(T scale, RigidBodyTransform<T> transform) {
 }
 
 /*!
- * \brief interpolateRigidBodyTransformOnManifold interpolate between two RigidBodyTransform on the manifold
+ * \brief interpolateRigidBodyTransformOnManifold interpolate between two RigidBodyTransform on the manifold, assuming they are from different frames to a reference frame.
  * \param w1 weight for t1
- * \param t1 transformation 1
+ * \param t1 transformation 1 (assumed to be frame1 to reference)
  * \param w2 weight for t2
- * \param t2 transformation 2
+ * \param t2 transformation 2 (assumed to be frame2 to reference)
  * \return the linear interpolation between t1 and t2, using weights w1 and w2 and done on the manifold (se(3)).
  */
 template<typename T>
 RigidBodyTransform<T> interpolateRigidBodyTransformOnManifold(
-        T w1,
-        RigidBodyTransform<T> const& t1,
-        T w2,
-        RigidBodyTransform<T> const& t2) {
+    T w1,
+    RigidBodyTransform<T> const& t1,
+    T w2,
+    RigidBodyTransform<T> const& t2) {
+
+    RigidBodyTransform<T> transform = t2.inverse()*t1;
+
+    T w = w1 / (w1 + w2);
+
+    return t2*(w*transform);
+
+}
+
+/*!
+ * \brief interpolateRigidBodyTransformOnManifoldIndirect interpolate between two RigidBodyTransform on the manifold, assuming they are from a reference to different frames.
+ * \param w1 weight for t1
+ * \param t1 transformation 1 (assumed to be reference to frame1)
+ * \param w2 weight for t2
+ * \param t2 transformation 2 (assumed to be reference to frame2)
+ * \return the linear interpolation between t1 and t2, using weights w1 and w2 and done on the manifold (se(3)).
+ */
+template<typename T>
+RigidBodyTransform<T> interpolateInverseRigidBodyTransformOnManifold(
+    T w1,
+    RigidBodyTransform<T> const& t1,
+    T w2,
+    RigidBodyTransform<T> const& t2) {
 
     RigidBodyTransform<T> transform = t2*t1.inverse();
 

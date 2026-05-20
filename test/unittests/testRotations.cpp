@@ -42,6 +42,8 @@ private Q_SLOTS:
 
     void testRigidTransformInverse();
 
+    void testRigidTransformDeltaWithLargeLeverArm();
+
     void testEulerRad2RMat();
     void testRMat2EulerRad();
 
@@ -567,6 +569,24 @@ void TestGeometryLibRotation::testRigidTransformInverse() {
 
 }
 
+void TestGeometryLibRotation::testRigidTransformDeltaWithLargeLeverArm() {
+
+    RigidBodyTransform<double> T1(Eigen::Vector3d(-1.6394399241924302, -1.9611730314418059, 0.7600071557939638),
+                                  Eigen::Vector3d(4263979.735111281, 734140.0485163283, 4673894.448915079)); //Body1_to_world
+
+    RigidBodyTransform<double> T2(Eigen::Vector3d(-1.639415590028132, -1.9611404657873726, 0.7600147977243641),
+                                  Eigen::Vector3d(4263979.635366553, 734140.5822338169, 4673894.458748609)); //Body2_to_world
+
+    double distanceDirect = (T1.t - T2.t).norm();
+
+    RigidBodyTransform<double> TdeltaLeft = T2.inverse()*T1;
+
+    double distanceLeft = TdeltaLeft.t.norm();
+
+    QVERIFY2(std::abs(distanceLeft - distanceDirect) < 1e-7,
+             qPrintable(QString("Mismatched left distance (distanceLeft = %1, distanceDirect = %2)").arg(distanceLeft).arg(distanceDirect)));
+
+}
 void TestGeometryLibRotation::testEulerRad2RMat() {
 
     Eigen::Matrix3f R0 = eulerRadXYZToRotation<float>(0,0,0);
@@ -943,13 +963,13 @@ void TestGeometryLibRotation::testRigidBodyTransformInterpolationOnManifold() {
         RigidBodyTransform<double> interpolated050 = interpolateRigidBodyTransformOnManifold<double>(0.5, T1, 0.5, T2);
         RigidBodyTransform<double> interpolated075 = interpolateRigidBodyTransformOnManifold<double>(0.75, T1, 0.25, T2);
 
-        RigidBodyTransform<double> interpolated025d = interpolateRigidBodyTransformOnManifold<double>(0.25, T0, 0.75, T2*T1.inverse());
-        RigidBodyTransform<double> interpolated050d = interpolateRigidBodyTransformOnManifold<double>(0.5, T0, 0.5, T2*T1.inverse());
-        RigidBodyTransform<double> interpolated075d = interpolateRigidBodyTransformOnManifold<double>(0.75, T0, 0.25, T2*T1.inverse());
+        RigidBodyTransform<double> interpolated025d = interpolateRigidBodyTransformOnManifold<double>(0.25, T2.inverse()*T1, 0.75, T0);
+        RigidBodyTransform<double> interpolated050d = interpolateRigidBodyTransformOnManifold<double>(0.5, T2.inverse()*T1, 0.5, T0);
+        RigidBodyTransform<double> interpolated075d = interpolateRigidBodyTransformOnManifold<double>(0.75, T2.inverse()*T1, 0.25, T0);
 
-        RigidBodyTransform<double> interpolated025e = interpolated025d*T1;
-        RigidBodyTransform<double> interpolated050e = interpolated050d*T1;
-        RigidBodyTransform<double> interpolated075e = interpolated075d*T1;
+        RigidBodyTransform<double> interpolated025e = T2*interpolated025d;
+        RigidBodyTransform<double> interpolated050e = T2*interpolated050d;
+        RigidBodyTransform<double> interpolated075e = T2*interpolated075d;
 
         for (int i = 0; i < 3; i++) {
 
