@@ -218,14 +218,18 @@ Eigen::Quaternion<T> axisAngleToQuaternion(Eigen::Matrix<T, 3,1> const& axisAngl
 
     if (norm < 1e-6) {
 
-        T scale = T(2)/sqrt(normSquared + T(1));
+        T cos = T(1) - normSquared/T(4);
 
-        return Eigen::Quaternion<T>(scale, axisAngle[0]*scale*T(0.5), axisAngle[1]*scale*T(0.5), axisAngle[2]*scale*T(0.5));
+        return Eigen::Quaternion<T>(cos, axisAngle[0]*T(0.5), axisAngle[1]*T(0.5), axisAngle[2]*T(0.5));
     }
 
     Eigen::Matrix<T, 3,1> normalized = axisAngle/norm;
 
-    return Eigen::Quaternion<T>(Eigen::AngleAxis<T>(norm, normalized));
+    T cosT = cos(norm*T(0.5));
+    T sinT = sin(norm*T(0.5));
+
+    return Eigen::Quaternion<T>(cosT, sinT*normalized[0], sinT*normalized[1], sinT*normalized[2]);
+
 }
 
 
@@ -277,8 +281,19 @@ Eigen::Matrix<T,4,3> diffAxisAngleToQuaternion(Eigen::Matrix<T, 3,1> const& axis
 
 template<typename T>
 Eigen::Matrix<T, 3,1> quaternionToAxisAngle(Eigen::Quaternion<T> const& quaternion) {
-    Eigen::AngleAxis<T> angleAxis(quaternion);
-    return angleAxis.axis()*angleAxis.angle();
+    //formula is from Eigen implementation, but ensure better compatibility with ceres jet for automatic differentiation
+    T n = quaternion.vec().norm();
+    if (n < Eigen::NumTraits<T>::epsilon()) {
+        n = quaternion.vec().stableNorm();
+    }
+
+    if (n > 1e-6) {
+        T angle = T(2)*atan2(n, quaternion.w());
+        Eigen::Matrix<T, 3,1> axis = quaternion.vec() / n;
+        return axis*angle;
+    } else {
+        return T(2)*quaternion.vec()/quaternion.norm();
+    }
 }
 
 

@@ -47,6 +47,9 @@ private Q_SLOTS:
     void testEulerRad2RMat();
     void testRMat2EulerRad();
 
+    void testRAxis2Quat_data();
+    void testRAxis2Quat();
+
     void testRAxis2Quat2RAxis_data();
     void testRAxis2Quat2RAxis();
 
@@ -756,6 +759,58 @@ void TestGeometryLibRotation::testRMat2EulerRad() {
         }
 
     }
+}
+
+void TestGeometryLibRotation::testRAxis2Quat_data() {
+
+    QTest::addColumn<float>("rx");
+    QTest::addColumn<float>("ry");
+    QTest::addColumn<float>("rz");
+
+    QTest::newRow("Identity") << 0.0f << 0.0f << 0.0f;
+
+    QTest::newRow("Small") << 1.56e-8f << 5.32e-8f << -2.95e-8f;
+
+    QTest::newRow("x axis one") << 1.0f << 0.0f << 0.0f;
+    QTest::newRow("y axis one") << 0.0f << 1.0f << 0.0f;
+    QTest::newRow("z axis one") << 0.0f << 0.0f << 1.0f;
+
+    QTest::newRow("x axis pi") << static_cast<float>(M_PI) << 0.0f << 0.0f;
+    QTest::newRow("y axis pi") << 0.0f << static_cast<float>(M_PI) << 0.0f;
+    QTest::newRow("z axis pi") << 0.0f << 0.0f << static_cast<float>(M_PI);
+
+    std::uniform_real_distribution<float> dataGen(-2, 2);
+
+    QTest::newRow("Random 1") << dataGen(re) << dataGen(re) << dataGen(re);
+    QTest::newRow("Random 2") << dataGen(re) << dataGen(re) << dataGen(re);
+    QTest::newRow("Random 3") << dataGen(re) << dataGen(re) << dataGen(re);
+
+}
+void TestGeometryLibRotation::testRAxis2Quat() {
+
+    QFETCH(float, rx);
+    QFETCH(float, ry);
+    QFETCH(float, rz);
+
+    Eigen::Vector3d rAxis(rx, ry, rz);
+
+    Eigen::Quaterniond quat = axisAngleToQuaternion(rAxis);
+
+    constexpr int nRepeats = 10;
+
+    for (int i = 0; i < nRepeats; i++) {
+
+        std::uniform_real_distribution<double> dataGen(-2, 2);
+        Eigen::Vector3d rVec;
+        rVec << dataGen(re) , dataGen(re) , dataGen(re);
+
+        Eigen::Vector3d rAxisRotated = angleAxisRotate(rAxis, rVec);
+        Eigen::Vector3d quaternionRotated = quat*rVec;
+
+        double delta = (rAxisRotated-quaternionRotated).norm();
+        QVERIFY(delta < 1e-6*rVec.norm());
+    }
+
 }
 
 void TestGeometryLibRotation::testRAxis2Quat2RAxis_data() {
