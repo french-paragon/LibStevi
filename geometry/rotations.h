@@ -301,7 +301,7 @@ Eigen::Matrix<T, 3,1> normalizeAxisAngleRotation(Eigen::Matrix<T, 3,1> const& ax
     T norm = axisAngle.norm();
 
     const T tau = T(2*M_PI);
-    T modulo = norm - tau*std::floor(norm/(tau));
+    T modulo = norm - tau*floor(norm/(tau));
 
     if (norm <= M_PI) {
         return axisAngle; //no need to divide
