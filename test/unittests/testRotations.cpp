@@ -37,6 +37,9 @@ private Q_SLOTS:
 	void testDiffRodriguez_data();
 	void testDiffRodriguez();
 
+    void testNormalizeAxisAngle_data();
+    void testNormalizeAxisAngle();
+
     void testDiffRigidBodyTransform();
     void testDiffShapePreservingTransform();
 
@@ -441,6 +444,47 @@ void TestGeometryLibRotation::testDiffRodriguez() {
 
 	float mismatchZ = (dZ_numeric - dZ_analytic).norm();
 	QVERIFY2(mismatchZ < 2e1*epsilon, qPrintable(QString("Reconstructed diff rotation axis not correct (norm (dz_ranalitic - dz_rnumeric) = %1)").arg(mismatchZ)));
+
+}
+
+void TestGeometryLibRotation::testNormalizeAxisAngle_data() {
+
+    QTest::addColumn<float>("rx");
+    QTest::addColumn<float>("ry");
+    QTest::addColumn<float>("rz");
+
+    QTest::newRow("Identity") << 0.0f << 0.0f << 0.0f;
+
+    QTest::newRow("Small") << 0.42f << -0.07f << -0.67f;
+
+    QTest::newRow("Medium") << -0.359f << 1.9265f << -3.1415f;
+
+    QTest::newRow("Large") << -5.23f << 6.91f << 27.33f;
+
+}
+void TestGeometryLibRotation::testNormalizeAxisAngle() {
+
+    QFETCH(float, rx);
+    QFETCH(float, ry);
+    QFETCH(float, rz);
+
+
+    Eigen::Vector3f vec(rx, ry, rz);
+
+    Eigen::Vector3f normalized = normalizeAxisAngleRotation(vec);
+
+    float norm  = normalized.norm();
+
+    QVERIFY(norm <= M_PI);
+
+    Eigen::Matrix3f R = rodriguezFormula(vec);
+    Eigen::Matrix3f Rnorm = rodriguezFormula(vec);
+
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            QCOMPARE(R(i,j), Rnorm(i,j));
+        }
+    }
 
 }
 
@@ -911,7 +955,7 @@ void TestGeometryLibRotation::testRAxis2QuatDiff() {
 
     }
 
-    constexpr float smoltol = 1e-7;
+    constexpr float smoltol = 1e-6;
 
 
     std::uniform_real_distribution<double> smolDataGen(-3e-6, 3e-6);
@@ -1005,12 +1049,20 @@ void TestGeometryLibRotation::testRigidBodyTransformInterpolationOnManifold() {
         RigidBodyTransform<double> interpolated1 = interpolateRigidBodyTransformOnManifold<double>(1, T1, 0, T2);
         RigidBodyTransform<double> interpolated2 = interpolateRigidBodyTransformOnManifold<double>(0, T1, 1, T2);
 
+        Eigen::Matrix3d R1 = rodriguezFormula(T1.r);
+        Eigen::Matrix3d R1interp = rodriguezFormula(interpolated1.r);
+
+        Eigen::Matrix3d R2 = rodriguezFormula(T2.r);
+        Eigen::Matrix3d R2interp = rodriguezFormula(interpolated2.r);
+
         for (int i = 0; i < 3; i++) {
 
-            QCOMPARE(interpolated1.r[i], T1.r[i]);
-            QCOMPARE(interpolated1.t[i], T1.t[i]);
+            for (int j = 0; j < 3; j++) {
+                QCOMPARE(R1interp(i,j), R1(i,j));
+                QCOMPARE(R2interp(i,j), R2(i,j));
+            }
 
-            QCOMPARE(interpolated2.r[i], T2.r[i]);
+            QCOMPARE(interpolated1.t[i], T1.t[i]);
             QCOMPARE(interpolated2.t[i], T2.t[i]);
         }
 

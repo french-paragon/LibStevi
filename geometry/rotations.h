@@ -44,7 +44,7 @@ Eigen::Matrix<T,3,3> rodriguezFormula(Eigen::Matrix<T,3,1> const& r) {
         Eigen::Matrix<T,3,3> cPart = cPartScale*scaled_m2;
         R = Eigen::Matrix<T,3,3>::Identity() + sPart + cPart;
     } else {
-        R = Eigen::Matrix<T,3,3>::Identity() + m + 0.5*m*m;
+        R = Eigen::Matrix<T,3,3>::Identity() + m + T(0.5)*m*m;
     }
 
     return R;
@@ -57,7 +57,7 @@ Eigen::Matrix<T,3,1> angleAxisRotate(Eigen::Matrix<T,3,1> const& r, Eigen::Matri
     Eigen::Matrix<T,3,1> rxv = r.cross(v);
 
     if (theta < 1e-6) {
-        return v + rxv + 0.5*r.cross(rxv);
+        return v + rxv + T(0.5)*r.cross(rxv);
     }
 
     Eigen::Matrix<T,3,1> rotated = v + sin(theta)/theta*rxv + (T(1) - cos(theta))/(theta*theta)*r.cross(rxv);
@@ -68,7 +68,7 @@ template<typename T>
 Eigen::Matrix<T,3,1> inverseRodriguezFormula(Eigen::Matrix<T,3,3> const& R) {
 
     T trace = R(0,0) + R(1,1) + R(2,2);
-    T d =  0.5*(trace - T(1));
+    T d =  T(0.5)*(trace - T(1));
 
     if (d < T(-1)) { //necessary for numerical stability.
         d = T(-1);
@@ -88,7 +88,7 @@ Eigen::Matrix<T,3,1> inverseRodriguezFormula(Eigen::Matrix<T,3,3> const& R) {
 
     if (d>d_threshold) {
 
-      omega=0.5*dR;
+        omega= T(0.5)*dR;
 
     } else if (nDr < nDr_threshold or !isfinite(scaledTheta)) {
 
@@ -296,6 +296,25 @@ Eigen::Matrix<T, 3,1> quaternionToAxisAngle(Eigen::Quaternion<T> const& quaterni
     }
 }
 
+template<typename T>
+Eigen::Matrix<T, 3,1> normalizeAxisAngleRotation(Eigen::Matrix<T, 3,1> const& axisAngle) {
+    T norm = axisAngle.norm();
+
+    const T tau = T(2*M_PI);
+    T modulo = norm - tau*std::floor(norm/(tau));
+
+    if (norm <= M_PI) {
+        return axisAngle; //no need to divide
+    }
+
+    if (modulo <= M_PI) {
+        return axisAngle/norm * modulo;
+    }
+
+    T corrected = modulo - tau;
+
+    return axisAngle/norm * corrected;
+}
 
 template<typename T>
 class RigidBodyTransform
@@ -450,6 +469,8 @@ RigidBodyTransform<T> interpolateRigidBodyTransformOnManifold(
     RigidBodyTransform<T> const& t2) {
 
     RigidBodyTransform<T> transform = t2.inverse()*t1;
+
+    transform.r = normalizeAxisAngleRotation(transform.r);
 
     T w = w1 / (w1 + w2);
 
