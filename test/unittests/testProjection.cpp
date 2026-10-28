@@ -110,6 +110,8 @@ private Q_SLOTS:
     void testBuildEssentialMatrix_data();
     void testBuildEssentialMatrix();
 
+    void testTransform2EssentialMatrix();
+
     void testEstimatePerspectiveMatrix();
 
 	void testReprojection_data();
@@ -177,6 +179,38 @@ void TestReprojectionMethods::testBuildEssentialMatrix() {
 	}
 }
 
+void TestReprojectionMethods::testTransform2EssentialMatrix() {
+    constexpr int nRuns = 10;
+
+    for (int i = 0; i < nRuns; i++) {
+        Eigen::Matrix3f R = rodriguezFormula<float>(0.1*Eigen::Vector3f::Random());
+        Eigen::Vector3f t = 10*Eigen::Vector3f::Random();
+        t.z() = std::abs(t.z());
+        int nPoints = 8;
+
+        Eigen::Array<float,3,Eigen::Dynamic> pts1 = Eigen::Array<float,3,Eigen::Dynamic>::Random(3,nPoints);
+
+        bool ok = true;
+
+        Eigen::Matrix3f E = transform2EssentialMatrix(AffineTransform<float>(R,t));
+
+        for (int j = 0; j < nPoints; j++) {
+            Eigen::Vector3f pt(pts1(0,j), pts1(1,j), pts1(2,j));
+            Eigen::Vector3f transformed = R*pt + t;
+
+            Eigen::Vector3f v1 = pt/pt.z();
+            Eigen::Vector3f v2 = transformed/transformed.z();
+
+            float res = v2.dot(E*v1);
+
+            if (std::abs(res) > 1e-5) {
+                qWarning() << "Closure gap: " << res;
+            }
+            QVERIFY(std::abs(res) < 1e-4);
+
+        }
+    }
+}
 void TestReprojectionMethods::testEstimatePerspectiveMatrix() {
 
     constexpr int nRuns = 10;

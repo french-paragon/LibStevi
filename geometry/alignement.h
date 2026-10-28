@@ -535,6 +535,10 @@ AffineTransform<float> findTransform(Eigen::Array<Pos_T, 2, nCols> const& pt_cam
 	return essentialMatrix2Transform(E, pt_cam_1, pt_cam_2);
 }
 
+template <typename Pos_T>
+Eigen::Matrix<Pos_T, 3, 3> transform2EssentialMatrix(AffineTransform<Pos_T> const& image1ToImage2) {
+    return skew<Pos_T>(image1ToImage2.t)*image1ToImage2.R;
+}
 
 
 template<typename T>
